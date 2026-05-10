@@ -1,0 +1,322 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Intake engine styles — section-stepped workflow
+═══════════════════════════════════════════════════════════════════════════ */
+
+.intake-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:18px;
+}
+
+/* ─── Step header pattern ───────────────────────────────────────────────── */
+.step{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  position:relative;
+  overflow:hidden;
+}
+.step.disabled{ opacity:.45; pointer-events:none; }
+
+.step-head{
+  display:flex; align-items:center; gap:14px;
+  padding:14px 22px;
+  border-bottom:1px solid var(--border-soft);
+  background:rgba(31,206,216,0.03);
+}
+.step-num{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:1.5px;
+  color:var(--accent);
+  width:28px; height:28px;
+  border:1px solid var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+  border-radius:var(--r-sm);
+}
+.step-title{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:18px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  color:var(--text-pri);
+}
+.step-status{
+  margin-left:auto;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:1.2px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+}
+.step-status.done{ color:var(--status-ok); }
+.step-status.warn{ color:var(--status-warn); }
+.step-status.crit{ color:var(--status-crit); }
+
+.step-body{
+  padding:22px;
+}
+
+/* ─── Step 1: Upload grid ───────────────────────────────────────────────── */
+.upload-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+@media (max-width:780px){ .upload-grid{ grid-template-columns:1fr; } }
+
+.drop-cond{ position:relative; }
+.drop-cond::after{
+  content:"OPTIONAL · CONDITIONAL";
+  position:absolute; top:12px; right:14px;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:1.2px;
+  color:var(--text-muted);
+  background:rgba(31,206,216,0.08);
+  padding:2px 7px;
+  border-radius:var(--r-sm);
+}
+
+/* ─── Step 2: Schema mapping ────────────────────────────────────────────── */
+.schema-rows{ display:flex; flex-direction:column; gap:10px; }
+.schema-row{
+  display:grid;
+  grid-template-columns:140px 1fr 200px 22px;
+  gap:14px;
+  align-items:center;
+  padding:8px 12px;
+  background:var(--bg-panel-2);
+  border-left:2px solid var(--border-soft);
+  border-radius:var(--r-sm);
+  font-size:12.5px;
+}
+.schema-row.matched{ border-left-color:var(--status-ok); }
+.schema-row.missing{ border-left-color:var(--status-warn); }
+.schema-row .src{
+  font-family:var(--font-mono);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:1px;
+  color:var(--text-muted);
+}
+.schema-row .field{
+  font-family:var(--font-mono);
+  color:var(--accent);
+  font-size:12px;
+}
+.schema-row .header{
+  font-family:var(--font-body);
+  color:var(--text-sec);
+}
+.schema-row .header em{
+  font-style:normal;
+  color:var(--status-warn);
+}
+
+/* ─── Step 3: DQ gate ───────────────────────────────────────────────────── */
+.dq-summary{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr 1fr;
+  gap:12px;
+  margin-bottom:18px;
+}
+.dq-tile{
+  background:var(--bg-panel-2);
+  border:1px solid var(--border-soft);
+  padding:14px 18px;
+  border-radius:var(--r-sm);
+}
+.dq-tile .lab{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.2px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+  margin-bottom:6px;
+  display:block;
+}
+.dq-tile .v{
+  font-family:var(--font-display);
+  font-size:24px;
+  font-weight:700;
+  color:var(--accent);
+  letter-spacing:1px;
+  line-height:1;
+}
+.dq-tile .v.ok{ color:var(--status-ok); }
+.dq-tile .v.warn{ color:var(--status-warn); }
+.dq-tile .v.crit{ color:var(--status-crit); }
+.dq-tile .desc{
+  font-family:var(--font-body);
+  font-size:11.5px;
+  color:var(--text-muted);
+  margin-top:6px;
+  line-height:1.4;
+}
+
+.dq-list{ list-style:none; }
+.dq-list li{
+  display:flex; gap:12px;
+  padding:9px 12px;
+  background:var(--bg-panel-2);
+  border-left:2px solid var(--border-soft);
+  font-size:12.5px;
+  margin-bottom:6px;
+  border-radius:var(--r-sm);
+  line-height:1.45;
+}
+.dq-list li.warn{ border-left-color:var(--status-warn); }
+.dq-list li.crit{ border-left-color:var(--status-crit); }
+.dq-list li .sev{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:var(--text-muted);
+  flex-shrink:0;
+  min-width:60px;
+}
+.dq-list li.warn .sev{ color:var(--status-warn); }
+.dq-list li.crit .sev{ color:var(--status-crit); }
+
+/* ─── Step 4: Scope tabs ────────────────────────────────────────────────── */
+.scope-pane{
+  display:flex; flex-direction:column; gap:14px;
+  padding:18px;
+  background:var(--bg-panel-2);
+  border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);
+  min-height:160px;
+}
+.scope-pane h5{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:1.5px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+
+/* multi-select chip list */
+.chip-row{
+  display:flex; flex-wrap:wrap; gap:6px;
+  padding:8px;
+  background:var(--bg-deep);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  min-height:42px;
+  max-height:120px;
+  overflow-y:auto;
+}
+.chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px;
+  background:rgba(31,206,216,0.10);
+  border:1px solid var(--border-soft);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.5px;
+  color:var(--accent);
+  cursor:pointer;
+  transition:background .12s, border-color .12s;
+  user-select:none;
+  border-radius:var(--r-sm);
+}
+.chip:hover{ background:rgba(31,206,216,0.18); border-color:var(--accent); }
+.chip.selected{ background:var(--accent); color:var(--bg-void); border-color:var(--accent); }
+.chip .x{ font-size:14px; line-height:1; opacity:.6; }
+
+.scope-preview{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-muted);
+  letter-spacing:.4px;
+  padding:10px 14px;
+  background:var(--bg-deep);
+  border-left:2px solid var(--accent);
+  border-radius:var(--r-sm);
+  line-height:1.5;
+}
+.scope-preview .v{ color:var(--accent); font-weight:500; }
+.scope-preview .v.warn{ color:var(--status-warn); }
+
+.classif-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+.classif-grid .row-input{
+  display:flex; gap:8px; align-items:center;
+}
+.classif-grid .row-input input{ flex:1; }
+
+/* ─── Step 5: Parameters grid ───────────────────────────────────────────── */
+.param-grid{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:14px;
+}
+@media (max-width:780px){ .param-grid{ grid-template-columns:1fr 1fr; } }
+.param-cell{
+  background:var(--bg-panel-2);
+  border:1px solid var(--border-soft);
+  padding:12px 14px;
+  border-radius:var(--r-sm);
+}
+.param-cell label{
+  display:block;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  color:var(--text-muted);
+  margin-bottom:6px;
+}
+.param-cell .factory-note{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  color:var(--text-disabled);
+  margin-top:4px;
+  letter-spacing:.4px;
+}
+.param-cell.dirty{ border-color:var(--status-warn); }
+.param-cell.dirty label::after{ content:" · OVERRIDDEN"; color:var(--status-warn); }
+
+.params-actions{
+  display:flex; gap:10px; align-items:center;
+  margin-top:14px;
+}
+
+/* ─── Step 6: JSON preview & actions ────────────────────────────────────── */
+.preview-box{
+  background:var(--bg-deep);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:14px 16px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-sec);
+  line-height:1.55;
+  max-height:340px;
+  overflow:auto;
+  white-space:pre;
+}
+
+.actions-row{
+  display:flex; gap:10px; align-items:center;
+  margin-top:18px;
+  flex-wrap:wrap;
+}
+
+/* Tab bar specific to scope */
+.scope-tabs{ margin-bottom:14px; }
+
+/* ─── JSON tree (simple collapsible) ────────────────────────────────────── */
+.jt-key{ color:var(--accent); }
+.jt-string{ color:var(--accent-soft); }
+.jt-number{ color:var(--status-warn); }
+.jt-bool{ color:var(--accent-green); }
+.jt-null{ color:var(--text-disabled); font-style:italic; }
+.jt-arr-summary{ color:var(--text-muted); font-style:italic; }

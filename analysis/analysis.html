@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Inventory Optimization · Analysis (Phase 4 — coming)</title>
+<link rel="stylesheet" href="../shared/brand-tokens.css" />
+<style>
+.phase4{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  border-top:3px solid var(--status-warn);
+  padding:36px;
+  margin-bottom:18px;
+  position:relative;
+  overflow:hidden;
+}
+.phase4::before{
+  content:"";
+  position:absolute;
+  width:300px; height:300px;
+  border-radius:50%;
+  background:rgba(251,191,36,0.10);
+  filter:blur(80px);
+  top:-100px; right:-100px;
+  pointer-events:none;
+  z-index:0;
+}
+.phase4 > *{ position:relative; z-index:1; }
+.phase4 .pre{
+  font-family:var(--font-mono);
+  color:var(--status-warn);
+  letter-spacing:2.5px;
+  font-size:11px;
+  text-transform:uppercase;
+  margin-bottom:14px;
+}
+.phase4 h1{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:42px;
+  letter-spacing:2.5px;
+  line-height:1;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  margin-bottom:10px;
+}
+.phase4 .sub{
+  font-family:var(--font-heading);
+  font-weight:500;
+  font-size:18px;
+  color:var(--accent);
+  letter-spacing:.5px;
+  line-height:1.35;
+  margin-bottom:18px;
+}
+.phase4 .body{
+  font-family:var(--font-body);
+  font-size:13.5px;
+  color:var(--text-sec);
+  line-height:1.6;
+  max-width:780px;
+}
+.phase4 .body ul{ list-style:none; margin-top:14px; }
+.phase4 .body li{
+  padding:6px 0 6px 18px;
+  position:relative;
+  border-bottom:1px solid rgba(155,171,168,0.08);
+}
+.phase4 .body li:last-child{ border-bottom:none; }
+.phase4 .body li::before{
+  content:""; position:absolute; left:0; top:14px;
+  width:6px; height:6px; background:var(--accent);
+}
+
+.handoff-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:18px;
+  margin-bottom:18px;
+}
+@media (max-width:780px){ .handoff-grid{ grid-template-columns:1fr; } }
+
+.handoff-card{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:22px 24px;
+}
+.handoff-card h3{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:16px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  margin-bottom:12px;
+}
+.handoff-card .row{
+  display:flex; justify-content:space-between; align-items:baseline;
+  padding:7px 0;
+  border-bottom:1px solid rgba(155,171,168,0.08);
+}
+.handoff-card .row:last-child{ border-bottom:none; }
+.handoff-card .lab{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:1.2px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+}
+.handoff-card .v{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--accent);
+  letter-spacing:.3px;
+  text-align:right;
+}
+.handoff-card .v.warn{ color:var(--status-warn); }
+
+.preview-box{
+  background:var(--bg-deep);
+  border:1px solid var(--border);
+  padding:14px 16px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-sec);
+  line-height:1.55;
+  max-height:320px;
+  overflow:auto;
+  white-space:pre;
+  border-radius:var(--r-sm);
+}
+
+.actions-row{
+  display:flex; gap:10px; align-items:center;
+  margin-top:18px;
+  flex-wrap:wrap;
+}
+
+.empty-state{
+  background:var(--bg-panel);
+  border:1px dashed var(--border);
+  padding:48px;
+  text-align:center;
+}
+.empty-state h3{
+  font-family:var(--font-display);
+  text-transform:uppercase;
+  letter-spacing:1.5px;
+  font-size:18px;
+  color:var(--text-pri);
+  margin-bottom:8px;
+}
+.empty-state p{
+  font-family:var(--font-body);
+  font-size:13.5px;
+  color:var(--text-muted);
+  line-height:1.5;
+  margin-bottom:18px;
+}
+</style>
+</head>
+<body>
+
+<nav class="appnav">
+  <div class="brand">
+    <span class="dot"></span>
+    Inventory Optimization
+    <span class="sub">v1.0 · Analysis</span>
+  </div>
+  <div class="links">
+    <a href="../index.html">Dashboard</a>
+    <a href="../intake/intake.html">Intake</a>
+    <a href="analysis.html" class="active">Analysis</a>
+    <a href="../settings/settings.html">Settings</a>
+  </div>
+</nav>
+
+<main class="shell">
+
+  <section class="phase4">
+    <div class="pre">Phase 4 build — coming next session</div>
+    <h1>Analysis Engine</h1>
+    <div class="sub">Pipeline ports of scripts 02 / 03 / 04. Charts. LLM review. Excel export.</div>
+    <div class="body">
+      <p>The analysis engine consumes the canonical JSON the intake engine produces and runs the deterministic MRP pipeline:</p>
+      <ul>
+        <li>Multi-model detection (when scope is <span class="cyan">fleet</span> with ≥ 2 models) — materials consumed across multiple fleets routed to a separate MULTI bucket.</li>
+        <li>Per-bucket extraction — fleet × model, manual list, classification group, or vendor.</li>
+        <li>Period rates — P1 baseline (5 mo) + P2 rolling (3 mo back from run date).</li>
+        <li>HCE detection — single WO ≥ 50 % of period total, or ≥ 3× the average WO qty.</li>
+        <li>Lumpy / smooth classification — coefficient of variation + top-WO share.</li>
+        <li>Recommended Min / Max + 8-rule traffic-light decision.</li>
+        <li>Per-material chart with cumulative actual + P1 / P2 trend lines + WO annotations.</li>
+        <li><b class="cyan">LLM review surface</b> — provider-agnostic, configured in Settings. Reviews chart images and proposes JSON edits the operator approves.</li>
+        <li>Excel export via ExcelJS — one workbook per bucket, embedded charts, action list.</li>
+      </ul>
+    </div>
+  </section>
+
+  <div id="contentArea"></div>
+
+</main>
+
+<script src="../shared/canonical-schema.js"></script>
+<script src="../shared/storage.js"></script>
+
+<script>
+(async () => {
+  const $ = (s) => document.querySelector(s);
+  const host = $('#contentArea');
+  const json = await AppStorage.get('intake.current');
+
+  if (!json) {
+    host.innerHTML = `
+      <section class="empty-state">
+        <h3>No intake loaded</h3>
+        <p>Build a canonical JSON in the intake engine first, or upload one from disk on the intake page.</p>
+        <a class="primary" href="../intake/intake.html"><button class="primary">Go to intake →</button></a>
+      </section>`;
+    return;
+  }
+
+  const dataKeys = Object.keys(json.data || {});
+  const counts = {};
+  for (const k of dataKeys) counts[k] = (json.data[k] || []).length;
+
+  let scopeDetail = '—';
+  if (json.scope.mode === 'fleet')              scopeDetail = `${json.scope.fleet.models.join(' · ') || '—'}`;
+  else if (json.scope.mode === 'manual')        scopeDetail = `${json.scope.manual.materials.length} materials`;
+  else if (json.scope.mode === 'byClassification') {
+    const f = json.scope.byClassification;
+    const bits = [];
+    if (f.inventoryTypes.length) bits.push(`type: ${f.inventoryTypes.join('/')}`);
+    if (f.mrpClassifiers.length) bits.push(`MRP: ${f.mrpClassifiers.join('/')}`);
+    if (f.movementAmount.min != null || f.movementAmount.max != null) {
+      bits.push(`mvmt: ${f.movementAmount.min ?? '—'}…${f.movementAmount.max ?? '—'}`);
+    }
+    scopeDetail = bits.join(' · ') || '—';
+  }
+  else if (json.scope.mode === 'byVendor')      scopeDetail = `${json.scope.byVendor.vendors.length} vendor${json.scope.byVendor.vendors.length===1?'':'s'}`;
+
+  const validation = json.validation || { passed:false, issues:[] };
+
+  host.innerHTML = `
+    <div class="handoff-grid">
+      <div class="handoff-card">
+        <h3>Loaded intake</h3>
+        <div class="row"><span class="lab">Assessment name</span><span class="v">${escapeHtml(json.metadata.assessmentName || '—')}</span></div>
+        <div class="row"><span class="lab">Created</span><span class="v">${escapeHtml((json.metadata.createdAt || '').replace('T',' ').slice(0,16))}</span></div>
+        <div class="row"><span class="lab">Created by</span><span class="v">${escapeHtml(json.metadata.createdBy || '—')}</span></div>
+        <div class="row"><span class="lab">Schema version</span><span class="v">${escapeHtml(json.schemaVersion || '—')}</span></div>
+        <div class="row"><span class="lab">DQ gate</span><span class="v ${validation.passed ? '' : 'warn'}">${validation.passed ? 'passed' : `${validation.issues.length} issue${validation.issues.length===1?'':'s'}`}</span></div>
+      </div>
+      <div class="handoff-card">
+        <h3>Scope &amp; data</h3>
+        <div class="row"><span class="lab">Scope mode</span><span class="v">${escapeHtml(json.scope.mode)}</span></div>
+        <div class="row"><span class="lab">Scope detail</span><span class="v">${escapeHtml(scopeDetail)}</span></div>
+        <div class="row"><span class="lab">MB51 rows</span><span class="v">${(counts.mb51||0).toLocaleString()}</span></div>
+        <div class="row"><span class="lab">IW39 rows</span><span class="v">${(counts.iw39||0).toLocaleString()}</span></div>
+        <div class="row"><span class="lab">Fleet Master</span><span class="v">${(counts.fleetMaster||0).toLocaleString()}</span></div>
+        <div class="row"><span class="lab">Inv Master</span><span class="v">${(counts.inventoryMaster||0).toLocaleString()}</span></div>
+        <div class="row"><span class="lab">Material-Vendor</span><span class="v">${(counts.materialVendor||0).toLocaleString()}</span></div>
+        <div class="row"><span class="lab">Lead Times</span><span class="v">${(counts.leadTimes||0).toLocaleString()}</span></div>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-eyebrow">Canonical JSON · summary preview</div>
+      <div class="panel-title">The handoff worked.</div>
+      <div class="panel-sub">When the analysis engine ships, it consumes this JSON and runs the deterministic pipeline against it. For now you can verify the intake produced what you expected.</div>
+      <pre class="preview-box" id="jsonPreview"></pre>
+      <div class="actions-row">
+        <a href="../intake/intake.html"><button class="ghost">← Back to intake</button></a>
+      </div>
+    </section>
+  `;
+
+  const summary = JSON.parse(JSON.stringify(json));
+  for (const k of Object.keys(summary.data)) {
+    const arr = summary.data[k] || [];
+    summary.data[k] = arr.length > 0 ? `[ … ${arr.length} rows … ]` : `[ ]`;
+  }
+  $('#jsonPreview').textContent = JSON.stringify(summary, null, 2);
+
+  function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
+})();
+</script>
+
+</body>
+</html>

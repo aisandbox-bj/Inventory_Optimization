@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Inventory Optimization · Dashboard</title>
+<link rel="stylesheet" href="shared/brand-tokens.css" />
+<style>
+.hero{
+  display:grid;
+  grid-template-columns:1.4fr 1fr;
+  gap:24px;
+  margin-bottom:24px;
+}
+@media (max-width:780px){ .hero{ grid-template-columns:1fr; } }
+
+.hero-headline{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:36px 36px 32px;
+  position:relative;
+  overflow:hidden;
+}
+.hero-headline::before{
+  content:"";
+  position:absolute;
+  width:380px; height:380px;
+  border-radius:50%;
+  background:rgba(31,206,216,0.12);
+  filter:blur(80px);
+  top:-160px; right:-160px;
+  pointer-events:none;
+  z-index:0;
+}
+.hero-headline > *{ position:relative; z-index:1; }
+.hero-headline .pre{
+  font-family:var(--font-mono);
+  color:var(--accent);
+  letter-spacing:2.5px;
+  font-size:11px;
+  text-transform:uppercase;
+  margin-bottom:14px;
+}
+.hero-headline h1{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:54px;
+  letter-spacing:3.5px;
+  line-height:.98;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  margin-bottom:14px;
+}
+.hero-headline .sub{
+  font-family:var(--font-heading);
+  font-weight:500;
+  font-size:18px;
+  color:var(--accent);
+  letter-spacing:.5px;
+  line-height:1.35;
+  margin-bottom:24px;
+}
+.hero-headline .body{
+  font-family:var(--font-body);
+  font-size:13.5px;
+  color:var(--text-sec);
+  line-height:1.55;
+  max-width:520px;
+}
+
+.hero-stats{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:24px 28px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.hero-stats .lab{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.5px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+  display:block;
+  margin-bottom:5px;
+}
+.hero-stats .stat-row{
+  padding:10px 0;
+  border-bottom:1px solid rgba(155,171,168,0.08);
+}
+.hero-stats .stat-row:last-child{ border-bottom:none; }
+.hero-stats .v{
+  font-family:var(--font-display);
+  font-size:32px;
+  font-weight:700;
+  color:var(--accent);
+  letter-spacing:1px;
+  line-height:1;
+}
+.hero-stats .v .un{
+  font-size:14px;
+  color:var(--text-muted);
+  margin-left:6px;
+  letter-spacing:.5px;
+  font-weight:500;
+}
+
+.tile-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:18px;
+  margin-bottom:24px;
+}
+@media (max-width:780px){ .tile-grid{ grid-template-columns:1fr; } }
+
+.tile{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  border-top:3px solid var(--accent);
+  padding:22px 24px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  text-decoration:none;
+  color:inherit;
+  cursor:pointer;
+  transition:border-color .15s, transform .15s;
+  position:relative;
+  overflow:hidden;
+}
+.tile:hover{ border-color:var(--accent); transform:translateY(-2px); }
+.tile.tile-2{ border-top-color:var(--accent-green); }
+.tile.tile-3{ border-top-color:var(--status-warn); }
+.tile .badge{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.5px;
+  color:var(--accent);
+  text-transform:uppercase;
+}
+.tile.tile-2 .badge{ color:var(--accent-green); }
+.tile.tile-3 .badge{ color:var(--status-warn); }
+.tile h3{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:22px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  line-height:1.1;
+}
+.tile p{
+  font-family:var(--font-body);
+  font-size:13px;
+  color:var(--text-sec);
+  line-height:1.5;
+}
+.tile .arrow{
+  margin-top:auto;
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--accent);
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+}
+
+.recent{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:22px 24px;
+}
+.recent h3{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:18px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  margin-bottom:14px;
+}
+.recent table{ width:100%; border-collapse:collapse; }
+.recent th{
+  background:var(--bg-elevated);
+  color:var(--text-muted);
+  text-align:left;
+  font-family:var(--font-mono);
+  font-weight:500;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  font-size:10px;
+  padding:9px 12px;
+  border-bottom:1px solid var(--border-soft);
+}
+.recent td{
+  padding:10px 12px;
+  border-bottom:1px solid rgba(155,171,168,0.05);
+  font-size:12.5px;
+  color:var(--text-sec);
+}
+.recent td.mono{ font-family:var(--font-mono); }
+.recent td.mode{ font-family:var(--font-mono); color:var(--accent); font-size:11px; letter-spacing:.5px; }
+.recent .empty{
+  padding:18px;
+  text-align:center;
+  color:var(--text-muted);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.5px;
+}
+.recent td .open{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--accent);
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.recent td .open:hover{ color:var(--accent-glow); }
+</style>
+</head>
+<body>
+
+<nav class="appnav">
+  <div class="brand">
+    <span class="dot"></span>
+    Inventory Optimization
+    <span class="sub">v1.0</span>
+  </div>
+  <div class="links">
+    <a href="index.html" class="active">Dashboard</a>
+    <a href="intake/intake.html">Intake</a>
+    <a href="analysis/analysis.html">Analysis</a>
+    <a href="settings/settings.html">Settings</a>
+  </div>
+</nav>
+
+<main class="shell">
+
+  <!-- ─── HERO ─── -->
+  <div class="hero">
+    <div class="hero-headline">
+      <div class="pre">Mining MRP optimization · service-led · SAP-native</div>
+      <h1>Inventory<br/>Optimization</h1>
+      <div class="sub">Build a canonical assessment JSON, run the analysis,<br/>review with an LLM, ship the deliverable.</div>
+      <div class="body">
+        Drop your SAP exports into the intake engine. The data quality gate flags issues before
+        they become rework. Pick a scope — fleet, manual list, by classification, or by vendor.
+        The analysis engine consumes the JSON, runs deterministic period rates and traffic-light
+        recommendations, and produces an Excel pack plus an LLM-reviewable visual.
+      </div>
+    </div>
+
+    <div class="hero-stats">
+      <div class="stat-row">
+        <span class="lab">Saved intakes</span>
+        <div class="v" id="statIntakes">0</div>
+      </div>
+      <div class="stat-row">
+        <span class="lab">Last activity</span>
+        <div class="v" id="statLast" style="font-family:var(--font-mono);font-size:14px;line-height:1.4;">—</div>
+      </div>
+      <div class="stat-row">
+        <span class="lab">Local storage</span>
+        <div class="v" id="statKeys">0<span class="un">keys</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ENGINE TILES ─── -->
+  <div class="tile-grid">
+    <a href="intake/intake.html" class="tile">
+      <span class="badge">01 · Intake engine</span>
+      <h3>New intake</h3>
+      <p>Upload SAP exports, validate, choose scope, build the canonical JSON. Six-step workflow with auto-mapping and a hybrid DQ gate.</p>
+      <span class="arrow">Start →</span>
+    </a>
+    <a href="analysis/analysis.html" class="tile tile-2">
+      <span class="badge">02 · Analysis engine</span>
+      <h3>Open analysis</h3>
+      <p>Run period rates, HCE detection, traffic-light recommendations on the saved JSON. LLM review on rendered charts. Excel export.</p>
+      <span class="arrow">Phase 4 build →</span>
+    </a>
+    <a href="settings/settings.html" class="tile tile-3">
+      <span class="badge">03 · Settings</span>
+      <h3>Configure</h3>
+      <p>Parameter defaults, LLM provider keys + model selection, persistent column-alias overrides, factory reset.</p>
+      <span class="arrow">Open →</span>
+    </a>
+  </div>
+
+  <!-- ─── RECENT INTAKES ─── -->
+  <div class="recent">
+    <h3>Recent intakes</h3>
+    <table id="recentTable">
+      <thead>
+        <tr><th>Name</th><th>Scope</th><th>Created</th><th></th></tr>
+      </thead>
+      <tbody id="recentBody"></tbody>
+    </table>
+    <div id="recentEmpty" class="empty hidden">No intakes saved yet — start one above.</div>
+  </div>
+
+</main>
+
+<script src="shared/canonical-schema.js"></script>
+<script src="shared/storage.js"></script>
+
+<script>
+(async () => {
+  const $ = (s) => document.querySelector(s);
+
+  const idx = (await AppStorage.get('intakes.index')) || [];
+  $('#statIntakes').textContent = idx.length.toString();
+  $('#statLast').textContent    = idx[0] ? idx[0].createdAt.replace('T',' · ').slice(0,19) : 'never';
+
+  const ks = await AppStorage.keys();
+  $('#statKeys').innerHTML = `${ks.length}<span class="un">keys</span>`;
+
+  const body  = $('#recentBody');
+  const empty = $('#recentEmpty');
+  if (idx.length === 0) {
+    document.getElementById('recentTable').classList.add('hidden');
+    empty.classList.remove('hidden');
+  } else {
+    body.innerHTML = idx.slice(0, 12).map(e => `
+      <tr>
+        <td>${escapeHtml(e.name)}</td>
+        <td class="mode">${escapeHtml(e.mode || '—')}</td>
+        <td class="mono" style="color:var(--text-muted);">${escapeHtml(e.createdAt.replace('T',' ').slice(0,16))}</td>
+        <td><a class="open" href="#" data-name="${escapeAttr(e.name)}">Load →</a></td>
+      </tr>
+    `).join('');
+
+    body.querySelectorAll('a.open').forEach(a => {
+      a.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        const json = await AppStorage.get('intake.' + a.dataset.name);
+        if (!json) { alert('Intake not found in local storage.'); return; }
+        await AppStorage.set('intake.current', json);
+        window.location.href = 'analysis/analysis.html';
+      });
+    });
+  }
+
+  function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
+  function escapeAttr(s){ return escapeHtml(s).replace(/'/g, '&#39;'); }
+})();
+</script>
+
+</body>
+</html>

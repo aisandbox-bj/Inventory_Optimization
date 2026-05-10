@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Inventory Optimization · Intake</title>
+<link rel="stylesheet" href="../shared/brand-tokens.css" />
+<link rel="stylesheet" href="intake.css" />
+</head>
+<body>
+
+<nav class="appnav">
+  <div class="brand">
+    <span class="dot"></span>
+    Inventory Optimization
+    <span class="sub">v1.0 · Intake</span>
+  </div>
+  <div class="links">
+    <a href="../index.html">Dashboard</a>
+    <a href="intake.html" class="active">Intake</a>
+    <a href="../analysis/analysis.html">Analysis</a>
+    <a href="../settings/settings.html">Settings</a>
+  </div>
+</nav>
+
+<main class="shell">
+  <div class="intake-grid">
+
+    <!-- ─── METADATA HEADER ─── -->
+    <section class="panel">
+      <div class="panel-eyebrow">Intake engine</div>
+      <div class="panel-title">Build a canonical assessment JSON.</div>
+      <div class="panel-sub">Upload your SAP exports, confirm the data-quality gate, pick a scope, set parameters, export. The JSON is the contract the analysis engine consumes — same inputs always produce the same canonical output.</div>
+      <div class="row" style="gap:14px;">
+        <div style="flex:1.2;">
+          <label class="label" style="display:block;margin-bottom:4px;">Assessment name</label>
+          <input id="assessmentName" type="text" placeholder="e.g. Yellow-Orange Fleet 2026 Q2" />
+        </div>
+        <div style="flex:1;">
+          <label class="label" style="display:block;margin-bottom:4px;">Created by</label>
+          <input id="createdBy" type="text" placeholder="operator name" />
+        </div>
+        <div style="flex:.7;">
+          <label class="label" style="display:block;margin-bottom:4px;">Run date</label>
+          <input id="runDate" type="date" />
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── STEP 1 — UPLOAD ─── -->
+    <section class="step" id="step1">
+      <div class="step-head">
+        <div class="step-num">01</div>
+        <div class="step-title">Upload source files</div>
+        <div class="step-status" id="step1Status">awaiting files</div>
+      </div>
+      <div class="step-body">
+        <div class="upload-grid">
+          <label class="drop" data-source="mb51">
+            <div class="name">MB51</div>
+            <div class="hint">Material movements · Posting Date, Order, Material, Movement Type, Quantity. ≥ 12 months.</div>
+            <span class="file">drag .xlsx / .csv here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv" />
+          </label>
+          <label class="drop" data-source="iw39">
+            <div class="name">IW39</div>
+            <div class="hint">Work orders · Order, Sort Field, Basic start date, Description.</div>
+            <span class="file">drag .xlsx / .csv here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv" />
+          </label>
+          <label class="drop" data-source="fleetMaster">
+            <div class="name">Fleet Master</div>
+            <div class="hint">Equipment list · Model number, Sort Field, Unit Type, Manufacturer, FunctLoc.</div>
+            <span class="file">drag .xlsx / .csv here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv" />
+          </label>
+          <label class="drop" data-source="inventoryMaster">
+            <div class="name">Inventory Master</div>
+            <div class="hint">Stock & MRP · Material, Tot Qty OH, MRP Ind, MRP Min, MRP Max, Inventory Type.</div>
+            <span class="file">drag .xlsx / .csv here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv" />
+          </label>
+          <div class="hidden">
+            <label class="drop drop-cond" data-source="materialVendor">
+              <div class="name">Material — Vendor mapping</div>
+              <div class="hint">Required for By Vendor scope. Material → Vendor → Vendor Name.</div>
+              <span class="file">drag .xlsx / .csv here, or click</span>
+              <input type="file" accept=".xlsx,.xls,.csv" />
+            </label>
+          </div>
+          <div class="hidden">
+            <label class="drop drop-cond" data-source="leadTimes">
+              <div class="name">Lead Times (optional)</div>
+              <div class="hint">Per-material trigger-to-GR + safety stock. Enables leadTimeBased Min/Max.</div>
+              <span class="file">drag .xlsx / .csv here, or click</span>
+              <input type="file" accept=".xlsx,.xls,.csv" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── STEP 2 — SCHEMA MAPPING ─── -->
+    <section class="step" id="step2">
+      <div class="step-head">
+        <div class="step-num">02</div>
+        <div class="step-title">Schema mapping</div>
+        <div class="step-status" id="schemaSummary">awaiting parse</div>
+      </div>
+      <div class="step-body">
+        <div class="panel-sub" style="margin-bottom:14px;">Auto-mapped fields are green. Override any unmatched header by picking from the dropdown — the page re-parses with your choice.</div>
+        <div id="schemaRows" class="schema-rows"></div>
+      </div>
+    </section>
+
+    <!-- ─── STEP 3 — DATA QUALITY GATE ─── -->
+    <section class="step" id="step3">
+      <div class="step-head">
+        <div class="step-num">03</div>
+        <div class="step-title">Data quality gate</div>
+        <div class="step-status" id="step3Status">awaiting all 4 required files</div>
+      </div>
+      <div class="step-body">
+        <div id="dqTiles" class="dq-summary"></div>
+        <ul id="dqList" class="dq-list"></ul>
+      </div>
+    </section>
+
+    <!-- ─── STEP 4 — SCOPE SELECTOR ─── -->
+    <section class="step disabled" id="step4">
+      <div class="step-head">
+        <div class="step-num">04</div>
+        <div class="step-title">Scope selection</div>
+        <div class="step-status">awaiting DQ pass</div>
+      </div>
+      <div class="step-body">
+        <div class="tabs scope-tabs">
+          <button class="tab active" data-mode="fleet">Fleet</button>
+          <button class="tab"        data-mode="manual">Manual</button>
+          <button class="tab"        data-mode="byClassification">By Classification</button>
+          <button class="tab"        data-mode="byVendor">By Vendor</button>
+        </div>
+
+        <!-- Fleet pane -->
+        <div class="scope-pane" data-mode="fleet">
+          <h5>Pick fleet models</h5>
+          <div id="fleetModels" class="chip-row"></div>
+          <div class="scope-preview">no models selected</div>
+        </div>
+
+        <!-- Manual pane -->
+        <div class="scope-pane hidden" data-mode="manual">
+          <h5>Paste material numbers (one per line, comma- or tab-delimited tolerated)</h5>
+          <textarea id="manualPaste" placeholder="10001234&#10;10005678&#10;10009999"></textarea>
+          <div class="scope-preview">no materials provided</div>
+        </div>
+
+        <!-- By Classification pane -->
+        <div class="scope-pane hidden" data-mode="byClassification">
+          <div class="classif-grid">
+            <div>
+              <h5>Inventory type (multi)</h5>
+              <div id="classifInvTypes" class="chip-row"></div>
+            </div>
+            <div>
+              <h5>MRP classifier (multi)</h5>
+              <div id="classifMrp" class="chip-row"></div>
+            </div>
+          </div>
+          <div>
+            <h5 style="margin-top:6px;">Movement amount (net consumption over MB51 window)</h5>
+            <div class="row" style="gap:10px;">
+              <div class="row-input" style="flex:1;">
+                <label class="label" style="min-width:60px;">min</label>
+                <input id="mvmtMin" type="number" placeholder="—" />
+              </div>
+              <div class="row-input" style="flex:1;">
+                <label class="label" style="min-width:60px;">max</label>
+                <input id="mvmtMax" type="number" placeholder="—" />
+              </div>
+            </div>
+          </div>
+          <div class="scope-preview">no filters set</div>
+        </div>
+
+        <!-- By Vendor pane -->
+        <div class="scope-pane hidden" data-mode="byVendor">
+          <h5>Pick vendors / suppliers</h5>
+          <div id="vendorList" class="chip-row"></div>
+          <div class="scope-preview">no vendors selected</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── STEP 5 — PARAMETERS ─── -->
+    <section class="step" id="step5">
+      <div class="step-head">
+        <div class="step-num">05</div>
+        <div class="step-title">Parameters · per-run override</div>
+        <div class="step-status">read from Settings</div>
+      </div>
+      <div class="step-body">
+        <div class="panel-sub" style="margin-bottom:14px;">Defaults come from <a href="../settings/settings.html">Settings</a>. Edit here for this run only — changes don't mutate saved defaults. Cells highlighted amber are overridden.</div>
+        <div id="paramsGrid" class="param-grid"></div>
+        <div class="params-actions">
+          <button id="paramsReset" class="ghost">↺ Reset to saved defaults</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── STEP 6 — REVIEW & EXPORT ─── -->
+    <section class="step" id="step6">
+      <div class="step-head">
+        <div class="step-num">06</div>
+        <div class="step-title">Review &amp; export</div>
+        <div class="step-status mono" id="jsonSize">— B</div>
+      </div>
+      <div class="step-body">
+        <pre id="jsonPreview" class="preview-box">{ }</pre>
+        <div class="actions-row">
+          <button id="btnSaveLocal" class="primary">Save to local storage</button>
+          <button id="btnDownload">⤓ Download .json</button>
+          <button id="btnUpload">⤒ Upload .json</button>
+          <input type="file" id="uploadJsonInput" accept=".json" class="hidden" />
+          <span class="spacer"></span>
+          <button id="btnOpenAnalysis" class="ghost">Open in Analysis Engine →</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ─── Libraries (CDN) ─── -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<!-- ─── App scripts ─── -->
+<script src="../shared/canonical-schema.js"></script>
+<script src="../shared/storage.js"></script>
+<script src="../shared/parsers.js"></script>
+<script src="../shared/config.js"></script>
+<script src="intake.js"></script>
+
+</body>
+</html>

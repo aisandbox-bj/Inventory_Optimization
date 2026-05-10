@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Inventory Optimization · Settings</title>
+<link rel="stylesheet" href="../shared/brand-tokens.css" />
+<link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+
+<nav class="appnav">
+  <div class="brand">
+    <span class="dot"></span>
+    Inventory Optimization
+    <span class="sub">v1.0 · Settings</span>
+  </div>
+  <div class="links">
+    <a href="../index.html">Dashboard</a>
+    <a href="../intake/intake.html">Intake</a>
+    <a href="../analysis/analysis.html">Analysis</a>
+    <a href="settings.html" class="active">Settings</a>
+  </div>
+</nav>
+
+<main class="shell">
+  <div class="settings-grid">
+
+    <!-- ─── PARAMETER DEFAULTS ─── -->
+    <section class="set-section">
+      <div class="set-head">
+        <h3>01 · Parameter defaults</h3>
+        <div class="desc">Persistent across runs. Intake reads these as the per-run starting point. Factory defaults seeded from the existing skill.</div>
+      </div>
+      <div class="set-body">
+        <div id="paramsGrid" class="param-grid"></div>
+        <div class="actions-row">
+          <button id="paramsSave"    class="primary">Save defaults</button>
+          <button id="paramsRevert"  class="ghost">↺ Revert</button>
+          <button id="paramsFactory" class="ghost">Restore factory</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── LLM PROVIDERS ─── -->
+    <section class="set-section">
+      <div class="set-head">
+        <h3>02 · LLM review providers</h3>
+        <div class="desc">Used by the Analysis engine for chart-level review. Keys stored locally only.</div>
+      </div>
+      <div class="set-body">
+        <div class="llm-grid">
+
+          <div class="llm-card" data-provider="anthropic">
+            <div class="pname">Anthropic</div>
+            <div class="ptag">claude · vision-capable</div>
+            <div class="field-row">
+              <label>API key</label>
+              <input class="apikey" type="password" placeholder="sk-ant-..." autocomplete="off" />
+            </div>
+            <div class="field-row">
+              <label>Model</label>
+              <div class="row-flex">
+                <select class="model" disabled><option>— fetch models to populate —</option></select>
+                <button class="btnFetch ghost">Fetch</button>
+              </div>
+            </div>
+            <div class="status"></div>
+            <div class="actions-row" style="margin-top:6px;">
+              <button class="btnSave primary">Save</button>
+              <button class="btnClear ghost">Clear</button>
+            </div>
+          </div>
+
+          <div class="llm-card openai" data-provider="openai">
+            <div class="pname">OpenAI</div>
+            <div class="ptag">gpt-* · vision-capable</div>
+            <div class="field-row">
+              <label>API key</label>
+              <input class="apikey" type="password" placeholder="sk-..." autocomplete="off" />
+            </div>
+            <div class="field-row">
+              <label>Model</label>
+              <div class="row-flex">
+                <select class="model" disabled><option>— fetch models to populate —</option></select>
+                <button class="btnFetch ghost">Fetch</button>
+              </div>
+            </div>
+            <div class="status"></div>
+            <div class="actions-row" style="margin-top:6px;">
+              <button class="btnSave primary">Save</button>
+              <button class="btnClear ghost">Clear</button>
+            </div>
+          </div>
+
+        </div>
+        <div class="panel-sub" style="margin-top:14px;font-size:11.5px;color:var(--text-muted);">
+          Browser-direct API calls expose the key to this page. Fine for a single-operator local-use tool.
+          For client deployments, route through a thin server proxy. Anthropic uses the
+          <code class="mono cyan">anthropic-dangerous-direct-browser-access</code> header for this.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── COLUMN ALIASES ─── -->
+    <section class="set-section">
+      <div class="set-head">
+        <h3>03 · Column alias overrides</h3>
+        <div class="desc">Teach the parser non-standard SAP export headers persistently. Multiple aliases per field — separate with semicolons.</div>
+      </div>
+      <div class="set-body">
+        <div style="overflow-x:auto;">
+          <table class="alias-table">
+            <thead>
+              <tr><th style="width:18%">Source</th><th style="width:18%">Canonical field</th><th style="width:32%">Built-in aliases</th><th style="width:32%">Your overrides</th></tr>
+            </thead>
+            <tbody id="aliasBody"></tbody>
+          </table>
+        </div>
+        <div class="actions-row">
+          <button id="aliasSave" class="primary">Save aliases</button>
+          <button id="aliasReset" class="ghost">Clear all overrides</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── ABOUT / DANGER ZONE ─── -->
+    <section class="set-section">
+      <div class="set-head">
+        <h3>04 · About</h3>
+        <div class="desc">Diagnostics &amp; clean-slate testing.</div>
+      </div>
+      <div class="set-body">
+        <div class="about-grid">
+          <div class="about-cell">
+            <span class="lab">Schema version</span>
+            <div class="v" id="aboutSchema">—</div>
+          </div>
+          <div class="about-cell">
+            <span class="lab">App version</span>
+            <div class="v" id="aboutApp">—</div>
+          </div>
+          <div class="about-cell">
+            <span class="lab">Local storage</span>
+            <div class="v" id="aboutKeys">—</div>
+          </div>
+          <div class="about-cell">
+            <span class="lab">Scope modes</span>
+            <div class="v" id="aboutScopes">—</div>
+          </div>
+        </div>
+        <div class="actions-row">
+          <button id="factoryReset" class="ghost">Restore factory · keep intakes</button>
+          <button id="wipeAll"      class="danger">⌫ Wipe all local data</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script src="../shared/canonical-schema.js"></script>
+<script src="../shared/storage.js"></script>
+<script src="../shared/parsers.js"></script>
+<script src="../shared/config.js"></script>
+<script src="settings.js"></script>
+
+</body>
+</html>
