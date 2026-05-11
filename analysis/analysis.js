@@ -418,10 +418,12 @@
     host.innerHTML = `
       <div class="label" style="margin-right:auto;">Export Excel pack</div>
       <button id="btnExportBucket" class="primary">⤓ Export this bucket</button>
-      <button id="btnExportAll">⤓ Export all buckets</button>
+      <button id="btnExportCombined" class="primary">⤓ Export ALL (combined)</button>
+      <button id="btnExportAll">⤓ Export all (separate files)</button>
       <span id="exportProgress" class="export-progress" style="display:none;"></span>
     `;
     $('#btnExportBucket').addEventListener('click', exportThisBucket);
+    $('#btnExportCombined').addEventListener('click', exportCombined);
     $('#btnExportAll').addEventListener('click', exportAllBuckets);
   }
 
@@ -439,6 +441,25 @@
       });
       prog.textContent = `✓ Exported ${b.name}`;
       setTimeout(() => { prog.style.display = 'none'; }, 3500);
+    } catch (e) {
+      console.error(e);
+      prog.textContent = `✗ ${e.message || e}`;
+    }
+  }
+
+  async function exportCombined(){
+    const prog = $('#exportProgress');
+    prog.style.display = '';
+    prog.textContent = 'Building combined workbook…';
+    try {
+      const assess = (state.json.metadata.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
+      const fname  = `analysis-${assess}-ALL-${state.result.runDate}.xlsx`;
+      const res = await AppExcel.downloadCombined(state.result, {
+        filename: fname,
+        progress: (n, total, label) => { prog.textContent = `Indexing ${n}/${total} · ${label}`; }
+      });
+      prog.textContent = `✓ Exported combined workbook · ${(res.sizeBytes/1024).toFixed(0)} KB`;
+      setTimeout(() => { prog.style.display = 'none'; }, 4500);
     } catch (e) {
       console.error(e);
       prog.textContent = `✗ ${e.message || e}`;

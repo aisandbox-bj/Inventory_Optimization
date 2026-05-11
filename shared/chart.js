@@ -18,10 +18,10 @@
     grid:     '#164049',
     axis:     '#9BABA8',
     cumLine:  '#FBBF24',  // amber/orange — cumulative actual
-    p1Line:   '#1FCED8',  // cyan — P1 baseline trend
-    p2Line:   '#5AB69D',  // green — P2 current trend
-    p1Zone:   'rgba(31,206,216,0.045)',
-    p2Zone:   'rgba(90,182,157,0.055)',
+    p1Line:   '#5DD9E2',  // brighter cyan — P1 baseline trend
+    p2Line:   '#7CDDB2',  // brighter green — P2 current trend
+    p1Zone:   'rgba(31,206,216,0.055)',
+    p2Zone:   'rgba(90,182,157,0.075)',
     text:     '#D6DFDE',
     textDim:  '#9BABA8',
     annot:    '#FBBF24',
@@ -187,31 +187,42 @@
     svg.appendChild(polyline(points.join(' '), { stroke: PAL.cumLine, width: 2 }));
 
     // ─── Trend lines ──────────────────────────────────────────────────────
-    function trendLine(startISO, endISO, rate, color, label){
-      if (!rate || rate <= 0) return;
-      // Find cumulative value just before start
-      const sT = new Date(startISO).getTime();
-      const eT = new Date(endISO).getTime();
-      let base = 0;
+    // Anchor both endpoints to the cumulative line itself so the trend is a
+    // visual chord across the period. Slope of the chord equals avg net
+    // consumption per month over the actual period — what a planner expects.
+    function cumAt(t){
+      // Find latest cum value at or before t (step semantics)
+      let v = 0, found = false;
       for (const p of cum) {
         const pt = new Date(p.date).getTime();
-        if (pt < sT) base = p.cum;
+        if (pt <= t) { v = p.cum; found = true; }
         else break;
       }
-      const months = Math.max(1, (eT - sT) / (30.44 * 86400000));
-      const endVal = base + rate * months;
-      const x1 = xScale(sT), y1 = yScale(base);
-      const x2 = xScale(eT), y2 = yScale(endVal);
-      svg.appendChild(line(x1, y1, x2, y2, { stroke: color, width: 2, dash: '6 4' }));
-      // rate label near right end of line
-      const lab = text(x2 + 6, y2 + 3, label, { fill: color, size: 10, weight: 500 });
-      svg.appendChild(lab);
+      return found ? v : (cum.length ? cum[0].cum : 0);
+    }
+    function trendLine(startISO, endISO, rate, color, label){
+      if (rate == null) return;
+      const sT = new Date(startISO).getTime();
+      const eT = new Date(endISO).getTime();
+      const yStart = cumAt(sT - 1);          // value going INTO the period
+      const yEnd   = cumAt(eT);              // value at the end of the period
+      const x1 = xScale(sT), y1 = yScale(yStart);
+      const x2 = xScale(eT), y2 = yScale(yEnd);
+      svg.appendChild(line(x1, y1, x2, y2, { stroke: color, width: 2.5, dash: '7 4' }));
+      // Anchor markers
+      svg.appendChild(el('circle', { cx: x1, cy: y1, r: 3.2, fill: color, opacity: 0.95 }));
+      svg.appendChild(el('circle', { cx: x2, cy: y2, r: 3.2, fill: color, opacity: 0.95 }));
+      // Rate label — placed above-right of end anchor with a thin connector
+      const labX = x2 + 8;
+      const labY = y2 - 6;
+      svg.appendChild(line(x2 + 3, y2 - 1, labX - 1, labY + 3, { stroke: color, width: 1, opacity: 0.55 }));
+      svg.appendChild(text(labX, labY, label, { fill: color, size: 10.5, weight: 600 }));
     }
     if (material.p1Flag === 'OK') {
-      trendLine(material.p1Start, material.p1End, material.p1Rate, PAL.p1Line, `${material.p1Rate.toFixed(1)} / mo`);
+      trendLine(material.p1Start, material.p1End, material.p1Rate, PAL.p1Line, `P1 · ${material.p1Rate.toFixed(1)}/mo`);
     }
     if (material.p2Flag === 'OK') {
-      trendLine(material.p2Start, material.p2End, material.p2Rate, PAL.p2Line, `${material.p2Rate.toFixed(1)} / mo`);
+      trendLine(material.p2Start, material.p2End, material.p2Rate, PAL.p2Line, `P2 · ${material.p2Rate.toFixed(1)}/mo`);
     }
 
     // ─── WO annotations (HCE events, top 3 by qty) ────────────────────────

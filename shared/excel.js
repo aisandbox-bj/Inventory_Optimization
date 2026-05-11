@@ -223,8 +223,8 @@
     sum.getCell(`A${sr}`).value = 'TOTAL';
     sum.getCell(`B${sr}`).value = bucket.summary.total || 0;
     sum.getCell(`A${sr}`).font  = { bold: true };
-    sum.column(1).width = 14;
-    sum.column(2).width = 12;
+    sum.getColumn(1).width = 14;
+    sum.getColumn(2).width = 12;
 
     // Metadata sheet
     const meta = wb.addWorksheet('Run');
@@ -254,8 +254,8 @@
       meta.getCell(`A${i + 3}`).font  = { bold: true };
       meta.getCell(`B${i + 3}`).value = r[1];
     });
-    meta.column(1).width = 24;
-    meta.column(2).width = 38;
+    meta.getColumn(1).width = 24;
+    meta.getColumn(2).width = 38;
 
     return wb;
   }
@@ -345,10 +345,217 @@
     return out;
   }
 
+  /* ─── Build one combined workbook with every bucket as its own sheet ────── */
+  async function buildCombinedWorkbook(result, progressCb){
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Inventory Optimization App';
+    wb.created = new Date();
+
+    const parameters = result.parameters;
+    const runDate    = result.runDate;
+
+    /* ─── Master Index — every material across every bucket ───────────────── */
+    const master = wb.addWorksheet('Master Index', {
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+    const masterHeaders = ['Bucket', ...INDEX_HEADERS];
+    master.columns = masterHeaders.map((h, i) => ({
+      header: h,
+      key:    'c' + i,
+      width:  i === 0 ? 22 : (i === 15 ? 30 : (i === 14 ? 36 : (i === 2 ? 32 : 16)))
+    }));
+    master.getRow(1).eachCell((cell, col) => {
+      cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: col === 1 ? 'FF0F3E5C' : (col >= 16 ? 'FF7B4F00' : 'FF1B4F72') } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    master.getRow(1).height = 28;
+
+    /* ─── Cross-bucket Summary ────────────────────────────────────────────── */
+    const xsum = wb.addWorksheet('Summary', { state: 'visible' });
+    xsum.getCell('A1').value = 'CROSS-BUCKET TRAFFIC-LIGHT SUMMARY';
+    xsum.getCell('A1').font  = { bold: true, size: 14 };
+    xsum.mergeCells('A1:G1');
+    const sumHeaders = ['Bucket', 'GREEN', 'BLUE', 'ORANGE', 'RED', 'GREY', 'Total'];
+    xsum.getRow(2).values = sumHeaders;
+    xsum.getRow(2).font   = { bold: true };
+    xsum.getRow(2).eachCell((cell, col) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col === 1 ? 'FF0F3E5C' : ('FF' + (TL_FILL[sumHeaders[col-1]] || '777777')) } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center' };
+    });
+
+    let masterRow = 2;
+    let xsumRow = 3;
+    const taken = new Set(['Master Index', 'Summary', 'Run']);
+
+    /* ─── Per-bucket sheets ───────────────────────────────────────────────── */
+    let totalMats = result.buckets.reduce((a, b) => a + b.materials.length, 0);
+    let done = 0;
+
+    const tl_total = { GREEN: 0, BLUE: 0, ORANGE: 0, RED: 0, GREY: 0, total: 0 };
+
+    for (const bucket of result.buckets) {
+      /* Bucket sheet name */
+      const bsheetName = safeSheetName(`B · ${bucket.name}`, taken);
+      const ws = wb.addWorksheet(bsheetName, { views: [{ state: 'frozen', ySplit: 1 }] });
+      ws.columns = INDEX_HEADERS.map((h, i) => ({
+        header: h,
+        key:    'c' + i,
+        width:  i === 14 ? 30 : (i === 13 ? 36 : (i === 1 ? 32 : 16))
+      }));
+      ws.getRow(1).eachCell((cell, col) => {
+        cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: col >= 15 ? 'FF7B4F00' : 'FF1B4F72' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      });
+      ws.getRow(1).height = 28;
+
+      let bRow = 2;
+
+      for (const m of bucket.materials) {
+        done++;
+        if (progressCb) progressCb(done, totalMats, `${bucket.name} · ${m.material}`);
+
+        const p1Disp = m.p1Flag === 'OK' ? m.p1Rate : `0 [${m.p1Flag}]`;
+        const p2Disp = m.p2Flag === 'OK' ? m.p2Rate : `0 [${m.p2Flag}]`;
+        const adjDisp = (m.hceP2 && m.hceP2.length)
+                          ? (m.adjP2Flag === 'OK' ? m.adjP2Rate : `0 [${m.adjP2Flag || 'NO_DATA'}]`)
+                          : '';
+        const hceFlagText = (m.hceP2 && m.hceP2.length)
+                          ? `WO ${m.hceP2[0].order} | ${m.hceP2[0].date} | ${m.hceP2[0].equipment} | ${m.hceP2[0].qty} units (${m.hceP2[0].pct}% of P2)${m.hceP2.length > 1 ? ` [+${m.hceP2.length - 1} more]` : ''}`
+                          : '';
+        const rcDisp = m.rateChange != null ? `${m.rateChange}%` : 'N/A';
+
+        const rowValues = [
+          m.material, m.description, m.totalNet,
+          p1Disp, p2Disp, rcDisp,
+          m.stock, m.mrpType, m.cmin, m.cmax,
+          m.recMin != null ? m.recMin : 'Review',
+          m.recMax != null ? m.recMax : 'Review',
+          m.trafficLight, m.action, hceFlagText, adjDisp, m.pattern
+        ];
+
+        /* Bucket sheet row */
+        const br = ws.getRow(bRow);
+        rowValues.forEach((v, i) => { br.getCell(i + 1).value = v; });
+        stylTrafficCell(br.getCell(13), m.trafficLight);
+        if (hceFlagText) {
+          for (const col of [15, 16]) {
+            br.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+            br.getCell(col).font = { color: { argb: 'FF7B4F00' }, bold: true };
+          }
+        }
+        bRow++;
+
+        /* Master index row */
+        const mr = master.getRow(masterRow);
+        mr.getCell(1).value = bucket.name;
+        rowValues.forEach((v, i) => { mr.getCell(i + 2).value = v; });
+        stylTrafficCell(mr.getCell(14), m.trafficLight);
+        if (hceFlagText) {
+          for (const col of [16, 17]) {
+            mr.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+            mr.getCell(col).font = { color: { argb: 'FF7B4F00' }, bold: true };
+          }
+        }
+        masterRow++;
+      }
+
+      /* Cross-bucket summary row */
+      const sr = xsum.getRow(xsumRow);
+      sr.getCell(1).value = bucket.name;
+      sr.getCell(2).value = bucket.summary.GREEN  || 0;
+      sr.getCell(3).value = bucket.summary.BLUE   || 0;
+      sr.getCell(4).value = bucket.summary.ORANGE || 0;
+      sr.getCell(5).value = bucket.summary.RED    || 0;
+      sr.getCell(6).value = bucket.summary.GREY   || 0;
+      sr.getCell(7).value = bucket.summary.total  || 0;
+      sr.getCell(7).font  = { bold: true };
+      xsumRow++;
+
+      tl_total.GREEN  += bucket.summary.GREEN  || 0;
+      tl_total.BLUE   += bucket.summary.BLUE   || 0;
+      tl_total.ORANGE += bucket.summary.ORANGE || 0;
+      tl_total.RED    += bucket.summary.RED    || 0;
+      tl_total.GREY   += bucket.summary.GREY   || 0;
+      tl_total.total  += bucket.summary.total  || 0;
+    }
+
+    /* Totals row on cross-bucket summary */
+    const tr = xsum.getRow(xsumRow);
+    tr.getCell(1).value = 'TOTAL';
+    tr.getCell(2).value = tl_total.GREEN;
+    tr.getCell(3).value = tl_total.BLUE;
+    tr.getCell(4).value = tl_total.ORANGE;
+    tr.getCell(5).value = tl_total.RED;
+    tr.getCell(6).value = tl_total.GREY;
+    tr.getCell(7).value = tl_total.total;
+    tr.eachCell(cell => { cell.font = { bold: true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFEEEEEE' } }; });
+
+    xsum.getColumn(1).width = 28;
+    for (let c = 2; c <= 7; c++) xsum.getColumn(c).width = 12;
+
+    /* ─── Run metadata sheet ──────────────────────────────────────────────── */
+    const meta = wb.addWorksheet('Run');
+    meta.getCell('A1').value = 'Inventory Optimization · Combined Analysis Run';
+    meta.getCell('A1').font  = { bold: true, size: 14 };
+    const metaRows = [
+      ['Run date',         runDate],
+      ['Buckets',          result.buckets.length],
+      ['Total materials',  totalMats],
+      ['P1 start',         parameters.p1Start],
+      ['P1 end',           parameters.p1End],
+      ['P2 months',        parameters.p2Months],
+      ['Min months',       parameters.minMonths],
+      ['Max months',       parameters.maxMonths],
+      ['Threshold',        parameters.threshold],
+      ['HCE % threshold',  parameters.hcePctThreshold],
+      ['HCE multiplier',   parameters.hceMultThreshold],
+      ['Lumpy CV',         parameters.lumpyCvThreshold],
+      ['Lumpy top-WO',     parameters.lumpyTopWoThreshold],
+      ['Min/Max method',   parameters.minMaxMethod],
+      ['Exported at',      new Date().toISOString()]
+    ];
+    metaRows.forEach((r, i) => {
+      meta.getCell(`A${i + 3}`).value = r[0];
+      meta.getCell(`A${i + 3}`).font  = { bold: true };
+      meta.getCell(`B${i + 3}`).value = r[1];
+    });
+    meta.getColumn(1).width = 24;
+    meta.getColumn(2).width = 38;
+
+    return wb;
+  }
+
+  function stylTrafficCell(cell, tl){
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + (TL_FILL[tl] || '777777') } };
+    cell.font = { bold: true, color: { argb: TL_FONT_WHITE.includes(tl) ? 'FFFFFFFF' : 'FF000000' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  }
+
+  /* ─── Public: combined single-workbook export ───────────────────────────── */
+  async function downloadCombined(result, opts){
+    opts = opts || {};
+    if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS not loaded — include the CDN script.');
+    const wb = await buildCombinedWorkbook(result, opts.progress);
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fname = sanitizeFile(opts.filename || `analysis-ALL-${result.runDate || new Date().toISOString().slice(0,10)}.xlsx`);
+    triggerDownload(blob, fname);
+    return { filename: fname, sizeBytes: buf.byteLength };
+  }
+
   function sanitizeFile(name){
     return String(name).replace(/[^A-Za-z0-9_.-]+/g, '_');
   }
 
-  global.AppExcel = Object.freeze({ buildWorkbookForBucket, downloadBucket, downloadAll });
+  global.AppExcel = Object.freeze({
+    buildWorkbookForBucket,
+    downloadBucket,
+    downloadAll,
+    buildCombinedWorkbook,
+    downloadCombined
+  });
 
 })(window);
