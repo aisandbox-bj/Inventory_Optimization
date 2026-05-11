@@ -36,12 +36,19 @@
     },
     inventoryMaster: {
       material:       ['Material'],
-      totQtyOh:       ['Tot_Qty_OH', 'Tot Qty OH', 'Total Qty', 'Stock On Hand', 'SOH'],
+      totQtyOh:       ['Tot_Qty_OH', 'Tot Qty OH', 'Total Qty', 'Stock On Hand', 'SOH', 'Qty On Hand'],
+      totValueOh:     ['Tot_Value_OH', 'Tot Value OH', 'Total Value', 'Stock Value', 'Value On Hand', 'On-Hand Value', 'Inventory Value'],
       mrpInd:         ['MRP_Ind', 'MRP Ind', 'MRP Type', 'MRP_Type', 'MRP Indicator'],
       mrpMin:         ['MRP_Min', 'MRP Min', 'Min', 'Minimum', 'Reorder Point'],
       mrpMax:         ['MRP_Max', 'MRP Max', 'Max', 'Maximum'],
       inventoryType:  ['Inventory_Type', 'Inventory Type', 'Inv Type', 'Item Category'],
+      materialGroup:  ['Material Group', 'Mat Group', 'MatGrp', 'Material_Group', 'MGroup'],
+      manufacturer:   ['Manufacturer', 'Mfr', 'OEM', 'Make', 'Manufacturer Name'],
       primaryVendor:  ['Vendor', 'Primary Vendor', 'Source', 'Vendor No.']
+    },
+    userList: {
+      material:    ['Material', 'Material Number', "Mat'l", 'Mat No', 'Mat. No.', 'SKU', 'Part'],
+      description: ['Description', 'Material Description', 'Mat Desc']
     },
     materialVendor: {
       material:            ['Material'],
@@ -190,11 +197,18 @@
     inventoryMaster: {
       material:      'string',
       totQtyOh:      'number',
+      totValueOh:    'number',
       mrpInd:        'string',
       mrpMin:        'number',
       mrpMax:        'number',
       inventoryType: 'string',
+      materialGroup: 'string',
+      manufacturer:  'string',
       primaryVendor: 'string'
+    },
+    userList: {
+      material:    'string',
+      description: 'string'
     },
     materialVendor: {
       material:            'string',

@@ -7,7 +7,7 @@
   'use strict';
 
   const SCHEMA_VERSION = '1.0.0';
-  const APP_VERSION    = '1.0.0';
+  const APP_VERSION    = '1.1.0-dev';
 
   /* ─── Factory defaults — seeded from the existing Python skill ──────────── */
   const FACTORY_DEFAULTS = Object.freeze({
@@ -24,7 +24,21 @@
     lumpyTopWoThreshold: 0.40                    // 40% top-WO share
   });
 
-  const SCOPE_MODES = ['fleet', 'manual', 'byClassification', 'byVendor'];
+  const SCOPE_MODES = ['fleet', 'manual', 'byClassification', 'byVendor', 'parameterSearch'];
+
+  /* ─── Assessment types (set on intake Step 0) ────────────────────────────
+     Determines which inputs are required and which scope modes are valid. */
+  const ASSESSMENT_TYPES = ['unitFloc', 'userList', 'paramSearch'];
+  const ASSESSMENT_TYPE_REQUIRES = Object.freeze({
+    unitFloc:    ['mb51', 'iw39', 'fleetMaster', 'inventoryMaster'],
+    userList:    ['mb51', 'inventoryMaster', 'userList'],
+    paramSearch: ['mb51', 'inventoryMaster']
+  });
+  const ASSESSMENT_TYPE_SCOPE = Object.freeze({
+    unitFloc:    ['fleet', 'byClassification', 'byVendor'],
+    userList:    ['manual'],
+    paramSearch: ['parameterSearch']
+  });
 
   /* ─── Per-parameter descriptors (used by Intake §5 + Settings §1) ────────
      Kept here so every consumer reads the same wording. */
@@ -53,7 +67,8 @@
         mrpClassifiers: [],
         movementAmount: { min: null, max: null }
       },
-      byVendor:         { vendors: [] }
+      byVendor:         { vendors: [] },
+      parameterSearch:  { filters: [], resolvedMaterials: [] }
     };
     return scope;
   }
@@ -66,7 +81,8 @@
         assessmentName: '',
         createdAt:      new Date().toISOString(),
         createdBy:      '',
-        appVersion:     APP_VERSION
+        appVersion:     APP_VERSION,
+        assessmentType: null
       },
       scope:      emptyScope('fleet'),
       parameters: { ...FACTORY_DEFAULTS },
@@ -75,6 +91,7 @@
         iw39:            [],
         fleetMaster:     [],
         inventoryMaster: [],
+        userList:        [],
         materialVendor:  [],
         leadTimes:       []
       },
@@ -149,6 +166,9 @@
     SCHEMA_VERSION,
     APP_VERSION,
     SCOPE_MODES,
+    ASSESSMENT_TYPES,
+    ASSESSMENT_TYPE_REQUIRES,
+    ASSESSMENT_TYPE_SCOPE,
     FACTORY_DEFAULTS,
     PARAMETER_DESCRIPTIONS,
     emptyScope,

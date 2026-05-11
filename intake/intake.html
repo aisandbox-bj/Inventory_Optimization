@@ -12,13 +12,14 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <span class="sub">v1.0 · Intake</span>
+    <span class="sub">v1.1.0-dev · Intake</span>
   </div>
   <div class="links">
     <a href="../index.html">Dashboard</a>
     <a href="intake.html" class="active">Intake</a>
     <a href="../analysis/analysis.html">Analysis</a>
     <a href="../settings/settings.html">Settings</a>
+    <a href="../record-of-change.html">RoC</a>
   </div>
 </nav>
 
@@ -46,38 +47,92 @@
       </div>
     </section>
 
+    <!-- ─── STEP 0 — ASSESSMENT TYPE ─── -->
+    <section class="step" id="step0">
+      <div class="step-head">
+        <div class="step-num">00</div>
+        <div class="step-title">Assessment type</div>
+        <div class="step-status" id="step0Status">pick one to proceed</div>
+      </div>
+      <div class="step-body">
+        <div class="panel-sub" style="margin-bottom:14px;">
+          The assessment type determines which inputs you need to upload and which scope strategies are available downstream. Pick one — non-applicable upload zones will grey out and reject drops.
+        </div>
+        <div class="atype-grid">
+          <label class="atype-card" data-atype="unitFloc">
+            <input type="radio" name="atype" value="unitFloc" />
+            <div class="atype-head">
+              <span class="atype-tag">A · UNIT / FLOC</span>
+              <span class="atype-check"></span>
+            </div>
+            <div class="atype-title">UNIT / FLOC based</div>
+            <div class="atype-desc">Fleet-driven assessment. Filter MB51 through IW39 work orders attached to the chosen equipment unit(s) or functional location(s).</div>
+            <div class="atype-needs"><b>Needs:</b> MB51 · IW39 · Fleet Master · Inventory Master</div>
+          </label>
+
+          <label class="atype-card" data-atype="userList">
+            <input type="radio" name="atype" value="userList" />
+            <div class="atype-head">
+              <span class="atype-tag">B · USER LIST</span>
+              <span class="atype-check"></span>
+            </div>
+            <div class="atype-title">User-specified list</div>
+            <div class="atype-desc">Run the pipeline against a known material list — paste, or upload as CSV / XLSX. No fleet filter applied; MB51 is consumed as-is.</div>
+            <div class="atype-needs"><b>Needs:</b> User list · MB51 · Inventory Master</div>
+          </label>
+
+          <label class="atype-card" data-atype="paramSearch">
+            <input type="radio" name="atype" value="paramSearch" />
+            <div class="atype-head">
+              <span class="atype-tag">C · PARAMETER SEARCH</span>
+              <span class="atype-check"></span>
+            </div>
+            <div class="atype-title">Parameter search</div>
+            <div class="atype-desc">Discover a material set by filtering Inventory Master + MB51 against multiple dimensions (Material Group · Manufacturer · MB51 movement · Value · Qty on hand · Inventory Type · MRP indicator).</div>
+            <div class="atype-needs"><b>Needs:</b> MB51 · Inventory Master</div>
+          </label>
+        </div>
+      </div>
+    </section>
+
     <!-- ─── STEP 1 — UPLOAD ─── -->
     <section class="step" id="step1">
       <div class="step-head">
         <div class="step-num">01</div>
         <div class="step-title">Upload source files</div>
-        <div class="step-status" id="step1Status">awaiting files</div>
+        <div class="step-status" id="step1Status">awaiting assessment type</div>
       </div>
       <div class="step-body">
         <div class="upload-grid">
-          <label class="drop" data-source="mb51">
+          <label class="drop" data-source="mb51" data-needed-by="unitFloc,userList,paramSearch">
             <div class="name">MB51</div>
             <div class="hint">Material movements · Posting Date, Order, Material, Movement Type, Quantity. ≥ 12 months.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
-          <label class="drop" data-source="iw39">
+          <label class="drop" data-source="iw39" data-needed-by="unitFloc">
             <div class="name">IW39</div>
             <div class="hint">Work orders · Order, Sort Field, Basic start date, Description.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
-          <label class="drop" data-source="fleetMaster">
+          <label class="drop" data-source="fleetMaster" data-needed-by="unitFloc">
             <div class="name">Fleet Master</div>
             <div class="hint">Equipment list · Model number, Sort Field, Unit Type, Manufacturer, FunctLoc.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
-          <label class="drop" data-source="inventoryMaster">
+          <label class="drop" data-source="inventoryMaster" data-needed-by="unitFloc,userList,paramSearch">
             <div class="name">Inventory Master</div>
-            <div class="hint">Stock & MRP · Material, Tot Qty OH, MRP Ind, MRP Min, MRP Max, Inventory Type.</div>
+            <div class="hint">Stock &amp; MRP &amp; classification · Material, Qty OH, Value OH, Material Group, Manufacturer, MRP Ind, MRP Min/Max, Inventory Type.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
+          </label>
+          <label class="drop drop-cond" data-source="userList" data-needed-by="userList" data-conditional="userList">
+            <div class="name">User material list</div>
+            <div class="hint">Required for User-list assessment. One material per row — or comma/tab-delimited.</div>
+            <span class="file">drag .xlsx / .csv / .txt here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv,.txt" />
           </label>
           <div class="hidden">
             <label class="drop drop-cond" data-source="materialVendor">
@@ -187,6 +242,43 @@
           <h5>Pick vendors / suppliers</h5>
           <div id="vendorList" class="chip-row"></div>
           <div class="scope-preview">no vendors selected</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── STEP 4b — PARAMETER SEARCH FILTER PANEL (Parameter Search only) ─── -->
+    <section class="step hidden" id="stepParamSearch">
+      <div class="step-head">
+        <div class="step-num">04b</div>
+        <div class="step-title">Parameter search · filter the material universe</div>
+        <div class="step-status" id="paramSearchStatus">no filters set</div>
+      </div>
+      <div class="step-body">
+        <div class="panel-sub" style="margin-bottom:14px;">
+          Drag a dimension from the bar onto the canvas to add a filter. Multiple filters AND together —
+          a material must satisfy every active filter to qualify. Use <b>Simple</b> for value-pick / range
+          presets, or <b>Advanced</b> for custom min/max, regex, or comma-separated lists.
+        </div>
+
+        <div class="ps-dim-bar" id="psDimBar"></div>
+
+        <div class="ps-canvas" id="psCanvas">
+          <div class="ps-canvas-empty">Drag a dimension here to start filtering.</div>
+        </div>
+
+        <div class="ps-preview">
+          <div class="ps-stat">
+            <span class="lab">Matching materials</span>
+            <span class="v" id="psMatCount">—</span>
+          </div>
+          <div class="ps-stat">
+            <span class="lab">Total net consumption</span>
+            <span class="v" id="psNetConsumption">—</span>
+          </div>
+          <div class="ps-stat">
+            <span class="lab">Total on-hand value</span>
+            <span class="v" id="psOnHandValue">—</span>
+          </div>
         </div>
       </div>
     </section>

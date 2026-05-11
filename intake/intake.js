@@ -9,13 +9,14 @@
 
   /* ─── Sources required and conditional ──────────────────────────────────── */
   const REQUIRED_SOURCES   = ['mb51', 'iw39', 'fleetMaster', 'inventoryMaster'];
-  const CONDITIONAL_SOURCES= ['materialVendor', 'leadTimes'];
+  const CONDITIONAL_SOURCES= ['userList', 'materialVendor', 'leadTimes'];
 
   const SOURCE_LABEL = {
     mb51:            'MB51 — Material Movements',
     iw39:            'IW39 — Work Orders',
     fleetMaster:     'Fleet Master',
     inventoryMaster: 'Inventory Master',
+    userList:        'User material list',
     materialVendor:  'Material — Vendor mapping',
     leadTimes:       'Lead Times'
   };
@@ -88,12 +89,102 @@
     paramsRun:   { ...CanonicalSchema.FACTORY_DEFAULTS },
     aliases:  {},
     runDate:  new Date().toISOString().slice(0, 10),
-    name:     ''
+    name:     '',
+    assessmentType: null,                            // 'unitFloc' | 'userList' | 'paramSearch'
+    psFilters: []                                    // Parameter-Search filter cards
   };
+
+  /* ─── Parameter-Search dimension catalogue ──────────────────────────────── */
+  /* Each dimension declares its data source, value type, and pickers. */
+  const PS_DIMENSIONS = [
+    { key:'mb51Movement',   label:'MB51 movement',   type:'number', from:'mb51_net',  unit:'units' },
+    { key:'materialGroup',  label:'Material group',  type:'string', from:'master',    field:'materialGroup' },
+    { key:'manufacturer',   label:'Manufacturer',    type:'string', from:'master',    field:'manufacturer' },
+    { key:'totValueOh',     label:'Value on hand',   type:'number', from:'master',    field:'totValueOh',  unit:'currency' },
+    { key:'totQtyOh',       label:'Qty on hand',     type:'number', from:'master',    field:'totQtyOh',    unit:'units' },
+    { key:'inventoryType',  label:'Inventory type',  type:'string', from:'master',    field:'inventoryType' },
+    { key:'mrpInd',         label:'MRP indicator',   type:'string', from:'master',    field:'mrpInd' }
+  ];
 
   /* ─── DOM refs ──────────────────────────────────────────────────────────── */
   const $  = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     STEP 0 — Assessment type
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  function setupAssessmentType(){
+    $$('.atype-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        // Avoid double-fire from inner radio click
+        if (e.target.tagName === 'INPUT') return;
+        const radio = card.querySelector('input[type=radio]');
+        radio.checked = true;
+        applyAssessmentType(card.dataset.atype);
+      });
+      const radio = card.querySelector('input[type=radio]');
+      radio.addEventListener('change', () => applyAssessmentType(card.dataset.atype));
+    });
+  }
+
+  function applyAssessmentType(type){
+    state.assessmentType = type;
+    $$('.atype-card').forEach(c => c.classList.toggle('selected', c.dataset.atype === type));
+
+    // Grey out drop zones not needed by this type
+    const needed = new Set(CanonicalSchema.ASSESSMENT_TYPE_REQUIRES[type] || []);
+    $$('.drop[data-source]').forEach(drop => {
+      const source = drop.dataset.source;
+      // The conditional zones (materialVendor, leadTimes) are managed by scope/method toggles —
+      // don't override their hidden state from here.
+      if (source === 'materialVendor' || source === 'leadTimes') return;
+      const requiredHere = needed.has(source);
+      drop.classList.toggle('atype-disabled', !requiredHere);
+      const inp = drop.querySelector('input[type=file]');
+      if (inp) inp.disabled = !requiredHere;
+    });
+
+    // Scope tab visibility — restrict to scope modes valid for this assessment type
+    const allowedScopes = new Set(CanonicalSchema.ASSESSMENT_TYPE_SCOPE[type] || []);
+    $$('.scope-tabs .tab').forEach(tab => {
+      const valid = allowedScopes.has(tab.dataset.mode);
+      tab.style.display = valid ? '' : 'none';
+    });
+    // Auto-pick the first valid scope mode for this type
+    const firstValid = CanonicalSchema.ASSESSMENT_TYPE_SCOPE[type][0];
+    if (firstValid && state.scope.mode !== firstValid) {
+      switchScopeMode(firstValid);
+    }
+
+    // Show/hide Parameter-Search panel
+    const psStep = $('#stepParamSearch');
+    if (psStep) psStep.classList.toggle('hidden', type !== 'paramSearch');
+
+    // Step 4 (scope) collapsed for paramSearch — its scope is the filter panel itself
+    const scopeStep = $('#step4');
+    if (scopeStep) scopeStep.classList.toggle('hidden', type === 'paramSearch');
+
+    $('#step0Status').textContent = `${labelForType(type)} selected`;
+    $('#step0Status').className = 'step-status done';
+    $('#step1Status').textContent = `awaiting ${[...needed].join(' · ')}`;
+
+    if (type === 'paramSearch') renderParamSearch();
+    renderJsonPreview();
+  }
+
+  function labelForType(t){
+    return { unitFloc:'UNIT/FLOC', userList:'User list', paramSearch:'Parameter search' }[t] || t;
+  }
+
+  /* Helper to swap the active scope tab + pane programmatically */
+  function switchScopeMode(mode){
+    state.scope.mode = mode;
+    $$('.scope-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+    $$('.scope-pane').forEach(p => p.classList.toggle('hidden', p.dataset.mode !== mode));
+    const mv = document.querySelector('.drop[data-source="materialVendor"]');
+    if (mv) mv.parentElement.classList.toggle('hidden', mode !== 'byVendor');
+  }
 
   /* ═════════════════════════════════════════════════════════════════════════
      STEP 1 — Upload
@@ -104,9 +195,13 @@
       const drop = document.querySelector(`.drop[data-source="${source}"]`);
       if (!drop) return;
       const input = drop.querySelector('input[type="file"]');
-      drop.addEventListener('dragover',  (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+      drop.addEventListener('dragover',  (e) => {
+        if (drop.classList.contains('atype-disabled')) return;
+        e.preventDefault(); drop.classList.add('dragover');
+      });
       drop.addEventListener('dragleave', ()  => drop.classList.remove('dragover'));
       drop.addEventListener('drop',      (e) => {
+        if (drop.classList.contains('atype-disabled')) { e.preventDefault(); return; }
         e.preventDefault();
         drop.classList.remove('dragover');
         if (e.dataTransfer.files.length) handleFile(source, e.dataTransfer.files[0]);
@@ -139,10 +234,27 @@
 
   function onParseUpdated(){
     renderSchema();
-    if (REQUIRED_SOURCES.every(s => state.parsed[s])) {
+    const required = currentRequiredSources();
+    if (required.length && required.every(s => state.parsed[s])) {
       runDqGate();
     }
+    // Auto-populate manual list textarea when user-list type + file uploaded
+    if (state.assessmentType === 'userList' && state.parsed.userList) {
+      const mats = uniq(state.parsed.userList.canonical
+        .map(r => String(r.material || '').trim())
+        .filter(Boolean));
+      state.scope.manual.materials = mats;
+      const ta = $('#manualPaste');
+      if (ta) ta.value = mats.join('\n');
+      renderScopePreview();
+    }
+    if (state.assessmentType === 'paramSearch') renderParamSearch();
     renderJsonPreview();
+  }
+
+  function currentRequiredSources(){
+    if (!state.assessmentType) return [];
+    return CanonicalSchema.ASSESSMENT_TYPE_REQUIRES[state.assessmentType] || [];
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -618,6 +730,290 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
+     STEP 4b — Parameter Search filter panel
+     PBI-style: drag a dimension from the bar onto the canvas. Each card
+     supports Simple (chips / range) and Advanced (custom min-max, regex,
+     comma-separated list) modes. Filters AND together.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  function setupParamSearch(){
+    const bar = $('#psDimBar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    PS_DIMENSIONS.forEach(dim => {
+      const pill = document.createElement('div');
+      pill.className = 'ps-dim';
+      pill.draggable = true;
+      pill.dataset.dim = dim.key;
+      pill.textContent = dim.label;
+      pill.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', dim.key);
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      pill.addEventListener('click', () => addPsFilter(dim.key));   // click = quick-add
+      bar.appendChild(pill);
+    });
+    const canvas = $('#psCanvas');
+    canvas.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      canvas.classList.add('drag-over');
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    canvas.addEventListener('dragleave', () => canvas.classList.remove('drag-over'));
+    canvas.addEventListener('drop', (e) => {
+      e.preventDefault();
+      canvas.classList.remove('drag-over');
+      const key = e.dataTransfer.getData('text/plain');
+      if (key) addPsFilter(key);
+    });
+  }
+
+  function addPsFilter(dimKey){
+    if (state.psFilters.find(f => f.dim === dimKey)) return;   // already added
+    const dim = PS_DIMENSIONS.find(d => d.key === dimKey);
+    if (!dim) return;
+    const filter = {
+      dim:    dimKey,
+      mode:   'simple',
+      values: [],
+      min:    null,
+      max:    null,
+      regex:  ''
+    };
+    state.psFilters.push(filter);
+    renderParamSearch();
+  }
+
+  function removePsFilter(dimKey){
+    state.psFilters = state.psFilters.filter(f => f.dim !== dimKey);
+    renderParamSearch();
+  }
+
+  function renderParamSearch(){
+    const canvas = $('#psCanvas');
+    const bar    = $('#psDimBar');
+    if (!canvas) return;
+
+    // Mark in-use dimensions in the bar
+    if (bar) {
+      $$('#psDimBar .ps-dim').forEach(p => p.classList.toggle('in-use', !!state.psFilters.find(f => f.dim === p.dataset.dim)));
+    }
+
+    canvas.innerHTML = '';
+    if (state.psFilters.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'ps-canvas-empty';
+      empty.textContent = 'Drag a dimension here to start filtering.';
+      canvas.appendChild(empty);
+      $('#paramSearchStatus').textContent = 'no filters set';
+      updatePsPreview();
+      return;
+    }
+
+    state.psFilters.forEach(f => canvas.appendChild(renderPsFilterCard(f)));
+    $('#paramSearchStatus').textContent = `${state.psFilters.length} filter${state.psFilters.length === 1 ? '' : 's'} active`;
+    updatePsPreview();
+  }
+
+  function renderPsFilterCard(filter){
+    const dim = PS_DIMENSIONS.find(d => d.key === filter.dim);
+    const card = document.createElement('div');
+    card.className = 'ps-filter';
+    card.dataset.dim = filter.dim;
+
+    card.innerHTML = `
+      <div class="ps-filter-head">
+        <span class="ps-filter-name">${escapeHtml(dim.label)}</span>
+        <div class="ps-filter-mode">
+          <button data-mode="simple" class="${filter.mode === 'simple' ? 'active' : ''}">Simple</button>
+          <button data-mode="advanced" class="${filter.mode === 'advanced' ? 'active' : ''}">Advanced</button>
+        </div>
+        <span class="ps-filter-count" data-count></span>
+        <button class="ps-filter-remove">✕ Remove</button>
+      </div>
+      <div class="ps-filter-body"></div>
+    `;
+    const body = card.querySelector('.ps-filter-body');
+
+    if (dim.type === 'string') {
+      if (filter.mode === 'simple') {
+        const values = uniqueValuesFor(dim).sort();
+        const chips = document.createElement('div');
+        chips.className = 'ps-chip-row';
+        values.forEach(v => {
+          const chip = document.createElement('span');
+          chip.className = 'ps-chip' + (filter.values.includes(v) ? ' on' : '');
+          chip.textContent = v || '(blank)';
+          chip.addEventListener('click', () => {
+            const idx = filter.values.indexOf(v);
+            if (idx >= 0) filter.values.splice(idx, 1); else filter.values.push(v);
+            renderParamSearch();
+          });
+          chips.appendChild(chip);
+        });
+        if (values.length === 0) {
+          chips.innerHTML = '<span class="ps-chip-summary">no values available — Inventory Master may not include this field</span>';
+        }
+        body.appendChild(chips);
+      } else {
+        // Advanced: comma-separated values OR regex
+        body.innerHTML = `
+          <div class="row-input">
+            <label>Values</label>
+            <input type="text" data-pskey="values"
+              placeholder="comma-separated, e.g. VOLVO, KOMATSU"
+              value="${escapeAttr(filter.values.join(', '))}">
+          </div>
+          <div class="row-input">
+            <label>Regex</label>
+            <input type="text" data-pskey="regex"
+              placeholder="optional — overrides values, e.g. ^CAT-"
+              value="${escapeAttr(filter.regex)}">
+          </div>
+        `;
+      }
+    } else {
+      // numeric — both Simple and Advanced share min/max; Advanced just lets user enter precise decimals
+      const stepAttr = (dim.unit === 'currency') ? 'step="100"' : 'step="1"';
+      body.innerHTML = `
+        <div class="row-input">
+          <label>min</label>
+          <input type="number" data-pskey="min" ${stepAttr}
+            placeholder="—" value="${filter.min == null ? '' : filter.min}">
+        </div>
+        <div class="row-input">
+          <label>max</label>
+          <input type="number" data-pskey="max" ${stepAttr}
+            placeholder="—" value="${filter.max == null ? '' : filter.max}">
+        </div>
+        <div class="ps-chip-summary">${dim.unit === 'currency' ? 'Currency units as stored on inventory master (currency unaware).' : 'Net consumption (issues − returns) over the analysis window.'}</div>
+      `;
+    }
+
+    // Mode toggle
+    card.querySelectorAll('.ps-filter-mode button').forEach(b => {
+      b.addEventListener('click', () => {
+        filter.mode = b.dataset.mode;
+        renderParamSearch();
+      });
+    });
+    // Remove
+    card.querySelector('.ps-filter-remove').addEventListener('click', () => removePsFilter(filter.dim));
+    // Input wiring
+    body.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const k = inp.dataset.pskey;
+        if (k === 'min' || k === 'max') {
+          const n = parseFloat(inp.value);
+          filter[k] = isNaN(n) ? null : n;
+        } else if (k === 'values') {
+          filter.values = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+        } else if (k === 'regex') {
+          filter.regex = inp.value;
+        }
+        updatePsPreview();
+      });
+    });
+
+    // Per-card match count
+    setTimeout(() => {
+      const match = countMatchingMaterials([filter]);
+      const c = card.querySelector('[data-count]');
+      if (c) c.textContent = `${match.size} match${match.size === 1 ? '' : 'es'}`;
+    }, 0);
+
+    return card;
+  }
+
+  function uniqueValuesFor(dim){
+    if (dim.from === 'master') {
+      const master = state.parsed.inventoryMaster?.canonical || [];
+      return uniq(master.map(r => String(r[dim.field] || '').trim()).filter(Boolean));
+    }
+    return [];
+  }
+
+  /* ─── Apply filters → resolved material set ─────────────────────────────── */
+  function countMatchingMaterials(filters){
+    const master = state.parsed.inventoryMaster?.canonical || [];
+    if (master.length === 0) return new Set();
+
+    // Per-material net consumption (cached)
+    const matNet = computeNetConsumption(state.parsed.mb51?.canonical || []);
+
+    const matched = new Set();
+    for (const r of master) {
+      const mat = String(r.material || '').trim();
+      if (!mat) continue;
+      if (passesAllFilters(r, mat, matNet, filters)) matched.add(mat);
+    }
+    return matched;
+  }
+
+  function passesAllFilters(masterRow, mat, matNet, filters){
+    for (const f of filters) {
+      const dim = PS_DIMENSIONS.find(d => d.key === f.dim);
+      if (!dim) continue;
+
+      if (dim.from === 'mb51_net') {
+        const net = matNet[mat] || 0;
+        if (f.min != null && net < f.min) return false;
+        if (f.max != null && net > f.max) return false;
+        continue;
+      }
+
+      if (dim.type === 'string') {
+        const v = String(masterRow[dim.field] || '').trim();
+        if (f.mode === 'advanced' && f.regex) {
+          let re;
+          try { re = new RegExp(f.regex); } catch { return false; }
+          if (!re.test(v)) return false;
+        } else {
+          if (f.values.length === 0) continue;            // no constraint set
+          if (!f.values.includes(v)) return false;
+        }
+      } else {
+        const n = parseFloat(masterRow[dim.field]);
+        if (isNaN(n)) {
+          // If filter is set, NaN doesn't satisfy
+          if (f.min != null || f.max != null) return false;
+          continue;
+        }
+        if (f.min != null && n < f.min) return false;
+        if (f.max != null && n > f.max) return false;
+      }
+    }
+    return true;
+  }
+
+  function updatePsPreview(){
+    const matched = countMatchingMaterials(state.psFilters);
+    const master  = state.parsed.inventoryMaster?.canonical || [];
+    const matNet  = computeNetConsumption(state.parsed.mb51?.canonical || []);
+
+    let netSum = 0, valSum = 0;
+    for (const r of master) {
+      const m = String(r.material || '').trim();
+      if (!matched.has(m)) continue;
+      netSum += matNet[m] || 0;
+      const v = parseFloat(r.totValueOh);
+      if (!isNaN(v)) valSum += v;
+    }
+    const fmt = (n) => Math.round(n).toLocaleString();
+
+    if ($('#psMatCount'))      $('#psMatCount').textContent      = matched.size.toLocaleString();
+    if ($('#psNetConsumption'))$('#psNetConsumption').textContent= fmt(netSum);
+    if ($('#psOnHandValue'))   $('#psOnHandValue').textContent   = fmt(valSum);
+
+    // Update resolvedMaterials on scope object for JSON serialization
+    state.scope.parameterSearch = {
+      filters: JSON.parse(JSON.stringify(state.psFilters)),
+      resolvedMaterials: [...matched]
+    };
+    renderJsonPreview();
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
      STEP 5 — Parameters
   ═════════════════════════════════════════════════════════════════════════ */
 
@@ -706,12 +1102,19 @@
     json.metadata.assessmentName = state.name || $('#assessmentName').value || '';
     json.metadata.createdBy      = $('#createdBy').value || '';
     json.metadata.createdAt      = new Date().toISOString();
+    json.metadata.assessmentType = state.assessmentType;
     json.scope                   = JSON.parse(JSON.stringify(state.scope));
+    // For userList type, derive scope.manual.materials from the uploaded list
+    if (state.assessmentType === 'userList' && state.parsed.userList) {
+      const mats = state.parsed.userList.canonical
+        .map(r => String(r.material || '').trim())
+        .filter(Boolean);
+      json.scope.mode = 'manual';
+      json.scope.manual = { materials: uniq(mats) };
+    }
     json.parameters              = { ...state.paramsRun };
     for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
-      if (state.parsed[s]) json.data[s === 'fleetMaster' ? 'fleetMaster'
-                                  : s === 'inventoryMaster' ? 'inventoryMaster'
-                                  : s] = state.parsed[s].canonical;
+      if (state.parsed[s]) json.data[s] = state.parsed[s].canonical;
     }
     json.validation = state.dq ? {
       passed: state.dq.passed,
@@ -848,10 +1251,12 @@
 
   document.addEventListener('DOMContentLoaded', async () => {
     await loadDefaults();
+    setupAssessmentType();
     setupDropZones();
     setupScopeTabs();
     setupManualPaste();
     setupClassifInputs();
+    setupParamSearch();
     setupParamButtons();
     setupReviewActions();
     renderJsonPreview();

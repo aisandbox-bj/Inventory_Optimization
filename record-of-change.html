@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Inventory Optimization · Record of Change</title>
+<link rel="stylesheet" href="shared/brand-tokens.css" />
+<style>
+.roc-head{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:28px 32px;
+  margin-bottom:24px;
+  position:relative;
+  overflow:hidden;
+}
+.roc-head::before{
+  content:"";
+  position:absolute;
+  width:280px; height:280px;
+  border-radius:50%;
+  background:rgba(31,206,216,0.10);
+  filter:blur(70px);
+  top:-120px; right:-120px;
+  pointer-events:none;
+  z-index:0;
+}
+.roc-head > *{ position:relative; z-index:1; }
+.roc-head .pre{
+  font-family:var(--font-mono);
+  color:var(--accent);
+  letter-spacing:2.5px;
+  font-size:11px;
+  text-transform:uppercase;
+  margin-bottom:10px;
+}
+.roc-head h1{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:38px;
+  letter-spacing:3px;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  margin-bottom:8px;
+}
+.roc-head .sub{
+  font-family:var(--font-body);
+  font-size:13.5px;
+  color:var(--text-sec);
+  line-height:1.55;
+  max-width:760px;
+}
+
+.rollback-panel{
+  background:var(--bg-elevated);
+  border:1px solid var(--border-soft);
+  border-left:3px solid var(--status-warn);
+  padding:18px 22px;
+  margin-bottom:24px;
+}
+.rollback-panel .lab{
+  font-family:var(--font-mono);
+  color:var(--status-warn);
+  letter-spacing:1.8px;
+  font-size:11px;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.rollback-panel h3{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:16px;
+  letter-spacing:1.4px;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  margin-bottom:10px;
+}
+.rollback-panel p{
+  font-family:var(--font-body);
+  font-size:12.5px;
+  color:var(--text-sec);
+  line-height:1.55;
+  margin-bottom:10px;
+}
+.rollback-panel code{
+  background:rgba(0,0,0,0.30);
+  color:var(--accent);
+  padding:2px 7px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  border-radius:2px;
+}
+.rollback-panel pre{
+  background:rgba(0,0,0,0.30);
+  color:var(--text-sec);
+  padding:10px 14px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  line-height:1.55;
+  border-radius:2px;
+  overflow-x:auto;
+  margin:8px 0;
+}
+
+.roc-list{
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+.roc-entry{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:22px 26px;
+  position:relative;
+}
+.roc-entry.dev{ border-left:3px solid var(--status-warn); }
+.roc-entry.release{ border-left:3px solid var(--accent-green); }
+.roc-entry .head{
+  display:flex;
+  align-items:baseline;
+  gap:16px;
+  margin-bottom:14px;
+  flex-wrap:wrap;
+}
+.roc-entry .ver{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:22px;
+  letter-spacing:1.5px;
+  color:var(--accent);
+  text-transform:uppercase;
+}
+.roc-entry.release .ver{ color:var(--accent-green); }
+.roc-entry.dev .ver{ color:var(--status-warn); }
+.roc-entry .date{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:1.3px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+}
+.roc-entry .tag{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:1.3px;
+  padding:3px 9px;
+  border:1px solid var(--border-soft);
+  color:var(--text-sec);
+  text-transform:uppercase;
+}
+.roc-entry .tag.dev{ color:var(--status-warn); border-color:var(--status-warn); }
+.roc-entry .tag.released{ color:var(--accent-green); border-color:var(--accent-green); }
+.roc-entry h4{
+  font-family:var(--font-heading);
+  font-weight:600;
+  font-size:14px;
+  letter-spacing:.8px;
+  color:var(--text-pri);
+  margin:14px 0 6px;
+}
+.roc-entry ul{
+  list-style:none;
+  padding:0;
+  margin:0 0 4px 0;
+}
+.roc-entry li{
+  font-family:var(--font-body);
+  font-size:13px;
+  color:var(--text-sec);
+  line-height:1.55;
+  padding:4px 0 4px 18px;
+  position:relative;
+}
+.roc-entry li::before{
+  content:"";
+  position:absolute;
+  left:0; top:13px;
+  width:7px; height:1px;
+  background:var(--accent);
+}
+.roc-entry .commit{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-muted);
+  letter-spacing:.4px;
+}
+.roc-entry .commit a{ color:var(--accent); text-decoration:none; }
+.roc-entry .commit a:hover{ color:var(--accent-glow); }
+</style>
+</head>
+<body>
+
+<nav class="appnav">
+  <div class="brand">
+    <span class="dot"></span>
+    Inventory Optimization
+    <span class="sub">v1.1.0-dev · RoC</span>
+  </div>
+  <div class="links">
+    <a href="index.html">Dashboard</a>
+    <a href="intake/intake.html">Intake</a>
+    <a href="analysis/analysis.html">Analysis</a>
+    <a href="settings/settings.html">Settings</a>
+    <a href="record-of-change.html" class="active">RoC</a>
+  </div>
+</nav>
+
+<main class="shell">
+
+  <section class="roc-head">
+    <div class="pre">Version management · rollback-safe</div>
+    <h1>Record of Change</h1>
+    <div class="sub">
+      Every release is tagged on the GitHub repo and listed here. Each entry names what changed,
+      what schema/file boundaries it touched, and the exact <code>git</code> command to roll back
+      to any prior version. Releases marked <em>dev</em> are in-flight; they become <em>released</em>
+      when the tag lands on <code>main</code>.
+    </div>
+  </section>
+
+  <section class="rollback-panel">
+    <div class="lab">How to roll back</div>
+    <h3>Reset to any tagged version</h3>
+    <p>
+      From a clone of the repo (e.g. <code>/tmp/push-Inventory_Optimization</code>), check out any tag
+      to see the working tree at that version, then either copy the files back into your local
+      <code>App/v1/</code> directory or reset <code>main</code> to that tag. The user's working folder
+      is <strong>not</strong> a git repo — rollback always happens through a clone, never via
+      <code>git init</code> in the working dir.
+    </p>
+<pre>
+# Inspect a prior version (read-only checkout)
+git clone https://github.com/aisandbox-bj/Inventory_Optimization.git /tmp/peek
+git -C /tmp/peek checkout v1.0.0
+# → now /tmp/peek holds the working tree at v1.0.0; copy what you need back
+
+# Or hard-reset main to a tag (irreversible — only when intended)
+git -C /tmp/peek checkout main
+git -C /tmp/peek reset --hard v1.0.0
+git -C /tmp/peek push --force-with-lease origin main
+</pre>
+    <p style="margin-top:6px;">
+      Local <code>App/v1/</code> reflects whatever Claude has just written — it tracks the
+      <em>dev</em> tip until the next release tag. Save a snapshot before destructive edits if
+      uncertain.
+    </p>
+  </section>
+
+  <div class="roc-list">
+
+    <!-- ───────── v1.1.0-dev ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v1.1.0</span>
+        <span class="date">2026-05-11</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>Intake — Assessment Type selector</h4>
+      <ul>
+        <li>New Step 0 on the Intake page: pick one of <strong>UNIT / FLOC based</strong>, <strong>User specified List</strong>, or <strong>Parameter search</strong>.</li>
+        <li>Upload zones not required by the selected type are greyed out and reject drops, eliminating ambiguity about which data is needed for which workflow.</li>
+        <li>Selection persists in canonical JSON as <code>metadata.assessmentType</code>.</li>
+      </ul>
+
+      <h4>Intake — Inventory Master extended fields</h4>
+      <ul>
+        <li>Parser now resolves <strong>Material Group</strong>, <strong>Manufacturer</strong>, <strong>Value on hand</strong> (Stock value), and keeps existing <strong>Qty on hand</strong>, <strong>MRP indicator</strong>, <strong>Inventory Type</strong> — through column aliases, so SAP export drift remains tolerable.</li>
+        <li>Fields are optional: a missing column simply removes that filter dimension from Parameter Search.</li>
+      </ul>
+
+      <h4>Parameter Search — PBI-style filter panel</h4>
+      <ul>
+        <li>When assessment type = Parameter search, an inline filter panel appears after upload and before "Save & Continue".</li>
+        <li>Drag dimensions from a pill bar onto the canvas to add filters. Multiple filters AND together.</li>
+        <li>Each filter supports <strong>Simple</strong> (multi-select values, or numeric range presets) and <strong>Advanced</strong> (custom min/max, regex, or comma-separated value lists).</li>
+        <li>Live preview: matching material count + total net consumption update as filters change.</li>
+        <li>Dimensions: MB51 movement (net qty), Material Group, Manufacturer, Value on hand, Qty on hand, Inventory Type, MRP indicator.</li>
+      </ul>
+
+      <h4>Version management</h4>
+      <ul>
+        <li>This <em>Record of Change</em> page added and linked from every page's nav.</li>
+        <li>Bumped <code>APP_VERSION</code> to <code>1.1.0-dev</code> in <code>shared/canonical-schema.js</code>.</li>
+        <li>Prior fully-working baseline tagged as <code>v1.0.0</code> on GitHub for rollback.</li>
+      </ul>
+
+      <div class="commit">
+        Tag (when released): <a href="https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v1.1.0">v1.1.0</a> · branch <code>main</code>
+      </div>
+    </article>
+
+    <!-- ───────── v1.0.0 ───────── -->
+    <article class="roc-entry release">
+      <div class="head">
+        <span class="ver">v1.0.0</span>
+        <span class="date">2026-05-11</span>
+        <span class="tag released">released</span>
+      </div>
+
+      <h4>First fully-working baseline</h4>
+      <ul>
+        <li>Phase 1 — Foundations: brand tokens, canonical schema v1.0.0, storage helpers, SAP parser with column-alias auto-mapping.</li>
+        <li>Phase 2 — Intake engine: 6-step workflow (upload → schema → DQ → scope → params → export). Hybrid DQ gate (green/amber/red) ports <code>01_data_quality.py</code>.</li>
+        <li>Phase 3 — Settings tab: persistent parameter defaults, LLM provider keys + dynamic model fetch, column-alias overrides.</li>
+        <li>Phase 4 — Analysis engine: deterministic pipeline (period rates, HCE, lumpy/smooth, 8-rule traffic-light), inline SVG cumulative chart with P1/P2 trend chords, provider-agnostic LLM review surface, ExcelJS workbook export with embedded charts.</li>
+      </ul>
+
+      <h4>Fixes folded into v1.0.0</h4>
+      <ul>
+        <li>Excel export crash (<code>worksheet.column</code> → <code>worksheet.getColumn</code>) on Summary + Run metadata sheets.</li>
+        <li>Combined-workbook export added: single file with Master Index, per-bucket sheets, cross-bucket Summary, Run metadata.</li>
+        <li>Chart trend lines re-anchored to actual cumulative values at both endpoints (chord across the period) with visible markers and bolder rate labels.</li>
+      </ul>
+
+      <div class="commit">
+        Tag: <a href="https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v1.0.0">v1.0.0</a> · commit <a href="https://github.com/aisandbox-bj/Inventory_Optimization/commit/15543e1">15543e1</a>
+      </div>
+    </article>
+
+  </div>
+
+</main>
+
+</body>
+</html>

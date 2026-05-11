@@ -298,7 +298,29 @@
     if (mode === 'manual') return bucketsManual(json, mb51);
     if (mode === 'byClassification') return bucketsByClassification(json, mb51, master);
     if (mode === 'byVendor') return bucketsByVendor(json, mb51, vendors);
+    if (mode === 'parameterSearch') return bucketsParameterSearch(json, mb51);
     return [];
+  }
+
+  /* ─── Parameter Search bucketing ────────────────────────────────────────────
+     The intake page resolves filters → list of materials. The pipeline simply
+     uses that resolved list — same shape as 'manual'. */
+  function bucketsParameterSearch(json, mb51){
+    const ps   = (json.scope && json.scope.parameterSearch) || {};
+    const mats = new Set(ps.resolvedMaterials || []);
+    const transactions = mb51.filter(t => {
+      const m = String(t.material || '').trim();
+      if (!mats.has(m)) return false;
+      const mt = String(t.movementType || '').trim();
+      return VALID_TYPES.has(mt);
+    });
+    return [{
+      key: 'paramSearch',
+      name: `Parameter search · ${mats.size} mat${mats.size === 1 ? '' : 's'}`,
+      kind: 'parameterSearch',
+      materials: mats,
+      transactions
+    }];
   }
 
   /* ─── Fleet bucketing + multi-model detection ───────────────────────────── */
