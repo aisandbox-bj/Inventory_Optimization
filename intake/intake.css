@@ -79,41 +79,98 @@
   border-radius:var(--r-sm);
 }
 
-/* ─── Step 2: Schema mapping ────────────────────────────────────────────── */
-.schema-rows{ display:flex; flex-direction:column; gap:10px; }
-.schema-row{
-  display:grid;
-  grid-template-columns:140px 1fr 200px 22px;
-  gap:14px;
-  align-items:center;
-  padding:8px 12px;
+/* ─── Step 2: Schema mapping — grouped tiles per dataset ────────────────── */
+.schema-rows{ display:block; }
+
+.schema-group{
   background:var(--bg-panel-2);
-  border-left:2px solid var(--border-soft);
+  border:1px solid var(--border-soft);
   border-radius:var(--r-sm);
-  font-size:12.5px;
+  margin-bottom:14px;
+  overflow:hidden;
 }
-.schema-row.matched{ border-left-color:var(--status-ok); }
-.schema-row.missing{ border-left-color:var(--status-warn); }
-.schema-row .src{
-  font-family:var(--font-mono);
-  font-size:11px;
+.schema-group:last-child{ margin-bottom:0; }
+.schema-group.required{ border-left:3px solid var(--accent); }
+.schema-group.optional{ border-left:3px solid var(--text-disabled); }
+
+.schema-group-head{
+  display:flex;
+  align-items:baseline;
+  gap:14px;
+  padding:12px 18px;
+  background:rgba(31,206,216,0.05);
+  border-bottom:1px solid var(--border-soft);
+}
+.schema-group-head .name{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:15px;
+  letter-spacing:1.8px;
   text-transform:uppercase;
-  letter-spacing:1px;
+  color:var(--text-pri);
+  flex-shrink:0;
+}
+.schema-group-head .desc{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:.4px;
   color:var(--text-muted);
 }
+.schema-group-head .count{
+  margin-left:auto;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  flex-shrink:0;
+}
+.schema-group-head .count.ok{ color:var(--status-ok); }
+.schema-group-head .count.warn{ color:var(--status-warn); }
+
+.schema-row{
+  display:grid;
+  grid-template-columns:140px 1fr 220px 22px;
+  gap:16px;
+  align-items:center;
+  padding:11px 18px;
+  border-left:2px solid var(--border-soft);
+  border-bottom:1px solid rgba(155,171,168,0.05);
+  font-size:12.5px;
+  background:var(--bg-panel);
+}
+.schema-row:last-child{ border-bottom:none; }
+.schema-row.matched{ border-left-color:var(--status-ok); }
+.schema-row.missing{ border-left-color:var(--status-warn); }
+
 .schema-row .field{
   font-family:var(--font-mono);
   color:var(--accent);
   font-size:12px;
+  letter-spacing:.3px;
 }
-.schema-row .header{
+.schema-row .notes{
   font-family:var(--font-body);
-  color:var(--text-sec);
+  font-size:11.5px;
+  color:var(--text-muted);
+  line-height:1.5;
+}
+.schema-row .notes b{
+  color:var(--accent);
+  font-family:var(--font-body);
+  font-weight:600;
 }
 .schema-row .header em{
   font-style:normal;
   color:var(--status-warn);
 }
+.schema-row .ok{
+  text-align:center;
+  font-family:var(--font-mono);
+  font-size:14px;
+  font-weight:600;
+}
+.schema-row.matched .ok{ color:var(--status-ok); }
+.schema-row.missing .ok{ color:var(--status-warn); }
 
 /* ─── Step 3: DQ gate ───────────────────────────────────────────────────── */
 .dq-summary{
@@ -272,7 +329,19 @@
   letter-spacing:1.2px;
   text-transform:uppercase;
   color:var(--text-muted);
-  margin-bottom:6px;
+  margin-bottom:4px;
+}
+.param-cell .param-desc{
+  font-family:var(--font-body);
+  font-size:11px;
+  color:var(--text-muted);
+  line-height:1.45;
+  margin-bottom:8px;
+  min-height:32px;
+}
+.param-cell .param-desc b{
+  color:var(--accent);
+  font-weight:600;
 }
 .param-cell .factory-note{
   font-family:var(--font-mono);
@@ -304,9 +373,37 @@
   white-space:pre;
 }
 
+.actions-help{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:14px;
+  margin-top:16px;
+  padding:14px 18px;
+  background:var(--bg-panel-2);
+  border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);
+}
+@media (max-width:980px){ .actions-help{ grid-template-columns:1fr 1fr; } }
+.actions-help .ah-cell{
+  display:flex; flex-direction:column; gap:4px;
+}
+.actions-help .ah-name{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  color:var(--accent);
+}
+.actions-help .ah-desc{
+  font-family:var(--font-body);
+  font-size:11.5px;
+  color:var(--text-muted);
+  line-height:1.45;
+}
+
 .actions-row{
   display:flex; gap:10px; align-items:center;
-  margin-top:18px;
+  margin-top:14px;
   flex-wrap:wrap;
 }
 

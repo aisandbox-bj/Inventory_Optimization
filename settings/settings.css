@@ -53,7 +53,19 @@
   letter-spacing:1.2px;
   text-transform:uppercase;
   color:var(--text-muted);
-  margin-bottom:6px;
+  margin-bottom:4px;
+}
+.param-cell .param-desc{
+  font-family:var(--font-body);
+  font-size:11px;
+  color:var(--text-muted);
+  line-height:1.45;
+  margin-bottom:8px;
+  min-height:32px;
+}
+.param-cell .param-desc b{
+  color:var(--accent);
+  font-weight:600;
 }
 .param-cell .factory-note{
   font-family:var(--font-mono);

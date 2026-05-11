@@ -1,0 +1,610 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Pipeline — analytical core for the Analysis engine.
+   Port of scripts/02_extract_model.py, 03_build_charts.py, 04_mrp_analysis.py.
+   Rule semantics preserved line-for-line; deterministic, no inference.
+═══════════════════════════════════════════════════════════════════════════ */
+
+(function (global) {
+  'use strict';
+
+  /* ─── Movement types ────────────────────────────────────────────────────── */
+  const ISSUE_TYPES  = new Set(['261', '201']);   // goods issue
+  const RETURN_TYPES = new Set(['262', '202']);   // returns
+  const VALID_TYPES  = new Set([...ISSUE_TYPES, ...RETURN_TYPES]);
+
+  /* ─── Date helpers ──────────────────────────────────────────────────────── */
+  function toDate(s){ if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d; }
+  function inRange(d, start, end){ const dd = toDate(d); if (!dd) return false; const ds = toDate(start), de = toDate(end); return ds && de && dd >= ds && dd <= de; }
+  function addMonths(iso, months){
+    const d = toDate(iso);
+    if (!d) return null;
+    const r = new Date(d.getTime());
+    r.setMonth(r.getMonth() + months);
+    return r.toISOString().slice(0, 10);
+  }
+  function monthsBetween(a, b){
+    const da = toDate(a), db = toDate(b);
+    if (!da || !db) return 0;
+    return (db.getFullYear() - da.getFullYear()) * 12 + (db.getMonth() - da.getMonth());
+  }
+
+  /* ─── Group-by helper ───────────────────────────────────────────────────── */
+  function groupBy(rows, keyFn){
+    const out = new Map();
+    for (const r of rows) {
+      const k = keyFn(r);
+      if (!out.has(k)) out.set(k, []);
+      out.get(k).push(r);
+    }
+    return out;
+  }
+
+  /* ─── Net consumption per material from a transaction set ───────────────── */
+  /**
+   * Net = sum(quantity of issues) − sum(quantity of returns), per material.
+   * Returns Map material → { net, tx261, qty261 (gross), description }.
+   */
+  function netConsumptionByMaterial(transactions, materialDescIndex){
+    const agg = new Map();
+    for (const r of transactions) {
+      const m = String(r.material || '').trim();
+      if (!m) continue;
+      const mt = String(r.movementType || '').trim();
+      if (!VALID_TYPES.has(mt)) continue;
+      const q = Math.abs(parseFloat(r.quantity) || 0);
+
+      const cur = agg.get(m) || { net: 0, qty261: 0, tx261: 0, qty262: 0 };
+      if (ISSUE_TYPES.has(mt))   { cur.net += q; cur.qty261 += q; if (mt === '261') cur.tx261++; }
+      if (RETURN_TYPES.has(mt))  { cur.net -= q; cur.qty262 += q; }
+      agg.set(m, cur);
+    }
+    // Attach description (first non-null seen) from the index if available
+    if (materialDescIndex) {
+      for (const [m, v] of agg) v.description = materialDescIndex.get(m) || '';
+    }
+    return agg;
+  }
+
+  function buildMaterialDescIndex(mb51){
+    const idx = new Map();
+    for (const r of mb51) {
+      const m = String(r.material || '').trim();
+      if (!m || idx.has(m)) continue;
+      const d = String(r.description || '').trim();
+      if (d) idx.set(m, d);
+    }
+    return idx;
+  }
+
+  /* ─── Period rate (port of calc_rate from 03_build_charts.py) ───────────── */
+  /**
+   * net = |sum issues in [start,end]| − |sum returns in [start,end]|
+   * rate = net / months
+   * flag: 'OK' | 'NO_DATA' (no rows in window) | 'NEGATIVE_NET'
+   */
+  function calcPeriodRate(transactions, start, end, months){
+    let issues = 0, returns = 0, rows = 0;
+    for (const r of transactions) {
+      if (!inRange(r.postingDate, start, end)) continue;
+      const mt = String(r.movementType || '').trim();
+      if (!VALID_TYPES.has(mt)) continue;
+      const q = Math.abs(parseFloat(r.quantity) || 0);
+      if (ISSUE_TYPES.has(mt))   issues  += q;
+      if (RETURN_TYPES.has(mt))  returns += q;
+      rows++;
+    }
+    if (rows === 0) return { rate: 0, flag: 'NO_DATA' };
+    const net = issues - returns;
+    if (net < 0)   return { rate: 0, flag: 'NEGATIVE_NET' };
+    return { rate: net / months, flag: 'OK' };
+  }
+
+  /* ─── HCE detection (port of detect_hce) ────────────────────────────────── */
+  /**
+   * Flag a WO as a High Consumption Event in a period if either:
+   *   A) qty ≥ hcePctThreshold (fraction, e.g. 0.50) × period total
+   *   B) qty ≥ hceMultThreshold × avg WO qty  (only when n_orders > 1)
+   * Uses ISSUE rows only (261, 201) — returns are not events.
+   * Returns array sorted by qty desc.
+   */
+  function detectHce(transactions, pStart, pEnd, periodLabel, params){
+    const pctThresh  = params.hcePctThreshold;
+    const multThresh = params.hceMultThreshold;
+
+    const issueRows = transactions.filter(r => {
+      if (!inRange(r.postingDate, pStart, pEnd)) return false;
+      return ISSUE_TYPES.has(String(r.movementType || '').trim());
+    });
+    if (issueRows.length === 0) return [];
+
+    // Aggregate per Order
+    const byOrder = new Map();
+    for (const r of issueRows) {
+      const o = String(r.order || '').trim() || '(no order)';
+      const q = Math.abs(parseFloat(r.quantity) || 0);
+      const cur = byOrder.get(o) || { order: o, qty: 0, firstDate: r.postingDate, equipment: r.equipmentUnit || r.sortField || '—', description: r.woDescription || r.description || '' };
+      cur.qty += q;
+      if (r.postingDate < cur.firstDate) cur.firstDate = r.postingDate;
+      if (!cur.equipment || cur.equipment === '—') cur.equipment = r.equipmentUnit || r.sortField || cur.equipment;
+      byOrder.set(o, cur);
+    }
+    const woAgg = [...byOrder.values()];
+    const totalQty = woAgg.reduce((a, w) => a + w.qty, 0);
+    if (totalQty === 0) return [];
+    const nOrders  = woAgg.length;
+    const avgQty   = totalQty / nOrders;
+
+    const out = [];
+    for (const w of woAgg) {
+      const pctFrac = w.qty / totalQty;
+      const critA = pctFrac >= pctThresh;
+      const critB = nOrders > 1 && w.qty >= multThresh * avgQty;
+      if (!critA && !critB) continue;
+      const reasons = [];
+      if (critA) reasons.push(`${Math.round(pctFrac * 100)}% of period total`);
+      if (critB) reasons.push(`${(w.qty / avgQty).toFixed(1)}× avg WO qty`);
+      out.push({
+        period:    periodLabel,
+        order:     w.order,
+        date:      w.firstDate,
+        equipment: w.equipment,
+        description: w.description || '',
+        qty:       Math.round(w.qty),
+        pct:       Math.round(pctFrac * 1000) / 10,
+        reasons:   reasons.join(' | '),
+        totalQty:  Math.round(totalQty),
+        nOrders,
+        avgQty:    Math.round(avgQty * 10) / 10
+      });
+    }
+    out.sort((a, b) => b.qty - a.qty);
+    return out;
+  }
+
+  /* ─── Adjusted P2 rate (HCE-excluded) ───────────────────────────────────── */
+  function calcAdjustedP2Rate(transactions, p2s, p2e, hceOrders, p2Months){
+    const excluded = new Set(hceOrders);
+    const filtered = transactions.filter(r => !excluded.has(String(r.order || '').trim()));
+    return calcPeriodRate(filtered, p2s, p2e, p2Months);
+  }
+
+  /* ─── Lumpy/Smooth classification (port of SKILL.md rule) ───────────────── */
+  /**
+   * is_lumpy = top1_pct >= lumpyTopWoThreshold
+   *           OR cv > lumpyCvThreshold
+   *           OR (wo_count <= 3 AND total_qty >= threshold)
+   * Operates on the full analysis window's issue rows.
+   */
+  function classifyPattern(transactions, params){
+    const issueRows = transactions.filter(r => ISSUE_TYPES.has(String(r.movementType || '').trim()));
+    if (issueRows.length === 0) return 'SMOOTH';
+    const byOrder = new Map();
+    for (const r of issueRows) {
+      const o = String(r.order || '').trim() || `__row_${Math.random()}`;
+      const q = Math.abs(parseFloat(r.quantity) || 0);
+      byOrder.set(o, (byOrder.get(o) || 0) + q);
+    }
+    const qtys = [...byOrder.values()];
+    const total = qtys.reduce((a, b) => a + b, 0);
+    if (total === 0) return 'SMOOTH';
+    const max  = Math.max(...qtys);
+    const mean = total / qtys.length;
+    const variance = qtys.reduce((a, q) => a + (q - mean) ** 2, 0) / qtys.length;
+    const sd   = Math.sqrt(variance);
+    const cv   = mean > 0 ? sd / mean : 0;
+    const top1 = max / total;
+    const woCount = qtys.length;
+
+    const isLumpy =
+      (top1 >= params.lumpyTopWoThreshold) ||
+      (cv > params.lumpyCvThreshold) ||
+      (woCount <= 3 && total >= params.threshold);
+    return isLumpy ? 'LUMPY' : 'SMOOTH';
+  }
+
+  /* ─── Cumulative consumption series ─────────────────────────────────────── */
+  /**
+   * Returns array of { date: ISO, delta, cum } sorted by date asc.
+   * delta = +qty for issues, −qty for returns.
+   */
+  function cumulativeSeries(transactions){
+    const byDate = new Map();
+    for (const r of transactions) {
+      const d = r.postingDate;
+      if (!d) continue;
+      const mt = String(r.movementType || '').trim();
+      if (!VALID_TYPES.has(mt)) continue;
+      const q = Math.abs(parseFloat(r.quantity) || 0);
+      const delta = ISSUE_TYPES.has(mt) ? q : -q;
+      byDate.set(d, (byDate.get(d) || 0) + delta);
+    }
+    const sorted = [...byDate.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1);
+    const out = [];
+    let cum = 0;
+    for (const [d, delta] of sorted) {
+      cum += delta;
+      out.push({ date: d, delta, cum });
+    }
+    return out;
+  }
+
+  /* ─── Traffic-light decision (port of assess() in 04_mrp_analysis.py) ───── */
+  /**
+   * Rules in priority order:
+   *  1. p2Flag != OK or p2Rate == 0      → GREY ("no recent consumption")
+   *  2. mrpType == "NOT IN MASTER"        → GREY ("excluded")
+   *  3. recMin is null                    → GREY ("not calculable")
+   *  4. mrp=PD AND total ≥ threshold      → RED   ("change to V1")
+   *  5. mrp=V1 AND rec=current            → GREEN ("no action")
+   *  6. mrp=V1 AND ALL rec < current      → BLUE  ("lower, safe")
+   *  7. mrp=V1 AND any rec > current      → ORANGE("raise, insufficient")
+   *  8. else                              → GREY  ("manual review")
+   */
+  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax){
+    if (p2f !== 'OK' || p2r === 0) {
+      return { code: 'GREY', action: 'Refer for manual review — no recent (P2) consumption', recMin: null, recMax: null };
+    }
+    if (String(mrpType || '').trim() === 'NOT IN MASTER') {
+      return { code: 'GREY', action: 'Not in Inventory Master — excluded', recMin: null, recMax: null };
+    }
+    if (rmin == null) {
+      return { code: 'GREY', action: 'Recommended Min/Max not calculable', recMin: null, recMax: null };
+    }
+    const mt = String(mrpType || '').trim().toUpperCase();
+
+    if (mt === 'PD' && total >= threshold) {
+      return { code: 'RED', action: `Change MRP type to V1. Set Min=${rmin}, Max=${rmax}`, recMin: rmin, recMax: rmax };
+    }
+    if (mt === 'V1') {
+      const minOk = cmin != null && Math.round(parseFloat(cmin)) === rmin;
+      const maxOk = cmax != null && Math.round(parseFloat(cmax)) === rmax;
+      if (minOk && maxOk) {
+        return { code: 'GREEN', action: 'No action required — MRP type and parameters correct', recMin: rmin, recMax: rmax };
+      }
+      const parts = [];
+      const dirs  = [];
+      if (!minOk) {
+        const cur = cmin != null ? Math.round(parseFloat(cmin)) : null;
+        parts.push(`Min: current=${cur != null ? cur : 'blank'}, rec=${rmin}`);
+        if (cur != null) dirs.push(rmin < cur ? 'down' : 'up');
+      }
+      if (!maxOk) {
+        const cur = cmax != null ? Math.round(parseFloat(cmax)) : null;
+        parts.push(`Max: current=${cur != null ? cur : 'blank'}, rec=${rmax}`);
+        if (cur != null) dirs.push(rmax < cur ? 'down' : 'up');
+      }
+      if (dirs.length && dirs.every(d => d === 'down')) {
+        return { code: 'BLUE', action: `Lower Min/Max (low risk). ${parts.join('; ')}`, recMin: rmin, recMax: rmax };
+      }
+      return { code: 'ORANGE', action: `Increase Min/Max (insufficient). ${parts.join('; ')}`, recMin: rmin, recMax: rmax };
+    }
+    return { code: 'GREY', action: `${mrpType} not assessed — manual review`, recMin: null, recMax: null };
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     BUCKET BUILDING
+     Builds analysis buckets from canonical JSON based on scope mode.
+     Returns array of { key, name, materials: Set<string>, transactions: [...] }.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function buildBuckets(json){
+    const mode    = json.scope.mode;
+    const mb51    = json.data.mb51 || [];
+    const iw39    = json.data.iw39 || [];
+    const fleet   = json.data.fleetMaster || [];
+    const master  = json.data.inventoryMaster || [];
+    const vendors = json.data.materialVendor || [];
+
+    if (mode === 'fleet') return bucketsFleet(json, mb51, iw39, fleet);
+    if (mode === 'manual') return bucketsManual(json, mb51);
+    if (mode === 'byClassification') return bucketsByClassification(json, mb51, master);
+    if (mode === 'byVendor') return bucketsByVendor(json, mb51, vendors);
+    return [];
+  }
+
+  /* ─── Fleet bucketing + multi-model detection ───────────────────────────── */
+  function bucketsFleet(json, mb51, iw39, fleet){
+    const runDate = new Date().toISOString().slice(0, 10);
+    const threshold = json.parameters.threshold;
+    const models = (json.scope.fleet && json.scope.fleet.models) || [];
+
+    // Per-model: sortFields → orders → transactions
+    const perModel = [];
+    for (const model of models) {
+      const sortFields = new Set(
+        fleet
+          .filter(f => String(f.model || '').trim().toUpperCase() === model.trim().toUpperCase())
+          .map(f => String(f.sortField || '').trim())
+          .filter(Boolean)
+      );
+      const orderSf = new Map(); // order → equipmentUnit
+      for (const w of iw39) {
+        const sf = String(w.sortField || '').trim();
+        const o  = String(w.order || '').trim();
+        if (!sf || !o) continue;
+        if (!sortFields.has(sf)) continue;
+        if (w.basicStartDate && w.basicStartDate > runDate) continue;
+        if (!orderSf.has(o)) orderSf.set(o, sf);
+      }
+      const orders = new Set(orderSf.keys());
+      const transactions = [];
+      for (const t of mb51) {
+        const o = String(t.order || '').trim();
+        if (!orders.has(o)) continue;
+        const mt = String(t.movementType || '').trim();
+        if (!VALID_TYPES.has(mt)) continue;
+        transactions.push({ ...t, equipmentUnit: orderSf.get(o) });
+      }
+      perModel.push({ key: model, name: model, transactions });
+    }
+
+    // Multi-model detection: per-material net per model
+    const materialModels = new Map();   // material → Set<model>
+    for (const bucket of perModel) {
+      const desc = buildMaterialDescIndex(bucket.transactions);
+      const net  = netConsumptionByMaterial(bucket.transactions, desc);
+      for (const [mat, agg] of net) {
+        if (agg.net < threshold) continue;
+        if (!materialModels.has(mat)) materialModels.set(mat, new Set());
+        materialModels.get(mat).add(bucket.key);
+      }
+    }
+    const multiSet = new Set();
+    for (const [mat, mods] of materialModels) {
+      if (mods.size >= 2) multiSet.add(mat);
+    }
+
+    // Strip multi materials from per-model buckets; build MULTI bucket from all selected models' transactions
+    const out = [];
+    for (const bucket of perModel) {
+      const filtered = bucket.transactions.filter(t => !multiSet.has(String(t.material || '').trim()));
+      out.push({
+        key: bucket.key,
+        name: bucket.name,
+        kind: 'fleet',
+        materials: null,
+        transactions: filtered
+      });
+    }
+    if (multiSet.size > 0) {
+      // MULTI bucket = transactions across all per-model buckets for these materials
+      const allTx = [];
+      for (const bucket of perModel) {
+        for (const t of bucket.transactions) {
+          if (multiSet.has(String(t.material || '').trim())) allTx.push(t);
+        }
+      }
+      out.push({ key: '__MULTI__', name: 'MULTI · cross-fleet', kind: 'multi', materials: multiSet, transactions: allTx });
+    }
+    return out;
+  }
+
+  function bucketsManual(json, mb51){
+    const mats = new Set((json.scope.manual && json.scope.manual.materials) || []);
+    const transactions = mb51.filter(t => {
+      const m = String(t.material || '').trim();
+      if (!mats.has(m)) return false;
+      const mt = String(t.movementType || '').trim();
+      return VALID_TYPES.has(mt);
+    });
+    return [{ key: 'manual', name: 'Manual list', kind: 'manual', materials: mats, transactions }];
+  }
+
+  function bucketsByClassification(json, mb51, master){
+    const f = json.scope.byClassification || {};
+    const types = new Set((f.inventoryTypes || []).map(s => String(s).trim()));
+    const mrps  = new Set((f.mrpClassifiers || []).map(s => String(s).trim()));
+    const mmin  = f.movementAmount && f.movementAmount.min;
+    const mmax  = f.movementAmount && f.movementAmount.max;
+
+    // Filter master to matching materials
+    const matSet = new Set();
+    for (const r of master) {
+      const it = String(r.inventoryType || '').trim();
+      const mp = String(r.mrpInd || '').trim();
+      if (types.size && !types.has(it)) continue;
+      if (mrps.size  && !mrps.has(mp)) continue;
+      matSet.add(String(r.material || '').trim());
+    }
+    // Movement-amount filter is applied per-material against MB51 net
+    let transactions = mb51.filter(t => {
+      const m = String(t.material || '').trim();
+      if (!matSet.has(m)) return false;
+      const mt = String(t.movementType || '').trim();
+      return VALID_TYPES.has(mt);
+    });
+    if (mmin != null || mmax != null) {
+      const desc = buildMaterialDescIndex(transactions);
+      const net  = netConsumptionByMaterial(transactions, desc);
+      const pass = new Set();
+      for (const [mat, agg] of net) {
+        if (mmin != null && agg.net < mmin) continue;
+        if (mmax != null && agg.net > mmax) continue;
+        pass.add(mat);
+      }
+      transactions = transactions.filter(t => pass.has(String(t.material || '').trim()));
+    }
+    return [{ key: 'classif', name: 'By Classification', kind: 'classification', materials: matSet, transactions }];
+  }
+
+  function bucketsByVendor(json, mb51, vendors){
+    const sel = new Set((json.scope.byVendor && json.scope.byVendor.vendors) || []);
+    const matToVendors = new Map();  // material → Set<vendor>
+    for (const r of vendors) {
+      const m = String(r.material || '').trim();
+      const v = String(r.vendor || '').trim();
+      if (!sel.has(v)) continue;
+      if (!matToVendors.has(m)) matToVendors.set(m, new Set());
+      matToVendors.get(m).add(v);
+    }
+    // Multi-vendor materials → MULTI bucket
+    const multi = new Set();
+    for (const [mat, vs] of matToVendors) if (vs.size >= 2) multi.add(mat);
+    const out = [];
+    for (const vendor of sel) {
+      const mats = new Set();
+      for (const [mat, vs] of matToVendors) {
+        if (multi.has(mat)) continue;
+        if (vs.has(vendor)) mats.add(mat);
+      }
+      const tx = mb51.filter(t => {
+        const m = String(t.material || '').trim();
+        if (!mats.has(m)) return false;
+        const mt = String(t.movementType || '').trim();
+        return VALID_TYPES.has(mt);
+      });
+      out.push({ key: vendor, name: vendor, kind: 'vendor', materials: mats, transactions: tx });
+    }
+    if (multi.size > 0) {
+      const tx = mb51.filter(t => {
+        const m = String(t.material || '').trim();
+        if (!multi.has(m)) return false;
+        const mt = String(t.movementType || '').trim();
+        return VALID_TYPES.has(mt);
+      });
+      out.push({ key: '__MULTI__', name: 'MULTI · cross-vendor', kind: 'multi', materials: multi, transactions: tx });
+    }
+    return out;
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     RUN PIPELINE
+     For each bucket, produce a per-material result with all derived stats.
+     Returns { buckets: [...], runDate, parameters, summary }.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function runPipeline(json, options){
+    options = options || {};
+    const runDate    = options.runDate || new Date().toISOString().slice(0, 10);
+    const params     = json.parameters;
+    const threshold  = params.threshold;
+    const minMonths  = params.minMonths;
+    const maxMonths  = params.maxMonths;
+    const p2Months   = params.p2Months;
+    const p1Start    = params.p1Start;
+    const p1End      = params.p1End;
+    const p1Months   = Math.max(1, monthsBetween(p1Start, p1End) + 1);
+    const p2Start    = addMonths(runDate, -p2Months);
+    const p2End      = runDate;
+
+    const master = json.data.inventoryMaster || [];
+    const masterIdx = new Map();
+    for (const r of master) {
+      masterIdx.set(String(r.material || '').trim(), r);
+    }
+
+    const buckets = buildBuckets(json);
+    const bucketResults = [];
+
+    const summary = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, total: 0 };
+
+    for (const bucket of buckets) {
+      const desc = buildMaterialDescIndex(bucket.transactions);
+      const net  = netConsumptionByMaterial(bucket.transactions, desc);
+      const qualifying = [];
+      for (const [mat, agg] of net) {
+        if (agg.net < threshold) continue;
+        qualifying.push({ material: mat, description: agg.description, totalNet: agg.net });
+      }
+      qualifying.sort((a, b) => b.totalNet - a.totalNet);
+
+      // Group transactions by material for per-material analysis
+      const txByMat = groupBy(bucket.transactions, t => String(t.material || '').trim());
+
+      const materials = [];
+      const bucketSummary = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, total: 0 };
+
+      for (const q of qualifying) {
+        const tx = txByMat.get(q.material) || [];
+        const { rate: p1r, flag: p1f } = calcPeriodRate(tx, p1Start, p1End, p1Months);
+        const { rate: p2r, flag: p2f } = calcPeriodRate(tx, p2Start, p2End, p2Months);
+
+        const hceP1 = detectHce(tx, p1Start, p1End, 'P1', params);
+        const hceP2 = detectHce(tx, p2Start, p2End, 'P2', params);
+
+        let adjP2 = null;
+        if (hceP2.length) {
+          const orders = hceP2.map(e => e.order);
+          const r = calcAdjustedP2Rate(tx, p2Start, p2End, orders, p2Months);
+          adjP2 = { rate: r.rate, flag: r.flag };
+        }
+
+        const pattern = classifyPattern(tx, params);
+        const cum = cumulativeSeries(tx);
+        const rateChange =
+          (p1f === 'OK' && p1r > 0 && p2f === 'OK')
+            ? Math.round((p2r - p1r) / p1r * 1000) / 10
+            : null;
+
+        const masterRow = masterIdx.get(q.material);
+        const mrpType = masterRow ? (masterRow.mrpInd || '') : 'NOT IN MASTER';
+        const stock   = masterRow ? masterRow.totQtyOh : null;
+        const cmin    = masterRow ? masterRow.mrpMin   : null;
+        const cmax    = masterRow ? masterRow.mrpMax   : null;
+
+        const rmin = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * minMonths) : null;
+        const rmax = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
+
+        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax);
+        bucketSummary[tl.code]++;
+        bucketSummary.total++;
+        summary[tl.code]++;
+        summary.total++;
+
+        materials.push({
+          material:     q.material,
+          description:  q.description,
+          totalNet:     Math.round(q.totalNet * 10) / 10,
+          p1Rate:       Math.round(p1r * 100) / 100,
+          p1Flag:       p1f,
+          p2Rate:       Math.round(p2r * 100) / 100,
+          p2Flag:       p2f,
+          rateChange,
+          adjP2Rate:    adjP2 ? Math.round(adjP2.rate * 100) / 100 : null,
+          adjP2Flag:    adjP2 ? adjP2.flag : null,
+          hceP1, hceP2,
+          pattern,
+          stock, mrpType, cmin, cmax,
+          recMin:       tl.recMin,
+          recMax:       tl.recMax,
+          trafficLight: tl.code,
+          action:       tl.action,
+          cumulative:   cum,
+          p2Start, p2End, p1Start, p1End
+        });
+      }
+
+      bucketResults.push({
+        key: bucket.key,
+        name: bucket.name,
+        kind: bucket.kind,
+        summary: bucketSummary,
+        materials,
+        txCount: bucket.transactions.length
+      });
+    }
+
+    return {
+      runDate,
+      parameters: params,
+      p2Start, p2End,
+      p1Start, p1End,
+      buckets: bucketResults,
+      summary
+    };
+  }
+
+  /* ─── Public API ────────────────────────────────────────────────────────── */
+  global.AppPipeline = Object.freeze({
+    ISSUE_TYPES, RETURN_TYPES, VALID_TYPES,
+    netConsumptionByMaterial,
+    calcPeriodRate,
+    detectHce,
+    calcAdjustedP2Rate,
+    classifyPattern,
+    cumulativeSeries,
+    assess,
+    buildBuckets,
+    runPipeline,
+    addMonths, monthsBetween
+  });
+
+})(window);

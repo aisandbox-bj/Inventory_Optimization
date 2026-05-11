@@ -43,6 +43,7 @@
       { key:'lumpyTopWoThreshold', label:'Lumpy top-WO',    type:'number', step:0.05 }
     ];
 
+    const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};
     const host = $('#paramsGrid');
     host.innerHTML = '';
     for (const f of fields) {
@@ -58,9 +59,10 @@
       } else {
         input = `<input type="number" data-pkey="${f.key}" value="${edit[f.key]}" step="${f.step || 1}">`;
       }
+      const desc = descs[f.key] || '';
       const factoryDiff = factory[f.key] !== saved[f.key];
       const factoryNote = factoryDiff ? `<div class="factory-note">factory: ${factory[f.key]}</div>` : '';
-      cell.innerHTML = `<label>${f.label}${dirty ? ' · UNSAVED' : ''}</label>${input}${factoryNote}`;
+      cell.innerHTML = `<label>${f.label}${dirty ? ' · UNSAVED' : ''}</label><div class="param-desc">${desc}</div>${input}${factoryNote}`;
       host.appendChild(cell);
     }
 

@@ -26,6 +26,22 @@
 
   const SCOPE_MODES = ['fleet', 'manual', 'byClassification', 'byVendor'];
 
+  /* ─── Per-parameter descriptors (used by Intake §5 + Settings §1) ────────
+     Kept here so every consumer reads the same wording. */
+  const PARAMETER_DESCRIPTIONS = Object.freeze({
+    minMaxMethod:        'How recommended Min/Max are computed. <b>monthsBased</b> = P2 rate × months. <b>leadTimeBased</b> = rate × lead-time + safety stock (needs lead-time data).',
+    p1Start:             'Baseline period start. Together with P1 end, defines the historical 5-month run-rate window.',
+    p1End:               'Baseline period end. P1 rate = net consumption in this window ÷ 5 months.',
+    p2Months:            'Rolling current window measured back from the run date. <b>P2 rate drives the Min/Max recommendation.</b>',
+    minMonths:           'Months of consumption the recommended <b>Min</b> should cover (only used in monthsBased method).',
+    maxMonths:           'Months of consumption the recommended <b>Max</b> should cover (only used in monthsBased method).',
+    threshold:           'Minimum net consumption (units) over the analysis window for a material to qualify for analysis.',
+    hcePctThreshold:     'Single WO ≥ this share of the period total flags as a <b>High Consumption Event</b> (one-off spike — e.g. rebuild).',
+    hceMultThreshold:    'Single WO ≥ this many times the average WO quantity also flags as an HCE.',
+    lumpyCvThreshold:    'Coefficient of variation above this classifies a material as <b>LUMPY</b> (clustered demand, not steady draw-down).',
+    lumpyTopWoThreshold: 'If a single WO represents this share or more of total consumption, classify as LUMPY.'
+  });
+
   /* ─── Empty scope (one of each mode pre-shaped) ─────────────────────────── */
   function emptyScope(mode) {
     const scope = {
@@ -134,6 +150,7 @@
     APP_VERSION,
     SCOPE_MODES,
     FACTORY_DEFAULTS,
+    PARAMETER_DESCRIPTIONS,
     emptyScope,
     emptyJson,
     validateShape,

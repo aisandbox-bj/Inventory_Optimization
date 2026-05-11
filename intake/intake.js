@@ -20,6 +20,64 @@
     leadTimes:       'Lead Times'
   };
 
+  /* ─── Per-field notes — what each canonical field is used for ───────────── */
+  const FIELD_NOTES = {
+    mb51: {
+      postingDate:  'When the movement happened. <b>Drives P1/P2 windowing</b> and the 12-month history check.',
+      order:        'Work order number. <b>Joined to IW39</b> for fleet scope mode (filters MB51 to fleet WOs only).',
+      material:     'SAP material number. <b>The unit of analysis</b> — every recommendation is per-material.',
+      description:  'Material description. Display only — appears alongside the material number in dashboards and Excel.',
+      quantity:     'Movement quantity. <b>Combined with movement type</b> to compute net consumption (issues − returns).',
+      movementType: '261 / 262 / 201 / 202. <b>261+201 = goods issue, 262+202 = return.</b> Determines the sign of quantity.'
+    },
+    iw39: {
+      order:          'Work order key. <b>Joins to MB51</b> via Order — links each transaction to a piece of equipment.',
+      sortField:      'Equipment unit (e.g. TD402). <b>Bridge field</b> — joined to Fleet Master to roll WOs up to model.',
+      basicStartDate: 'When the WO started. <b>Future-dated orders are filtered out</b> so we count realised demand only.',
+      description:    "WO description (e.g. 'Undercarriage rebuild'). <b>Annotated on charts</b> to explain consumption spikes."
+    },
+    fleetMaster: {
+      model:               'Fleet model code (e.g. 775G, D9T). <b>Defines the buckets</b> in fleet scope mode.',
+      sortField:           'Equipment unit. <b>Bridge field</b>: model → sort fields → IW39 orders → MB51 transactions.',
+      unitType:            "e.g. 'CAT Dump Truck'. Display only — used in the fleet asset tree.",
+      manufacturer:        'OEM name. Display only — useful when multiple OEMs are in scope.',
+      functLocDescription: 'SAP functional location label. Display only — operational context per unit.'
+    },
+    inventoryMaster: {
+      material:      'Material number — <b>the join key</b> against MB51 materials.',
+      totQtyOh:      'Stock on hand. <b>Used for runway calculation</b> (months of cover at current rate).',
+      mrpInd:        'MRP type (PD, V1, …). <b>Drives the traffic-light rules</b> in the analysis engine.',
+      mrpMin:        'Current MRP minimum. <b>Compared to recommended Min</b> to set the action (raise / lower / leave).',
+      mrpMax:        'Current MRP maximum. <b>Compared to recommended Max</b> the same way.',
+      inventoryType: 'Inventory category (NORM, INSP, …). <b>Filter dimension</b> in byClassification scope mode.',
+      primaryVendor: 'Vendor for this material. Optional fallback if no separate Material-Vendor file is uploaded.'
+    },
+    materialVendor: {
+      material:            'Join key to MB51 / Inventory Master.',
+      vendor:              'Vendor number. <b>Defines the buckets</b> in byVendor scope mode.',
+      vendorName:          'Display label for the vendor.',
+      sourceListIndicator: 'Primary / approved / single-source flag. Display in v1; reserved for sole-source-risk flags later.'
+    },
+    leadTimes: {
+      material:     'Join key to the rest of the dataset.',
+      leadTimeDays: 'Time from re-order trigger to goods receipt. <b>Replaces minMonths</b> in the leadTimeBased Min/Max formula.',
+      safetyStock:  'Buffer added on top of lead-time consumption to size the recommended Min.',
+      source:       "How this lead-time was derived (e.g. 'SAP MARC', 'supplier-confirmed', 'measured')."
+    }
+  };
+
+  function sourceTagline(source){
+    const map = {
+      mb51:            'consumption history',
+      iw39:            'fleet WO link',
+      fleetMaster:     'equipment → model rollup',
+      inventoryMaster: 'stock + MRP settings',
+      materialVendor:  'material → vendor mapping',
+      leadTimes:       'per-material lead time + safety stock'
+    };
+    return map[source] || '';
+  }
+
   /* ─── Mutable module state ──────────────────────────────────────────────── */
   const state = {
     files:    {},                                    // source → File
@@ -100,11 +158,28 @@
     for (const source of order) {
       const parsed = state.parsed[source];
       if (!parsed) continue;
-      const fields = Object.keys(AppParsers.ALIASES[source] || {});
+      const fields  = Object.keys(AppParsers.ALIASES[source] || {});
+      const isReq   = REQUIRED_SOURCES.includes(source);
+      let groupMatched = 0;
+
+      const group = document.createElement('div');
+      group.className = 'schema-group ' + (isReq ? 'required' : 'optional');
+
+      const labelLeft = SOURCE_LABEL[source].split('—')[0].trim();
+      const sheetTxt  = parsed.sheet ? `sheet "${parsed.sheet}" · ` : '';
+      const head = document.createElement('div');
+      head.className = 'schema-group-head';
+      head.innerHTML = `
+        <div class="name">${escapeHtml(labelLeft)}</div>
+        <div class="desc">${escapeHtml(sourceTagline(source))} · ${sheetTxt}${parsed.rowCount.toLocaleString()} rows</div>
+        <div class="count" data-count></div>
+      `;
+      group.appendChild(head);
+
       for (const field of fields) {
-        const header = parsed.fieldMap[field];
+        const header  = parsed.fieldMap[field];
         const matched = !!header;
-        if (matched) totalMatched++; else totalMissing++;
+        if (matched) { totalMatched++; groupMatched++; } else { totalMissing++; }
 
         const row = document.createElement('div');
         row.className = 'schema-row ' + (matched ? 'matched' : 'missing');
@@ -113,14 +188,22 @@
           .concat(parsed.headers.map(h => `<option value="${escapeAttr(h)}" ${h === header ? 'selected' : ''}>${escapeHtml(h)}</option>`))
           .join('');
 
+        const note = (FIELD_NOTES[source] && FIELD_NOTES[source][field]) || '—';
+
         row.innerHTML = `
-          <div class="src">${SOURCE_LABEL[source].split('—')[0].trim()}</div>
-          <div class="field">${field}</div>
-          <div class="header">${matched ? `<select data-source="${source}" data-field="${field}">${opts}</select>` : `<em>not matched</em><select data-source="${source}" data-field="${field}">${opts}</select>`}</div>
+          <div class="field">${escapeHtml(field)}</div>
+          <div class="notes">${note}</div>
+          <div class="header">${matched ? '' : '<em>not matched · </em>'}<select data-source="${source}" data-field="${field}">${opts}</select></div>
           <div class="ok">${matched ? '✓' : '!'}</div>
         `;
-        host.appendChild(row);
+        group.appendChild(row);
       }
+
+      const countEl = head.querySelector('[data-count]');
+      countEl.textContent = `${groupMatched} / ${fields.length} matched`;
+      countEl.classList.add(groupMatched === fields.length ? 'ok' : 'warn');
+
+      host.appendChild(group);
     }
 
     $('#schemaSummary').textContent =
@@ -564,6 +647,7 @@
       { key:'lumpyTopWoThreshold', label:'Lumpy top-WO',    type:'number', step:0.05 }
     ];
 
+    const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};
     const host = $('#paramsGrid');
     host.innerHTML = '';
     for (const f of fields) {
@@ -578,8 +662,9 @@
       } else {
         input = `<input type="number" data-pkey="${f.key}" value="${run[f.key]}" step="${f.step || 1}">`;
       }
+      const desc = descs[f.key] || '';
       const factoryNote = factory[f.key] !== saved[f.key] ? `<div class="factory-note">factory: ${factory[f.key]} · saved: ${saved[f.key]}</div>` : '';
-      cell.innerHTML = `<label>${f.label}</label>${input}${factoryNote}`;
+      cell.innerHTML = `<label>${f.label}</label><div class="param-desc">${desc}</div>${input}${factoryNote}`;
       host.appendChild(cell);
     }
     $$('#paramsGrid [data-pkey]').forEach(el => {

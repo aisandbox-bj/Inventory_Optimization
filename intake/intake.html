@@ -216,6 +216,24 @@
       </div>
       <div class="step-body">
         <pre id="jsonPreview" class="preview-box">{ }</pre>
+        <div class="actions-help">
+          <div class="ah-cell">
+            <span class="ah-name">Save to local storage</span>
+            <span class="ah-desc">Persists this JSON inside your browser (localStorage / IndexedDB). Appears in <b>Recent intakes</b> on the dashboard. Survives browser restarts. Never leaves your machine.</span>
+          </div>
+          <div class="ah-cell">
+            <span class="ah-name">⤓ Download .json</span>
+            <span class="ah-desc">Saves the JSON to a real file on disk — for backup, sharing with a colleague, moving to another machine, or version-controlling the intake.</span>
+          </div>
+          <div class="ah-cell">
+            <span class="ah-name">⤒ Upload .json</span>
+            <span class="ah-desc">Reverse of Download — loads a previously-saved <code>.json</code> back into this page. Use to resume on a fresh machine, or review someone else's intake.</span>
+          </div>
+          <div class="ah-cell">
+            <span class="ah-name">Open in Analysis Engine →</span>
+            <span class="ah-desc">Writes the JSON to the <code>intake.current</code> slot and navigates to the analysis page. The analysis engine reads from that slot. <b>Save first</b> if you also want it in Recent intakes.</span>
+          </div>
+        </div>
         <div class="actions-row">
           <button id="btnSaveLocal" class="primary">Save to local storage</button>
           <button id="btnDownload">⤓ Download .json</button>

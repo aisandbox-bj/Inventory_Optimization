@@ -6,14 +6,14 @@ Architecture follows the NumaCore Lens shape — front-end shell loading modular
 
 ## Status
 
-**v1.0 — Phases 1–3 built (intake + settings + shell). Phase 4 (analysis engine + LLM review) is next.**
+**v1.0 — all four phases built. End-to-end workflow runs: intake → JSON → analysis → Excel.**
 
 | Phase | Component | Status |
 |---|---|---|
 | 1 | Foundations (`shared/*`) | ✓ done |
 | 2 | Intake engine | ✓ done |
 | 3 | Settings tab + dashboard shell | ✓ done |
-| 4 | Analysis engine + LLM review surface + Excel export | placeholder stub only |
+| 4 | Analysis engine + chart + LLM review + Excel export | ✓ done |
 
 ## Structure
 
@@ -35,7 +35,23 @@ App/v1/
 │   ├── settings.js             Parameter defaults, dynamic LLM model fetch, alias overrides
 │   └── settings.css
 └── analysis/
-    └── analysis.html           Stub — confirms intake → analysis JSON handoff
+    ├── analysis.html           Pipeline runner + bucket nav + material detail + LLM review + Excel export
+    ├── analysis.js
+    └── analysis.css
+```
+
+Additional `shared/` modules added in Phase 4:
+
+```
+shared/
+  pipeline.js   Port of scripts 02/03/04 — net consumption, multi-model detection,
+                period rates, HCE detection, lumpy/smooth, traffic-light decision tree
+  chart.js      Inline SVG cumulative chart with P1/P2 trend lines + WO annotations.
+                PNG capture for LLM image input
+  llm.js        Provider-agnostic review surface (Anthropic + OpenAI). Sends chart
+                image + structured prompt, parses verdict + notes + suggested edits
+  excel.js      ExcelJS workbook builder — Index sheet + per-material sheets with
+                embedded chart images, HCE tables, traffic-light fills
 ```
 
 ## Canonical JSON contract (v1.0.0)
