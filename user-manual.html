@@ -239,6 +239,7 @@
       <a href="#chart">8 · Charts — what they show</a>
       <a href="#analysis-ui">9 · Analysis page UI</a>
       <a href="#excel">10 · Excel deliverable</a>
+      <a class="deep" href="#pdf-pack">10b · PDF Pack ★ v2</a>
       <a href="#llm">11 · LLM review surface</a>
       <a class="deep" href="#llm-mass">11b · Mass LLM Review ★ v2</a>
       <a href="#troubleshooting">12 · Troubleshooting</a>
@@ -671,6 +672,38 @@
         <p>Two utility sheets per workbook — TL count summary and run-metadata block (parameters, dates, exported-at timestamp).</p>
         <h3>Combined workbook (Export ALL)</h3>
         <p>Single file with Master Index (every material across every bucket, bucket name as first column, AutoFilter active) + cross-bucket Summary (per-bucket TL counts + totals) + Run metadata. Lighter than per-bucket workbooks (no per-material chart sheets) so it opens fast for comparison views.</p>
+
+        <h3 id="pdf-pack">10b · PDF Pack ★ (v2.0)</h3>
+        <p>Per-material PDF deliverable — one A4 portrait page per selected material, designed for client presentation rather than working analysis (Excel is the working format).</p>
+        <h4>Marking materials</h4>
+        <ul>
+          <li><b>Right-click any row</b> in the material list to open a context menu. Pick <em>Mark for PDF print</em> to add to the PDF queue, <em>Mark for LLM review</em> to add to the Mass-LLM queue. The same menu lets you Unmark or Open the detail panel.</li>
+          <li>Marked rows show small badges next to the material number (<span style="background:rgba(184,60,208,0.18);color:#D898E8;border:1px solid rgba(184,60,208,0.50);padding:1px 5px;font-family:monospace;font-size:10px;">✦</span> review · <span style="background:rgba(245,166,35,0.18);color:#FFC76A;border:1px solid rgba(245,166,35,0.50);padding:1px 5px;font-family:monospace;font-size:10px;">⤓</span> PDF) and a coloured stripe down the left edge of the row.</li>
+          <li>The Bulk operations row's buttons show counts: e.g. <code>✦ Mass LLM Review · 12 marked</code> / <code>⤓ Export PDF Pack · 7 marked</code>.</li>
+        </ul>
+        <h4>PDF Pack modal</h4>
+        <p>Click <b>⤓ Export PDF Pack</b> to open the selection modal. Same shape as the Mass LLM modal but without the 50-cap. Three quick-selects: <em>Select all visible</em>, <em>Select marked only</em>, <em>Clear</em>. Pre-checked from <code>state.marked.pdf</code>.</p>
+        <p>Click <b>⤓ Build PDF (N)</b> → modal switches to a progress view showing "Page X / N · {material}" as each page renders. When complete, the PDF is downloaded automatically as <code>PDF_Pack_&lt;assessment&gt;_&lt;bucket&gt;_&lt;date&gt;.pdf</code>.</p>
+        <h4>PDF page layout (per material)</h4>
+        <p>A4 portrait, 12 mm margins. Top-to-bottom:</p>
+        <ol>
+          <li><b>Navy header band</b> — "Inventory Optimization · Consumption Profile" + assessment name / bucket / run date / page X of N.</li>
+          <li><b>Material number</b> (large, 16pt bold) with the traffic-light pill anchored top-right (coloured fill matching the analysis page).</li>
+          <li><b>Material description</b> below.</li>
+          <li><b>Recommendation banner</b> — algorithmic action text, framed with the TL colour on the left.</li>
+          <li><b>Embedded chart</b> — the same SVG-rendered cumulative chart with P1/P2 trend chords, HCE annotations, Inv Adj vertical lines, LUMPY badge. ~186 mm × 73 mm.</li>
+          <li><b>Stat grid table</b> — two-column key/value table covering P1/P2 rates, Adj P2, rate change, total, pattern, stock, runway, WO count, multi-model flag.</li>
+          <li><b>MRP Settings Comparison</b> — Current vs Recommended, with amber row highlight where they differ.</li>
+          <li><b>HCE events table</b> (only when material has HCE flags) — orange-tinted, lists each HCE work order with date, equipment, qty, % of P2.</li>
+          <li><b>Inv Adj events table</b> (only when material has confirmed Inv-Adj dates) — purple-tinted, lists each adjustment date with order, equipment, qty, reason.</li>
+          <li><b>Footer</b> — timestamp + version + repo URL on every page.</li>
+        </ol>
+        <h4>Implementation notes</h4>
+        <ul>
+          <li>Built on <b>jsPDF 2.5.1</b> + <b>jsPDF-autoTable 3.8.2</b>, both CDN-loaded. No html2canvas dependency — the chart embeds via <code>AppChart.toPng()</code> (same path used by the Excel chart export), all text + tables are jsPDF native for crisp vector output and smaller file size.</li>
+          <li>Rendering speed: ~150–300 ms per material (chart capture is the bottleneck). 50 materials → ~15 s.</li>
+          <li>If the modal is closed mid-build, you get a "still running — close anyway?" confirm. PDF won't complete if you confirm close.</li>
+        </ul>
       </section>
 
       <!-- ───────────── 11 · LLM ───────────── -->

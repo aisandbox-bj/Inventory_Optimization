@@ -20,7 +20,11 @@
     searchText:      '',
     llmInflight:     false,
     llmByMaterial:   {},         // material → { verdict, notes, suggestedEdits, raw }
-    colFilters:      {}          // colKey → { type:'set'|'range', values:Set, min, max }
+    colFilters:      {},         // colKey → { type:'set'|'range', values:Set, min, max }
+    marked:          {           // user-marked materials (right-click context menu, v2.0)
+      review: new Set(),         // → pre-checked in Mass LLM modal
+      pdf:    new Set()          // → pre-checked in PDF Pack modal
+    }
   };
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -285,10 +289,22 @@
         </th>`;
     }).join('');
 
-    const tbody = rows.map(m => `
-      <tr data-material="${escapeAttr(m.material)}" class="${state.selectedMaterial === m.material ? 'selected' : ''}">
+    const tbody = rows.map(m => {
+      const isReview = state.marked.review.has(m.material);
+      const isPdf    = state.marked.pdf.has(m.material);
+      const rowClasses = [
+        state.selectedMaterial === m.material ? 'selected' : '',
+        (isReview || isPdf) ? 'marked-any' : '',
+        isReview ? 'marked-review' : '',
+        isPdf    ? 'marked-pdf'    : ''
+      ].filter(Boolean).join(' ');
+      const badges = (isReview || isPdf)
+        ? `<span class="mark-badges">${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}${isPdf ? '<span class="mark-badge pdf" title="Marked for PDF print">⤓</span>' : ''}</span>`
+        : '';
+      return `
+      <tr data-material="${escapeAttr(m.material)}" class="${rowClasses}">
         <td><span class="tl-dot ${m.trafficLight}"></span><span class="tl-label">${m.trafficLight}</span></td>
-        <td class="mat">${escapeHtml(m.material)}</td>
+        <td class="mat">${escapeHtml(m.material)}${badges}</td>
         <td class="desc" title="${escapeAttr(m.description)}">${escapeHtml(m.description || '')}</td>
         <td class="num">${m.totalNet?.toLocaleString?.() ?? m.totalNet ?? '—'}</td>
         <td class="num">${m.p1Flag === 'OK' ? m.p1Rate.toFixed(1) : `<span class="amber">${escapeHtml(m.p1Flag || '—')}</span>`}</td>
@@ -297,7 +313,8 @@
         <td class="num">${m.recMax ?? '—'}</td>
         <td class="num" style="color:var(--text-muted)">${escapeHtml(m.mrpType || '—')}</td>
         <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${escapeHtml(m.pattern || '—')}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
     tbl.innerHTML = `<table class="list-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
                      <div class="list-meta" style="padding:8px 14px;font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted);letter-spacing:.5px;">
                        ${rows.length.toLocaleString()} of ${bucket.materials.length.toLocaleString()} materials shown
@@ -326,7 +343,79 @@
         renderList();
         renderDetail();
       });
+      tr.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openRowContextMenu(e.clientX, e.clientY, tr.dataset.material);
+      });
     });
+  }
+
+  /* ─── Right-click context menu (v2.0) ───────────────────────────────────── */
+  function openRowContextMenu(x, y, material){
+    const menu = $('#rowContextMenu');
+    if (!menu) return;
+    menu.classList.remove('hidden');
+    menu.setAttribute('aria-hidden', 'false');
+
+    // Toggle which menu items are shown based on existing marks
+    const isReview = state.marked.review.has(material);
+    const isPdf    = state.marked.pdf.has(material);
+    menu.querySelector('[data-action="mark-review"]').style.display   = isReview ? 'none' : '';
+    menu.querySelector('[data-action="unmark-review"]').style.display = isReview ? '' : 'none';
+    menu.querySelector('[data-action="mark-pdf"]').style.display      = isPdf    ? 'none' : '';
+    menu.querySelector('[data-action="unmark-pdf"]').style.display    = isPdf    ? '' : 'none';
+
+    // Position — clamp to viewport
+    const w = 260, h = 200;
+    const left = Math.min(x, window.innerWidth - w - 8);
+    const top  = Math.min(y, window.innerHeight - h - 8);
+    menu.style.left = left + 'px';
+    menu.style.top  = top + 'px';
+
+    // Bind item handlers (one-shot per open)
+    menu.querySelectorAll('.row-ctx-item').forEach(item => {
+      item.onclick = () => {
+        const act = item.dataset.action;
+        if (act === 'mark-review')   { state.marked.review.add(material);    }
+        if (act === 'unmark-review') { state.marked.review.delete(material); }
+        if (act === 'mark-pdf')      { state.marked.pdf.add(material);       }
+        if (act === 'unmark-pdf')    { state.marked.pdf.delete(material);    }
+        if (act === 'open-detail')   {
+          state.selectedMaterial = material;
+          renderDetail();
+          document.querySelector('#materialDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        closeRowContextMenu();
+        renderList();
+        renderBulkCounters();
+      };
+    });
+
+    setTimeout(() => {
+      document.addEventListener('click', dismissRowCtxOutside, { once: true });
+      document.addEventListener('keydown', dismissRowCtxEsc, { once: true });
+      window.addEventListener('scroll', closeRowContextMenu, { once: true });
+    }, 0);
+  }
+  function dismissRowCtxOutside(){ closeRowContextMenu(); }
+  function dismissRowCtxEsc(e){ if (e.key === 'Escape') closeRowContextMenu(); }
+  function closeRowContextMenu(){
+    const menu = $('#rowContextMenu');
+    if (menu) { menu.classList.add('hidden'); menu.setAttribute('aria-hidden','true'); }
+  }
+
+  /* Update bulk-operations row to show mark counters */
+  function renderBulkCounters(){
+    const reviewBtn = $('#btnMassReview');
+    const pdfBtn    = $('#btnPdfPack');
+    const nReview = state.marked.review.size;
+    const nPdf    = state.marked.pdf.size;
+    if (reviewBtn) reviewBtn.textContent = nReview > 0
+      ? `✦ Mass LLM Review · ${nReview} marked`
+      : `✦ Mass LLM Review`;
+    if (pdfBtn) pdfBtn.textContent = nPdf > 0
+      ? `⤓ Export PDF Pack · ${nPdf} marked`
+      : `⤓ Export PDF Pack`;
   }
 
   /* ─── Excel-style per-column filter popover ─────────────────────────────── */
@@ -697,6 +786,7 @@
     host.innerHTML = `
       <div class="label" style="margin-right:auto;">Bulk operations</div>
       <button id="btnInvAdj" class="ghost" title="Re-open the Inventory Adjustment Review modal. Flags MB51 dates with anomalously high issue-transaction counts (likely cycle counts) and excludes confirmed dates from rate calculations.">⚠ Inv Adj review</button>
+      <button id="btnPdfPack" class="primary" title="Export a PDF pack — one page per selected material (chart + key stats + MRP comparison + HCE + Inv Adj). Right-click a row in the list to 'Mark for PDF print', then click here.">⤓ Export PDF Pack</button>
       <button id="btnMassReview" class="primary" title="Pick up to 50 materials from this bucket and run the LLM against each one in sequence. Produces an Excel + JSON deliverable. In-memory only — wiped on modal close.">✦ Mass LLM Review</button>
       <button id="btnLoadMassReview" class="ghost" title="Reload a previously-downloaded mass-review JSON. Use this after a session was wiped (closed) to view the saved LLM annotations again. The matching canonical intake JSON must already be loaded on this page.">⤒ Reload saved review</button>
       <button id="btnExportBucket" class="primary">⤓ Export this bucket</button>
@@ -706,7 +796,9 @@
       <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
     `;
     $('#btnInvAdj').addEventListener('click', openInvAdjModal);
+    $('#btnPdfPack').addEventListener('click', openPdfPackModal);
     $('#btnMassReview').addEventListener('click', openMassReview);
+    renderBulkCounters();
     $('#btnLoadMassReview').addEventListener('click', () => $('#loadMassReviewInput').click());
     $('#loadMassReviewInput').addEventListener('change', handleMassReviewUpload);
     $('#btnExportBucket').addEventListener('click', exportThisBucket);
@@ -773,6 +865,373 @@
       console.error(e);
       prog.textContent = `✗ ${e.message || e}`;
     }
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     PDF PACK EXPORT (v2.0)
+     Per-material PDF page (chart + stats + MRP compare + HCE + Inv Adj),
+     selection modal pre-checked from state.marked.pdf, no row cap.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function openPdfPackModal(){
+    const b = currentBucket();
+    if (!b) { toast('No bucket selected', 'warn'); return; }
+    if (typeof jspdf === 'undefined' && typeof window.jspdf === 'undefined') {
+      toast('jsPDF library not loaded yet — try again in a moment.', 'crit');
+      return;
+    }
+    state._pdfPack = state._pdfPack || { selected: new Set(), running: false };
+    // Pre-check materials marked via right-click
+    state._pdfPack.selected = new Set([...state.marked.pdf].filter(m => b.materials.some(x => x.material === m)));
+    $('#pdfBucketName').textContent = b.name;
+    $('#pdfModePill').textContent = 'Select';
+    $('#pdfModePill').className = 'mass-mode-pill';
+    showPdfModal();
+    renderPdfSelect();
+    // Bind close
+    const closeBtn = $('#pdfClose');
+    if (closeBtn && !closeBtn._pdfBound) {
+      closeBtn.addEventListener('click', closePdfModal);
+      closeBtn._pdfBound = true;
+    }
+    const backdrop = $('#pdfModal').querySelector('.mass-backdrop');
+    if (backdrop && !backdrop._pdfBound) {
+      backdrop.addEventListener('click', closePdfModal);
+      backdrop._pdfBound = true;
+    }
+  }
+  function showPdfModal(){
+    const m = $('#pdfModal');
+    m.classList.remove('hidden'); m.setAttribute('aria-hidden','false');
+  }
+  function closePdfModal(){
+    if (state._pdfPack && state._pdfPack.running) {
+      if (!confirm('PDF export is still running. Close anyway?')) return;
+    }
+    const m = $('#pdfModal');
+    m.classList.add('hidden'); m.setAttribute('aria-hidden','true');
+  }
+
+  function renderPdfSelect(){
+    const bucket = currentBucket();
+    const body = $('#pdfBody');
+    const foot = $('#pdfFoot');
+    const sel  = state._pdfPack.selected;
+
+    const cols = [
+      { l:'' }, { l:'TL' }, { l:'Material' }, { l:'Description' },
+      { l:'Total' }, { l:'P2/mo' }, { l:'Pattern' }
+    ];
+    const thead = cols.map(c => `<th>${c.l}</th>`).join('');
+    const tbody = bucket.materials.map(m => {
+      const checked = sel.has(m.material) ? 'checked' : '';
+      return `
+        <tr data-material="${escapeAttr(m.material)}">
+          <td><input type="checkbox" data-mat="${escapeAttr(m.material)}" ${checked} /></td>
+          <td><span class="tl-dot ${m.trafficLight}"></span><span class="tl-label">${m.trafficLight}</span></td>
+          <td class="mat">${escapeHtml(m.material)}</td>
+          <td class="desc" title="${escapeAttr(m.description)}">${escapeHtml((m.description || '').slice(0, 80))}</td>
+          <td class="num">${m.totalNet?.toLocaleString?.() ?? m.totalNet ?? '—'}</td>
+          <td class="num">${m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : '—'}</td>
+          <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${m.pattern}</td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="mass-select-info">
+        <span>Pick materials to include in the PDF pack — one page per material:</span>
+        <span class="mass-select-counter" id="pdfSelCounter">${sel.size} selected</span>
+      </div>
+      <div class="list-table-wrap" style="max-height:480px;">
+        <table class="list-table">
+          <thead><tr>${thead}</tr></thead>
+          <tbody>${tbody}</tbody>
+        </table>
+      </div>
+    `;
+    body.querySelectorAll('input[type=checkbox][data-mat]').forEach(cb => {
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => {
+        const mat = cb.dataset.mat;
+        if (cb.checked) sel.add(mat); else sel.delete(mat);
+        $('#pdfSelCounter').textContent = `${sel.size} selected`;
+      });
+    });
+
+    foot.innerHTML = `
+      <button id="pdfSelAll"   class="ghost">Select all visible</button>
+      <button id="pdfSelMarked" class="ghost">Select marked only</button>
+      <button id="pdfSelClear" class="ghost">Clear</button>
+      <span class="spacer"></span>
+      <span class="stat">Output: A4 portrait · 1 page / material</span>
+      <button id="pdfStart" class="primary" ${sel.size === 0 ? 'disabled' : ''}>⤓ Build PDF (${sel.size})</button>
+    `;
+    $('#pdfSelAll').addEventListener('click', () => {
+      bucket.materials.forEach(m => sel.add(m.material));
+      renderPdfSelect();
+    });
+    $('#pdfSelMarked').addEventListener('click', () => {
+      sel.clear();
+      [...state.marked.pdf].filter(m => bucket.materials.some(x => x.material === m)).forEach(m => sel.add(m));
+      renderPdfSelect();
+    });
+    $('#pdfSelClear').addEventListener('click', () => { sel.clear(); renderPdfSelect(); });
+    $('#pdfStart').addEventListener('click', buildPdfPack);
+  }
+
+  async function buildPdfPack(){
+    const bucket = currentBucket();
+    const sel = state._pdfPack.selected;
+    const mats = bucket.materials.filter(m => sel.has(m.material));
+    if (mats.length === 0) return;
+
+    // Switch modal to progress view
+    state._pdfPack.running = true;
+    $('#pdfModePill').textContent = 'Building';
+    $('#pdfModePill').className = 'mass-mode-pill running';
+    const body = $('#pdfBody');
+    const foot = $('#pdfFoot');
+    body.innerHTML = `
+      <div class="mass-progress">
+        <span class="label">Progress</span>
+        <span class="now" id="pdfNow">Preparing…</span>
+        <div class="mass-progress-bar"><div id="pdfBar" style="width:0%"></div></div>
+        <span class="mass-progress-pct" id="pdfPct">0 / ${mats.length}</span>
+      </div>
+      <div class="panel-sub" style="font-size:11.5px;color:var(--text-muted);margin-top:12px;">
+        Rendering each material's chart to PNG and laying out the page tables.
+        Larger packs (50+ materials) take 15-30 seconds.
+      </div>
+    `;
+    foot.innerHTML = `<span class="ia-foot-info">Hold tight — building the PDF…</span>`;
+
+    try {
+      const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      for (let i = 0; i < mats.length; i++) {
+        const m = mats[i];
+        $('#pdfNow').textContent = `Page ${i + 1} / ${mats.length} · ${m.material}`;
+        $('#pdfBar').style.width = `${Math.round((i / mats.length) * 100)}%`;
+        $('#pdfPct').textContent = `${i} / ${mats.length}`;
+        if (i > 0) doc.addPage();
+        await renderMaterialToPdf(doc, m, bucket, i + 1, mats.length);
+      }
+      $('#pdfBar').style.width = '100%';
+      $('#pdfPct').textContent = `${mats.length} / ${mats.length}`;
+      $('#pdfNow').textContent = 'Writing file…';
+
+      const assess = (state.json.metadata.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g,'_');
+      const safeBucket = bucket.name.replace(/[^A-Za-z0-9_-]+/g,'_');
+      doc.save(`PDF_Pack_${assess}_${safeBucket}_${state.result.runDate}.pdf`);
+
+      // Done view
+      $('#pdfModePill').textContent = 'Done'; $('#pdfModePill').className = 'mass-mode-pill done';
+      body.innerHTML = `
+        <div class="ia-empty">
+          <span class="big">✓ PDF saved</span>
+          ${mats.length} page${mats.length === 1 ? '' : 's'} written to disk.
+        </div>
+      `;
+      foot.innerHTML = `
+        <span class="ia-foot-info">PDF Pack downloaded.</span>
+        <span class="spacer"></span>
+        <button id="pdfDone" class="primary">Close</button>
+      `;
+      $('#pdfDone').addEventListener('click', closePdfModal);
+    } catch (e) {
+      console.error(e);
+      body.innerHTML = `<div class="ia-empty"><span class="big" style="color:var(--status-crit);">✗ PDF failed</span>${escapeHtml(e.message || String(e))}</div>`;
+      foot.innerHTML = `<span class="spacer"></span><button id="pdfDone" class="ghost">Close</button>`;
+      $('#pdfDone').addEventListener('click', closePdfModal);
+    } finally {
+      state._pdfPack.running = false;
+    }
+  }
+
+  /* ─── Per-material PDF page (A4 portrait, 210×297 mm) ─── */
+  async function renderMaterialToPdf(doc, m, bucket, pageIdx, pageTotal){
+    const W = 210, H = 297, M = 12;       // mm
+    const params = state.json.parameters;
+    const assess = state.json.metadata.assessmentName || '(unnamed)';
+    const runDate = state.result.runDate;
+
+    // ── Header band ──────────────────────────────────────────────────────
+    doc.setFillColor(31, 56, 100);                 // navy
+    doc.rect(0, 0, W, 18, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Inventory Optimization · Consumption Profile', M, 8);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text(`${assess}  |  Bucket: ${bucket.name}  |  Run: ${runDate}`, M, 13.5);
+    doc.text(`Page ${pageIdx} / ${pageTotal}`, W - M, 13.5, { align: 'right' });
+
+    // ── Material title row ──────────────────────────────────────────────
+    let y = 24;
+    doc.setTextColor(20, 20, 30);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(String(m.material), M, y);
+    // TL pill on right
+    const tl = m.trafficLight;
+    const tlColor = ({ GREEN:[0,176,80], BLUE:[52,152,219], ORANGE:[255,140,0], RED:[192,0,0], PURPLE:[155,89,182], GREY:[191,191,191] })[tl] || [127,127,127];
+    doc.setFillColor(tlColor[0], tlColor[1], tlColor[2]);
+    const pillW = 26, pillX = W - M - pillW, pillY = y - 5.5;
+    doc.rect(pillX, pillY, pillW, 7, 'F');
+    doc.setTextColor(tl === 'GREY' ? 0 : 255, tl === 'GREY' ? 0 : 255, tl === 'GREY' ? 0 : 255);
+    doc.setFontSize(10);
+    doc.text(tl, pillX + pillW/2, y - 0.5, { align: 'center' });
+
+    y += 5;
+    doc.setTextColor(80, 80, 90);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    const descLines = doc.splitTextToSize(m.description || '', W - 2*M - 30);
+    doc.text(descLines, M, y);
+    y += descLines.length * 4.2;
+
+    // Action banner
+    y += 3;
+    doc.setFillColor(245, 247, 250);
+    doc.setDrawColor(tlColor[0], tlColor[1], tlColor[2]);
+    doc.setLineWidth(0.8);
+    doc.rect(M, y, W - 2*M, 12, 'FD');
+    doc.setTextColor(40, 40, 50);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('ALGORITHMIC RECOMMENDATION', M + 3, y + 4.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const actLines = doc.splitTextToSize(m.action || '', W - 2*M - 6);
+    doc.text(actLines.slice(0, 2), M + 3, y + 9);
+    y += 16;
+
+    // ── Chart ────────────────────────────────────────────────────────────
+    try {
+      const host = document.createElement('div');
+      host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1100px;height:430px;visibility:hidden;background:#0C2D3B;';
+      document.body.appendChild(host);
+      const svg = AppChart.render(host, m, { width: 1100, height: 430 });
+      const png = await AppChart.toPng(svg, 1.6);
+      document.body.removeChild(host);
+      const chartW = W - 2*M;
+      const chartH = chartW * (430 / 1100);
+      doc.addImage(png, 'PNG', M, y, chartW, chartH);
+      y += chartH + 4;
+    } catch (e) {
+      doc.setTextColor(192, 0, 0);
+      doc.text(`Chart render error: ${e.message || e}`, M, y);
+      y += 5;
+    }
+
+    // ── Stat grid (2 columns) — replaced by autoTable for cleaner output ──
+    const rcDisp = m.rateChange != null ? `${m.rateChange}%` : 'N/A';
+    const adjDisp = (m.hceP2 && m.hceP2.length && m.adjP2Flag === 'OK') ? `${m.adjP2Rate.toFixed(2)} / mo` : '—';
+    const stats = [
+      ['P1 rate',          m.p1Flag === 'OK' ? `${m.p1Rate.toFixed(2)} / mo` : '—',
+       'P2 rate',          m.p2Flag === 'OK' ? `${m.p2Rate.toFixed(2)} / mo` : '—'],
+      ['Adj P2 (HCE excl)', adjDisp,
+       'P1 → P2 change',   rcDisp],
+      ['Total (window)',   String(m.totalNet ?? '—'),
+       'Pattern',          m.pattern || '—'],
+      ['Stock on hand',    m.stock != null ? String(m.stock) : '—',
+       'Runway @ P2',      m.runway != null ? `${m.runway} mo` : '—'],
+      ['WO count (window)', m.woCount != null ? String(m.woCount) : '—',
+       'Multi-model',      m.multiModelFlag || 'Single']
+    ];
+    doc.autoTable({
+      startY: y,
+      head: [['Stat', 'Value', 'Stat', 'Value']],
+      body: stats,
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: [200, 200, 210], lineWidth: 0.15 },
+      headStyles: { fillColor: [64, 64, 64], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 36, fillColor: [240, 240, 245] },
+        1: { cellWidth: 56 },
+        2: { fontStyle: 'bold', cellWidth: 36, fillColor: [240, 240, 245] },
+        3: { cellWidth: 56 }
+      },
+      margin: { left: M, right: M }
+    });
+    y = doc.lastAutoTable.finalY + 4;
+
+    // ── MRP Settings Comparison ──────────────────────────────────────────
+    const cmpBody = [
+      ['MRP type', m.mrpType || '—', m.recMrpType || m.mrpType || '—'],
+      ['Min',      m.cmin != null ? String(m.cmin) : '—',  m.recMin != null ? String(m.recMin) : '—'],
+      ['Max',      m.cmax != null ? String(m.cmax) : '—',  m.recMax != null ? String(m.recMax) : '—'],
+      ['Safety stock', m.safetyStock != null ? String(m.safetyStock) : '—', '—']
+    ];
+    doc.autoTable({
+      startY: y,
+      head: [['MRP Settings', 'Current', 'Recommended']],
+      body: cmpBody,
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: [200, 200, 210], lineWidth: 0.15 },
+      headStyles: { fillColor: [48, 84, 150], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 36, fillColor: [240, 240, 245] },
+        1: { cellWidth: 56, halign: 'center' },
+        2: { cellWidth: 56, halign: 'center', textColor: [22, 138, 145] }
+      },
+      didParseCell: (data) => {
+        if (data.row.section === 'body' && data.column.index >= 1 && data.row.index < 3) {
+          const cur = cmpBody[data.row.index][1];
+          const rec = cmpBody[data.row.index][2];
+          if (cur !== '—' && rec !== '—' && cur !== rec) {
+            data.cell.styles.fillColor = [255, 243, 205];
+          }
+        }
+      },
+      margin: { left: M, right: M }
+    });
+    y = doc.lastAutoTable.finalY + 4;
+
+    // ── HCE events table (if any) ────────────────────────────────────────
+    if (m.hceP2 && m.hceP2.length && y < H - 50) {
+      doc.autoTable({
+        startY: y,
+        head: [['Period', 'WO', 'Date', 'Equipment', 'Qty', '% of P2']],
+        body: m.hceP2.map(e => [e.period || 'P2', String(e.order || '—'), e.date || '', e.equipment || '—', String(e.qty), `${e.pct}%`]),
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.4, lineColor: [200, 200, 210], lineWidth: 0.15 },
+        headStyles: { fillColor: [198, 89, 17], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        bodyStyles:  { fillColor: [255, 242, 204] },
+        margin: { left: M, right: M },
+        didDrawPage: () => {
+          doc.setFontSize(9); doc.setTextColor(123, 79, 0); doc.setFont('helvetica', 'bold');
+          doc.text('High Consumption Events — P2', M, y - 1);
+        }
+      });
+      y = doc.lastAutoTable.finalY + 3;
+    }
+
+    // ── Inv Adj events (if any) ──────────────────────────────────────────
+    if (m.invAdj && m.invAdj.length && y < H - 40) {
+      doc.autoTable({
+        startY: y,
+        head: [['Date', 'Order', 'Equipment', 'Qty', 'Reason']],
+        body: m.invAdj.map(e => [e.date || '', String(e.order || '—'), e.equipment || '—', String(e.qty), e.reasons || '']),
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.4, lineColor: [200, 200, 210], lineWidth: 0.15 },
+        headStyles: { fillColor: [155, 89, 182], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        bodyStyles:  { fillColor: [232, 216, 240] },
+        margin: { left: M, right: M },
+        didDrawPage: () => {
+          doc.setFontSize(9); doc.setTextColor(110, 50, 130); doc.setFont('helvetica', 'bold');
+          doc.text('Inventory Adjustments (excluded from rate)', M, y - 1);
+        }
+      });
+      y = doc.lastAutoTable.finalY + 3;
+    }
+
+    // ── Footer (every page) ──────────────────────────────────────────────
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 150);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')}  ·  Inventory Optimization v2.0.0-dev  ·  github.com/aisandbox-bj/Inventory_Optimization`, M, H - 6);
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -995,7 +1454,15 @@
     // Fresh selection — scope to current bucket only (per design)
     state.mass.view = 'select';
     state.mass.bucketKeyAtRun = b.key;
-    state.mass.selected = new Set();
+    // Pre-check materials marked for review via right-click (capped at MAX_SELECTION)
+    const max = AppMassLlm.MAX_SELECTION;
+    const preChecked = new Set();
+    for (const mat of b.materials) {
+      if (state.marked.review.has(mat.material) && preChecked.size < max) {
+        preChecked.add(mat.material);
+      }
+    }
+    state.mass.selected = preChecked;
     showMassModal();
   }
 

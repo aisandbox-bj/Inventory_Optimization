@@ -917,3 +917,91 @@
   letter-spacing:.4px;
 }
 .ia-foot-info b{ color:var(--accent); }
+
+/* ─── Right-click context menu (v2.0) ───────────────────────────────────── */
+.row-ctx{
+  position:fixed;
+  z-index:2000;
+  background:var(--bg-panel);
+  border:1px solid var(--accent);
+  box-shadow:0 12px 32px rgba(0,0,0,0.55);
+  padding:4px 0;
+  min-width:240px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  letter-spacing:.4px;
+}
+.row-ctx.hidden{ display:none; }
+.row-ctx-item{
+  display:flex; align-items:center; gap:10px;
+  padding:8px 14px;
+  color:var(--text-sec);
+  cursor:pointer;
+  user-select:none;
+  transition:background .12s, color .12s;
+}
+.row-ctx-item:hover{
+  background:rgba(31,206,216,0.10);
+  color:var(--accent);
+}
+.row-ctx-item.disabled{
+  opacity:.35;
+  pointer-events:none;
+}
+.row-ctx-item .ctx-icon{
+  display:inline-block;
+  width:16px; text-align:center;
+  color:var(--accent);
+  font-weight:700;
+}
+.row-ctx-item .ctx-text{ flex:1; }
+.row-ctx-sep{
+  height:1px;
+  background:var(--border-soft);
+  margin:4px 0;
+}
+
+/* ─── Mark badges shown next to material number in the list table ──────── */
+.list-table .mark-badges{
+  display:inline-flex;
+  gap:4px;
+  margin-left:6px;
+  vertical-align:middle;
+}
+.list-table .mark-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:16px; height:16px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0;
+  cursor:help;
+}
+.list-table .mark-badge.review{
+  background:rgba(184,60,208,0.18);
+  color:#D898E8;
+  border:1px solid rgba(184,60,208,0.50);
+}
+.list-table .mark-badge.pdf{
+  background:rgba(245,166,35,0.18);
+  color:#FFC76A;
+  border:1px solid rgba(245,166,35,0.50);
+}
+
+/* Row context-cue dot for marked rows */
+.list-table tr.marked-any td:first-child{
+  position:relative;
+}
+.list-table tr.marked-any td:first-child::before{
+  content:"";
+  position:absolute;
+  left:0; top:0; bottom:0;
+  width:2px;
+}
+.list-table tr.marked-review td:first-child::before{ background:#B83CD0; }
+.list-table tr.marked-pdf td:first-child::before{    background:#F5A623; }
+.list-table tr.marked-review.marked-pdf td:first-child::before{
+  background:linear-gradient(180deg, #B83CD0 50%, #F5A623 50%);
+}

@@ -266,6 +266,17 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>PDF Pack export + Right-click mark workflow</h4>
+      <ul>
+        <li><b>Right-click any row</b> in the analysed material list to open a custom context menu with four actions: <em>Mark for LLM review</em>, <em>Unmark from LLM review</em>, <em>Mark for PDF print</em>, <em>Unmark from PDF print</em>, plus <em>Open detail panel</em>. The menu auto-swaps "Mark"/"Unmark" based on current state.</li>
+        <li><b>Visual indicators</b> on marked rows: small magenta ✦ badge for review-marked, amber ⤓ badge for PDF-marked, plus a coloured stripe on the left edge of the first cell.</li>
+        <li><b>Mass LLM Review modal</b> now pre-checks materials marked for review (capped at the 50-material limit).</li>
+        <li><b>New "Export PDF Pack" button</b> in the Bulk operations row. Opens a selection modal pre-checked from PDF-marked materials. Three quick-selects: <em>Select all visible</em>, <em>Select marked only</em>, <em>Clear</em>. Counter updates live.</li>
+        <li><b>PDF generation</b> — A4 portrait, one page per material. Each page contains: navy header band (assessment / bucket / run date / page X of N), large material number + description, traffic-light pill, algorithmic recommendation banner, embedded consumption chart (1100×430 px), two-column stat grid (P1/P2 rates / adj P2 / rate change / total / pattern / stock / runway / WO count / multi-model), MRP Settings Comparison table with amber highlighting on rows where recommended differs from current, HCE events table (orange-tinted), Inv Adj events table (purple-tinted), and a footer with timestamp + repo URL.</li>
+        <li><b>Buttons show counts</b> when materials are marked — e.g. "✦ Mass LLM Review · 12 marked" / "⤓ Export PDF Pack · 7 marked" so the marked sets are visible at-a-glance.</li>
+        <li>Built on jsPDF 2.5.1 + jsPDF-autoTable 3.8.2 (CDN). No html2canvas dependency — the chart embeds via the existing <code>AppChart.toPng()</code> path, all other content uses jsPDF's native text + autoTable for crisp, vector-friendly output.</li>
+      </ul>
+
       <h4>Dashboard — "Clear session data" button</h4>
       <ul>
         <li>New button at the bottom of the Dashboard (under Recent intakes) with its own framed card and amber-warn styling: <b>⌫ Clear session data</b>.</li>

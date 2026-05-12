@@ -102,6 +102,49 @@
     </div>
   </div>
 
+  <!-- ─── PDF Pack modal ─── -->
+  <div id="pdfModal" class="mass-modal hidden" aria-hidden="true">
+    <div class="mass-backdrop"></div>
+    <div class="mass-dialog">
+      <div class="mass-head">
+        <div class="mass-title">
+          <span class="lab">PDF Pack export</span>
+          <h3 id="pdfBucketName">—</h3>
+        </div>
+        <div class="mass-mode-pill" id="pdfModePill">Select</div>
+        <button id="pdfClose" class="mass-close" title="Close">✕</button>
+      </div>
+      <div class="mass-body" id="pdfBody"></div>
+      <div class="mass-foot" id="pdfFoot"></div>
+    </div>
+  </div>
+
+  <!-- ─── Custom right-click context menu ─── -->
+  <div id="rowContextMenu" class="row-ctx hidden" role="menu" aria-hidden="true">
+    <div class="row-ctx-item" data-action="mark-review">
+      <span class="ctx-icon">✦</span>
+      <span class="ctx-text">Mark for LLM review</span>
+    </div>
+    <div class="row-ctx-item" data-action="unmark-review">
+      <span class="ctx-icon">✕</span>
+      <span class="ctx-text">Unmark from LLM review</span>
+    </div>
+    <div class="row-ctx-sep"></div>
+    <div class="row-ctx-item" data-action="mark-pdf">
+      <span class="ctx-icon">⤓</span>
+      <span class="ctx-text">Mark for PDF print</span>
+    </div>
+    <div class="row-ctx-item" data-action="unmark-pdf">
+      <span class="ctx-icon">✕</span>
+      <span class="ctx-text">Unmark from PDF print</span>
+    </div>
+    <div class="row-ctx-sep"></div>
+    <div class="row-ctx-item" data-action="open-detail">
+      <span class="ctx-icon">→</span>
+      <span class="ctx-text">Open detail panel</span>
+    </div>
+  </div>
+
   <!-- ─── Mass LLM Review modal ─── -->
   <div id="massModal" class="mass-modal hidden" aria-hidden="true">
     <div class="mass-backdrop"></div>
@@ -128,6 +171,8 @@
 
 <!-- ─── Libraries (CDN) ─── -->
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
 <!-- ─── App scripts (load order matters) ─── -->
 <script src="../shared/canonical-schema.js"></script>
