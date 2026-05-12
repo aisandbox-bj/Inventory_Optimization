@@ -223,6 +223,8 @@
       state.parsed[source] = result;
       const sheetTxt = result.sheet ? ` · sheet: "${result.sheet}"` : '';
       drop.querySelector('.file').textContent = `${file.name} · ${result.rowCount.toLocaleString()} rows${sheetTxt}`;
+      // Re-render every drop so cross-file reconciliation chips refresh too
+      renderAllDropStats();
       onParseUpdated();
     } catch (e) {
       console.error(e);
@@ -230,6 +232,160 @@
       drop.querySelector('.file').textContent = `${file.name} · ERROR: ${e.message || e}`;
       toast('Parse failed: ' + (e.message || e), 'crit');
     }
+  }
+
+  /* ─── Per-drop key-parameter stats ──────────────────────────────────────── */
+  function computeSourceStats(source, rows){
+    if (!rows || !rows.length) return [];
+    const uniqOf = (key) => new Set(rows.map(r => String(r[key] || '').trim()).filter(Boolean)).size;
+    switch (source) {
+      case 'mb51':
+        return [
+          { lab:'Transactions', v:rows.length.toLocaleString() },
+          { lab:'Materials',    v:uniqOf('material').toLocaleString() },
+          { lab:'Orders',       v:uniqOf('order').toLocaleString() }
+        ];
+      case 'iw39':
+        return [
+          { lab:'Work orders', v:rows.length.toLocaleString() },
+          { lab:'Units',       v:uniqOf('sortField').toLocaleString() }
+        ];
+      case 'fleetMaster':
+        return [
+          { lab:'Units',  v:rows.length.toLocaleString() },
+          { lab:'Models', v:uniqOf('model').toLocaleString() }
+        ];
+      case 'inventoryMaster':
+        return [
+          { lab:'Materials',     v:uniqOf('material').toLocaleString() },
+          { lab:'MRP types',     v:uniqOf('mrpInd').toLocaleString() },
+          { lab:'Inv. types',    v:uniqOf('inventoryType').toLocaleString() }
+        ];
+      case 'userList':
+        return [{ lab:'Materials', v:uniqOf('material').toLocaleString() }];
+      case 'materialVendor':
+        return [
+          { lab:'Mat→vendor rows', v:rows.length.toLocaleString() },
+          { lab:'Materials',       v:uniqOf('material').toLocaleString() },
+          { lab:'Vendors',         v:uniqOf('vendor').toLocaleString() }
+        ];
+      case 'leadTimes':
+        return [{ lab:'Materials', v:uniqOf('material').toLocaleString() }];
+      default:
+        return [];
+    }
+  }
+
+  function renderDropStats(source){
+    const drop = document.querySelector(`.drop[data-source="${source}"]`);
+    if (!drop) return;
+    let wrap = drop.querySelector('.drop-stats');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'drop-stats';
+      drop.appendChild(wrap);
+    }
+    const parsed = state.parsed[source];
+    if (!parsed) { wrap.innerHTML = ''; return; }
+    const stats = computeSourceStats(source, parsed.canonical)
+                    .concat(computeCrossFileChips(source));
+    wrap.innerHTML = stats.map(s => `
+      <span class="drop-stat${s.cls ? ' ' + s.cls : ''}">
+        <span class="lab">${escapeHtml(s.lab)}</span>
+        <span class="v">${s.v}</span>
+      </span>`).join('');
+  }
+
+  function renderAllDropStats(){
+    Object.keys(state.parsed).forEach(s => renderDropStats(s));
+  }
+
+  /* ─── Cross-file reconciliation chips ─── shows up only if the relevant
+     second file is also parsed; flags amber/red when below thresholds. */
+  function computeCrossFileChips(source){
+    const out = [];
+    const p = state.parsed;
+
+    const setOfKey = (rows, key) => new Set((rows || []).map(r => String(r[key] || '').trim()).filter(Boolean));
+
+    if (source === 'mb51') {
+      const mb51Mats = setOfKey(p.mb51?.canonical, 'material');
+      if (p.inventoryMaster) {
+        const mMats = setOfKey(p.inventoryMaster.canonical, 'material');
+        const overlap = [...mb51Mats].filter(m => mMats.has(m)).length;
+        out.push(reconChip('in Inv Master', overlap, mb51Mats.size));
+      }
+      if (p.iw39) {
+        const mb51Ords = setOfKey(p.mb51.canonical, 'order');
+        const iwOrds   = setOfKey(p.iw39.canonical, 'order');
+        const overlap  = [...mb51Ords].filter(o => iwOrds.has(o)).length;
+        out.push(reconChip('orders in IW39', overlap, mb51Ords.size));
+      }
+    }
+    if (source === 'iw39') {
+      if (p.mb51) {
+        const iwOrds  = setOfKey(p.iw39.canonical, 'order');
+        const mbOrds  = setOfKey(p.mb51.canonical, 'order');
+        const overlap = [...iwOrds].filter(o => mbOrds.has(o)).length;
+        out.push(reconChip('orders in MB51', overlap, iwOrds.size));
+      }
+      if (p.fleetMaster) {
+        const iwSf  = setOfKey(p.iw39.canonical, 'sortField');
+        const flSf  = setOfKey(p.fleetMaster.canonical, 'sortField');
+        const overlap = [...iwSf].filter(s => flSf.has(s)).length;
+        out.push(reconChip('units in Fleet', overlap, iwSf.size));
+      }
+    }
+    if (source === 'fleetMaster') {
+      if (p.iw39) {
+        const flSf  = setOfKey(p.fleetMaster.canonical, 'sortField');
+        const iwSf  = setOfKey(p.iw39.canonical, 'sortField');
+        const overlap = [...flSf].filter(s => iwSf.has(s)).length;
+        out.push(reconChip('units with WOs', overlap, flSf.size));
+      }
+    }
+    if (source === 'inventoryMaster') {
+      if (p.mb51) {
+        const mMats = setOfKey(p.inventoryMaster.canonical, 'material');
+        const mb51M = setOfKey(p.mb51.canonical, 'material');
+        const overlap = [...mb51M].filter(m => mMats.has(m)).length;
+        out.push(reconChip('MB51 mats covered', overlap, mb51M.size));
+      }
+    }
+    if (source === 'userList') {
+      if (p.mb51) {
+        const ul = setOfKey(p.userList.canonical, 'material');
+        const mb = setOfKey(p.mb51.canonical, 'material');
+        const overlap = [...ul].filter(m => mb.has(m)).length;
+        out.push(reconChip('in MB51', overlap, ul.size));
+      }
+      if (p.inventoryMaster) {
+        const ul = setOfKey(p.userList.canonical, 'material');
+        const im = setOfKey(p.inventoryMaster.canonical, 'material');
+        const overlap = [...ul].filter(m => im.has(m)).length;
+        out.push(reconChip('in Inv Master', overlap, ul.size));
+      }
+    }
+    if (source === 'materialVendor') {
+      if (p.inventoryMaster) {
+        const mv = setOfKey(p.materialVendor.canonical, 'material');
+        const im = setOfKey(p.inventoryMaster.canonical, 'material');
+        const overlap = [...mv].filter(m => im.has(m)).length;
+        out.push(reconChip('in Inv Master', overlap, mv.size));
+      }
+    }
+    return out;
+  }
+
+  function reconChip(label, overlap, total){
+    if (!total) return { lab: label, v: '—' };
+    const pct = overlap / total * 100;
+    const cls = pct < 50 ? 'crit' : (pct < 90 ? 'warn' : '');
+    return {
+      lab: label,
+      v:   `${overlap.toLocaleString()} / ${total.toLocaleString()} (${pct.toFixed(0)}%)`,
+      cls
+    };
   }
 
   function onParseUpdated(){
@@ -1094,7 +1250,216 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
-     STEP 6 — Review & Export
+     STEP 6 — Final scope summary (what will actually be analyzed)
+     Runs the pipeline's bucket builder against the current JSON and reports
+     materials per bucket + total. Cross-file mismatch flags surfaced.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  function renderScopeSummary(){
+    const host   = $('#scopeSummaryBody');
+    const status = $('#scopeSummaryStatus');
+    if (!host) return;
+
+    const required = currentRequiredSources();
+    if (!required.length || !required.every(s => state.parsed[s])) {
+      const missing = required.filter(s => !state.parsed[s]);
+      host.innerHTML = `<div class="scope-summary-empty">awaiting upload: ${missing.length ? missing.join(' · ') : 'all required files'}</div>`;
+      status.textContent = 'awaiting data';
+      status.className = 'step-status';
+      return;
+    }
+
+    let json;
+    try {
+      json = buildJson();
+    } catch (e) {
+      host.innerHTML = `<div class="scope-summary-empty">error building scope: ${escapeHtml(e.message)}</div>`;
+      status.textContent = 'error';
+      status.className = 'step-status crit';
+      return;
+    }
+
+    if (typeof AppPipeline === 'undefined') {
+      host.innerHTML = '<div class="scope-summary-empty">pipeline module not loaded</div>';
+      return;
+    }
+
+    let buckets = [];
+    try {
+      buckets = AppPipeline.buildBuckets(json);
+    } catch (e) {
+      console.error(e);
+      host.innerHTML = `<div class="scope-summary-empty">error computing buckets: ${escapeHtml(e.message)}</div>`;
+      status.textContent = 'error';
+      status.className = 'step-status crit';
+      return;
+    }
+
+    // Per-bucket: count materials that PASS the threshold filter
+    // (i.e. would actually be analyzed by the pipeline)
+    const threshold = json.parameters.threshold || 0;
+    let totalQualifying = 0, totalRaw = 0;
+    const bucketRows = buckets.map(b => {
+      const raw = (b.materials instanceof Set) ? b.materials.size : (Array.isArray(b.materials) ? b.materials.length : 0);
+      // Compute net consumption per material in this bucket → count above threshold
+      const netByMat = AppPipeline.netConsumptionByMaterial(b.transactions, new Map());
+      let qualifying = 0;
+      for (const [, agg] of netByMat) {
+        if (agg.net >= threshold) qualifying++;
+      }
+      totalRaw         += raw;
+      totalQualifying  += qualifying;
+      const rowCls = b.kind === 'multi' ? 'multi' : '';
+      return `
+        <tr class="${rowCls}">
+          <td class="bname">${escapeHtml(b.name)}</td>
+          <td class="bkind">${escapeHtml(b.kind)}</td>
+          <td class="num">${raw.toLocaleString()}</td>
+          <td class="num">${qualifying.toLocaleString()}</td>
+          <td class="num">${b.transactions.length.toLocaleString()}</td>
+        </tr>`;
+    }).join('');
+
+    // Mismatch advisories
+    const mismatch = computeMismatch(json);
+    const mismatchHtml = mismatch.length ? `
+      <div class="scope-mismatch">
+        <b>⚠ Cross-file consistency notes:</b>
+        ${mismatch.map(m => `<div>· ${m}</div>`).join('')}
+      </div>` : '';
+
+    const scopeDescr = describeScope(json);
+
+    host.innerHTML = `
+      <div class="scope-summary-head">
+        <div class="key">
+          <span class="lab">Materials to be analyzed</span>
+          <span class="v big">${totalQualifying.toLocaleString()}</span>
+        </div>
+        <div class="key">
+          <span class="lab">Buckets</span>
+          <span class="v">${buckets.length}</span>
+        </div>
+        <div class="key">
+          <span class="lab">Pre-threshold materials</span>
+          <span class="v">${totalRaw.toLocaleString()}</span>
+        </div>
+        <div class="sub">
+          Scope: <b style="color:var(--text-pri)">${escapeHtml(scopeDescr)}</b><br>
+          Threshold: <b style="color:var(--text-pri)">net consumption ≥ ${threshold}</b> over the analysis window.<br>
+          Materials below threshold are excluded automatically.
+        </div>
+      </div>
+      ${mismatchHtml}
+      <table class="scope-summary-table">
+        <thead>
+          <tr>
+            <th>Bucket</th>
+            <th>Kind</th>
+            <th class="num">Materials (raw)</th>
+            <th class="num">≥ threshold</th>
+            <th class="num">Transactions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bucketRows || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);padding:14px;">no buckets — check scope selections</td></tr>'}
+          ${buckets.length > 1 ? `
+            <tr class="totals">
+              <td class="bname">TOTAL</td>
+              <td class="bkind">—</td>
+              <td class="num">${totalRaw.toLocaleString()}</td>
+              <td class="num">${totalQualifying.toLocaleString()}</td>
+              <td class="num">—</td>
+            </tr>` : ''}
+        </tbody>
+      </table>
+    `;
+
+    if (totalQualifying === 0) {
+      status.textContent = '0 materials qualify · review scope or threshold';
+      status.className = 'step-status warn';
+    } else {
+      status.textContent = `${totalQualifying.toLocaleString()} material${totalQualifying === 1 ? '' : 's'} ready for analysis`;
+      status.className = 'step-status done';
+    }
+  }
+
+  /* ─── Describe the current scope in plain English ───────────────────────── */
+  function describeScope(json){
+    const m = json.scope.mode;
+    if (m === 'fleet')              return `Fleet · ${(json.scope.fleet?.models || []).join(' / ') || '—'}`;
+    if (m === 'manual') {
+      const n = (json.scope.manual?.materials || []).length;
+      return `Manual list · ${n} material${n === 1 ? '' : 's'}`;
+    }
+    if (m === 'byClassification') {
+      const f = json.scope.byClassification || {};
+      const bits = [];
+      if (f.inventoryTypes?.length) bits.push(`type: ${f.inventoryTypes.join('/')}`);
+      if (f.mrpClassifiers?.length) bits.push(`MRP: ${f.mrpClassifiers.join('/')}`);
+      if (f.movementAmount?.min != null || f.movementAmount?.max != null)
+        bits.push(`mvmt: ${f.movementAmount.min ?? '—'} … ${f.movementAmount.max ?? '—'}`);
+      return `By classification · ${bits.join(' · ') || 'no filters'}`;
+    }
+    if (m === 'byVendor') {
+      const n = (json.scope.byVendor?.vendors || []).length;
+      return `By vendor · ${n} vendor${n === 1 ? '' : 's'}`;
+    }
+    if (m === 'parameterSearch') {
+      const f = (json.scope.parameterSearch?.filters || []).length;
+      return `Parameter search · ${f} filter${f === 1 ? '' : 's'}`;
+    }
+    return m;
+  }
+
+  /* ─── Cross-file mismatch advisories ────────────────────────────────────── */
+  function computeMismatch(json){
+    const out  = [];
+    const mb51 = json.data.mb51 || [];
+    const iw39 = json.data.iw39 || [];
+    const fleet = json.data.fleetMaster || [];
+    const master = json.data.inventoryMaster || [];
+
+    const mb51Mats   = new Set(mb51.map(r => String(r.material || '').trim()).filter(Boolean));
+    const masterMats = new Set(master.map(r => String(r.material || '').trim()).filter(Boolean));
+
+    if (mb51Mats.size && masterMats.size) {
+      const missing = [...mb51Mats].filter(m => !masterMats.has(m));
+      if (missing.length) {
+        const pct = (missing.length / mb51Mats.size * 100).toFixed(1);
+        out.push(`<b>${missing.length.toLocaleString()}</b> of ${mb51Mats.size.toLocaleString()} MB51 materials (${pct}%) are NOT in Inventory Master — they'll be excluded from MRP-driven assessments.`);
+      }
+    }
+
+    if (mb51.length && iw39.length && json.metadata.assessmentType === 'unitFloc') {
+      const mb51Orders = new Set(mb51.map(r => String(r.order || '').trim()).filter(Boolean));
+      const iw39Orders = new Set(iw39.map(r => String(r.order || '').trim()).filter(Boolean));
+      const missing = [...mb51Orders].filter(o => !iw39Orders.has(o));
+      if (missing.length && mb51Orders.size > 0) {
+        const pct = (missing.length / mb51Orders.size * 100).toFixed(1);
+        if (parseFloat(pct) > 5) {
+          out.push(`<b>${missing.length.toLocaleString()}</b> of ${mb51Orders.size.toLocaleString()} MB51 orders (${pct}%) are NOT in IW39 — those transactions can't be attributed to a fleet unit.`);
+        }
+      }
+    }
+
+    if (iw39.length && fleet.length && json.metadata.assessmentType === 'unitFloc') {
+      const iw39Sf  = new Set(iw39.map(r => String(r.sortField || '').trim()).filter(Boolean));
+      const fleetSf = new Set(fleet.map(r => String(r.sortField || '').trim()).filter(Boolean));
+      const missing = [...iw39Sf].filter(s => !fleetSf.has(s));
+      if (missing.length && iw39Sf.size > 0) {
+        const pct = (missing.length / iw39Sf.size * 100).toFixed(1);
+        if (parseFloat(pct) > 5) {
+          out.push(`<b>${missing.length.toLocaleString()}</b> of ${iw39Sf.size.toLocaleString()} IW39 sort-field units (${pct}%) are NOT in Fleet Master — those WOs won't roll up to a fleet model bucket.`);
+        }
+      }
+    }
+
+    return out;
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     STEP 7 — Review & Export
   ═════════════════════════════════════════════════════════════════════════ */
 
   function buildJson(){
@@ -1138,6 +1503,9 @@
 
     const sizeBytes = new Blob([JSON.stringify(json)]).size;
     $('#jsonSize').textContent = humanBytes(sizeBytes);
+
+    // Scope summary updates with the JSON preview — same upstream triggers
+    renderScopeSummary();
   }
 
   function setupReviewActions(){
@@ -1201,6 +1569,12 @@
               drop.querySelector('.file').textContent = `${json.data[s].length.toLocaleString()} rows · loaded from JSON`;
             }
           }
+        }
+        // Render all drop-stats so cross-file recon chips populate
+        renderAllDropStats();
+        // Re-apply assessment type if it was set on the JSON
+        if (json.metadata && json.metadata.assessmentType) {
+          applyAssessmentType(json.metadata.assessmentType);
         }
         $('#assessmentName').value = state.name;
         $('#createdBy').value = json.metadata.createdBy || '';

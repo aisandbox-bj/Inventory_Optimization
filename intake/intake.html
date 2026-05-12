@@ -307,10 +307,29 @@
       </div>
     </section>
 
-    <!-- ─── STEP 6 — REVIEW & EXPORT ─── -->
-    <section class="step" id="step6">
+    <!-- ─── STEP 6 — FINAL SCOPE SUMMARY ─── -->
+    <section class="step" id="stepScopeSummary">
       <div class="step-head">
         <div class="step-num">06</div>
+        <div class="step-title">Final scope · what will be analyzed</div>
+        <div class="step-status" id="scopeSummaryStatus">awaiting data</div>
+      </div>
+      <div class="step-body">
+        <div class="panel-sub" style="margin-bottom:14px;">
+          The numbers below show exactly what the analysis engine will see — bucketed by your scope choice,
+          with the parameter threshold applied. If the totals don't match what you expect, go back to Step 4 (scope)
+          or Step 1 (uploads) and reconcile <em>before</em> running the analysis.
+        </div>
+        <div id="scopeSummaryBody" class="scope-summary-wrap">
+          <div class="scope-summary-empty">awaiting required uploads</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── STEP 7 — REVIEW & EXPORT ─── -->
+    <section class="step" id="step6">
+      <div class="step-head">
+        <div class="step-num">07</div>
         <div class="step-title">Review &amp; export</div>
         <div class="step-status mono" id="jsonSize">— B</div>
       </div>
@@ -357,6 +376,7 @@
 <script src="../shared/storage.js"></script>
 <script src="../shared/parsers.js"></script>
 <script src="../shared/config.js"></script>
+<script src="../shared/pipeline.js"></script>
 <script src="intake.js"></script>
 
 </body>

@@ -265,6 +265,21 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Intake — Per-drop key-parameter stats + cross-file mismatch chips</h4>
+      <ul>
+        <li>Every upload card now shows source-specific stat tiles immediately after the file parses — MB51 transactions / materials / orders; IW39 work orders / units; Fleet units / models; Inventory Master materials / MRP types / inv types; etc.</li>
+        <li>Cross-file reconciliation chips appear once a second relevant file is loaded — e.g. MB51 card shows "47 / 50 in Inv Master (94%)" once Inventory Master arrives. Below 90% turns amber, below 50% red.</li>
+        <li>Spot file-vs-file mismatches inside the upload zone itself instead of having to walk through every downstream tab.</li>
+      </ul>
+
+      <h4>Intake — Final scope summary (Step 6)</h4>
+      <ul>
+        <li>New gate between Parameters (Step 5) and Review &amp; Export (Step 7): runs the pipeline's bucketer against the live JSON and reports total materials to be analyzed, broken down per bucket.</li>
+        <li>Columns: bucket name, kind, raw material count, materials ≥ threshold, transactions. Includes a TOTAL row when more than one bucket exists.</li>
+        <li>Cross-file mismatch advisory block surfaces material/order/sortField coverage gaps that would silently distort the analysis if ignored.</li>
+        <li>Step header status flips to "N materials ready for analysis" when the scope resolves; "0 materials qualify — review scope or threshold" otherwise.</li>
+      </ul>
+
       <h4>Intake — Assessment Type selector</h4>
       <ul>
         <li>New Step 0 on the Intake page: pick one of <strong>UNIT / FLOC based</strong>, <strong>User specified List</strong>, or <strong>Parameter search</strong>.</li>
