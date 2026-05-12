@@ -265,6 +265,39 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Analysis — full-width material table + Excel-style sortable / filterable headers</h4>
+      <ul>
+        <li>Material list now spans the full screen width; detail panel sits below instead of beside, so all eight columns are visible without horizontal scrolling.</li>
+        <li>Every column header has a sort label (toggles asc/desc) AND a filter caret ▾ that opens a popover. Three popover styles match column type:
+            <ul>
+              <li><b>Set picker</b> (TL, Material, MRP, Pattern) — checkbox list of every distinct value, with Select all / Clear / Apply.</li>
+              <li><b>Range picker</b> (Total, P1/mo, P2/mo, Rec Min, Rec Max) — numeric min / max inputs.</li>
+              <li><b>Text picker</b> (Description) — contains-substring search.</li>
+            </ul>
+        </li>
+        <li>Filters AND together; active filter caret highlights in the brand accent so it's obvious which columns are filtered. Bucket switch clears filters automatically.</li>
+        <li>Footer line below the table reads "X of Y materials shown".</li>
+      </ul>
+
+      <h4>Excel deliverable — reference-matched per-bucket workbook</h4>
+      <ul>
+        <li>Per-bucket workbook now mirrors the reference <code>775G_Analysis.xlsx</code> deliverable exactly:
+          <ul>
+            <li><b>Index sheet</b> — title row merged across A1:Q1, 17-column header on row 2 (Material No., Description, Total Consumed, P1/P2 Rate, Rate Change %, Stock, MRP Type, Current/Recommended Min/Max, Traffic Light, Action Required, HCE Flag (P2), Adj P2 Rate, Multi-Model Flag), frozen at row 2, <b>AutoFilter on the header row</b> (Excel-native filter dropdowns).</li>
+            <li><b>Hyperlinks</b> — Material No. cell on Index → that material's sheet; "← Index" back-link on every per-material sheet.</li>
+            <li><b>Per-material sheet</b> — sheet name = material number. Field / Value / Notes table with 21 rows (Material No., Description, Material Group, Manufacturer, Multi-Model Flag, Total Consumed, P1 Net Qty + Rate, P2 Net Qty + Rate, Adj P2 Rate, Rate Change, Current Stock, Runway @ P2, MRP Type, Current / Rec Min + Max, Traffic Light, Action Required). Followed by a "High Consumption Events — P2" table starting at row 27, then "MRP Settings Comparison" at row 31.</li>
+            <li><b>Chart image</b> embedded at the F2 anchor (~1100 × 470 px), matching reference width.</li>
+            <li><b>Traffic-light cells</b> colour-filled green / blue / orange / red / grey with bold white text; HCE-related cells amber-tinted; rows striped; thin borders throughout.</li>
+          </ul>
+        </li>
+        <li>Combined workbook ("Export ALL") keeps the master-index + cross-bucket summary shape; per-bucket workbook now matches the deliverable expectation.</li>
+      </ul>
+
+      <h4>Pipeline — derived fields for the reference Excel</h4>
+      <ul>
+        <li>Each per-material result now carries <code>materialGroup</code>, <code>manufacturer</code>, <code>totValueOh</code> (from Inventory Master), <code>p1Net</code> / <code>p2Net</code> (raw period totals), <code>runway</code> (months of cover at P2 rate), <code>recMrpType</code> (V1 for LUMPY / HCE patterns, otherwise mirrors current), <code>multiModelFlag</code>, <code>bucketKey</code> / <code>bucketName</code>.</li>
+      </ul>
+
       <h4>Intake — Per-drop key-parameter stats + cross-file mismatch chips</h4>
       <ul>
         <li>Every upload card now shows source-specific stat tiles immediately after the file parses — MB51 transactions / materials / orders; IW39 work orders / units; Fleet units / models; Inventory Master materials / MRP types / inv types; etc.</li>

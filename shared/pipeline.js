@@ -557,10 +557,13 @@
             : null;
 
         const masterRow = masterIdx.get(q.material);
-        const mrpType = masterRow ? (masterRow.mrpInd || '') : 'NOT IN MASTER';
-        const stock   = masterRow ? masterRow.totQtyOh : null;
-        const cmin    = masterRow ? masterRow.mrpMin   : null;
-        const cmax    = masterRow ? masterRow.mrpMax   : null;
+        const mrpType       = masterRow ? (masterRow.mrpInd || '') : 'NOT IN MASTER';
+        const stock         = masterRow ? masterRow.totQtyOh : null;
+        const cmin          = masterRow ? masterRow.mrpMin   : null;
+        const cmax          = masterRow ? masterRow.mrpMax   : null;
+        const materialGroup = masterRow ? (masterRow.materialGroup || '') : '';
+        const manufacturer  = masterRow ? (masterRow.manufacturer  || '') : '';
+        const totValueOh    = masterRow ? masterRow.totValueOh : null;
 
         const rmin = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * minMonths) : null;
         const rmax = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
@@ -571,12 +574,36 @@
         summary[tl.code]++;
         summary.total++;
 
+        // Derived: runway @ P2 rate (in months of cover), null if no rate / no stock
+        const runway = (p2f === 'OK' && p2r > 0 && typeof stock === 'number' && stock > 0)
+                          ? Math.round((stock / p2r) * 10) / 10
+                          : null;
+
+        // Recommended MRP type: V1 (consumption-driven) for LUMPY / HCE patterns where
+        // a fixed Min/Max is a poor fit; otherwise mirror the current setting.
+        const recMrpType = (pattern === 'LUMPY' || (hceP2 && hceP2.length))
+                              ? 'V1'
+                              : (mrpType || 'PD');
+
         materials.push({
           material:     q.material,
           description:  q.description,
+          materialGroup,
+          manufacturer,
+          totValueOh,
           totalNet:     Math.round(q.totalNet * 10) / 10,
+          p1Net:        Math.round((tx.filter(r => inRange(r.postingDate, p1Start, p1End) && VALID_TYPES.has(String(r.movementType || '').trim())).reduce((s, r) => {
+                          const mt = String(r.movementType || '').trim();
+                          const qv = Math.abs(parseFloat(r.quantity) || 0);
+                          return s + (ISSUE_TYPES.has(mt) ? qv : -qv);
+                        }, 0)) * 10) / 10,
           p1Rate:       Math.round(p1r * 100) / 100,
           p1Flag:       p1f,
+          p2Net:        Math.round((tx.filter(r => inRange(r.postingDate, p2Start, p2End) && VALID_TYPES.has(String(r.movementType || '').trim())).reduce((s, r) => {
+                          const mt = String(r.movementType || '').trim();
+                          const qv = Math.abs(parseFloat(r.quantity) || 0);
+                          return s + (ISSUE_TYPES.has(mt) ? qv : -qv);
+                        }, 0)) * 10) / 10,
           p2Rate:       Math.round(p2r * 100) / 100,
           p2Flag:       p2f,
           rateChange,
@@ -587,8 +614,14 @@
           stock, mrpType, cmin, cmax,
           recMin:       tl.recMin,
           recMax:       tl.recMax,
+          recMrpType,
+          runway,                                  // months of cover at P2 rate
           trafficLight: tl.code,
           action:       tl.action,
+          // Multi-model is filled in post-bucketing (see below). Defaults to 'Single'.
+          multiModelFlag: bucket.kind === 'multi' ? 'Multi' : 'Single',
+          bucketKey:    bucket.key,
+          bucketName:   bucket.name,
           cumulative:   cum,
           p2Start, p2End, p1Start, p1End
         });

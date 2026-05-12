@@ -19,7 +19,8 @@
     sortDir:         'desc',
     searchText:      '',
     llmInflight:     false,
-    llmByMaterial:   {}          // material → { verdict, notes, suggestedEdits, raw }
+    llmByMaterial:   {},         // material → { verdict, notes, suggestedEdits, raw }
+    colFilters:      {}          // colKey → { type:'set'|'range', values:Set, min, max }
   };
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -165,6 +166,8 @@
     state.selectedMaterial = null;
     state.filterTl = 'ALL';
     state.searchText = '';
+    state.colFilters = {};
+    closeColFilterPopover();
     $$('#bucketTabs .bucket-tab').forEach(t => t.classList.toggle('active', t.dataset.bucket === key));
     renderList();
     renderDetail();
@@ -187,6 +190,50 @@
     });
   }
 
+  const LIST_COLS = [
+    { k:'trafficLight', l:'TL',          type:'set',  picker:'set'   },
+    { k:'material',     l:'Material',    type:'text', picker:'set'   },
+    { k:'description',  l:'Description', type:'text', picker:'text'  },
+    { k:'totalNet',     l:'Total',       type:'num',  picker:'range' },
+    { k:'p1Rate',       l:'P1/mo',       type:'num',  picker:'range' },
+    { k:'p2Rate',       l:'P2/mo',       type:'num',  picker:'range' },
+    { k:'recMin',       l:'Rec Min',     type:'num',  picker:'range' },
+    { k:'recMax',       l:'Rec Max',     type:'num',  picker:'range' },
+    { k:'mrpType',      l:'MRP',         type:'text', picker:'set'   },
+    { k:'pattern',      l:'Pattern',     type:'text', picker:'set'   }
+  ];
+
+  function passesColFilters(m){
+    for (const [k, f] of Object.entries(state.colFilters)) {
+      if (!f) continue;
+      const v = m[k];
+      if (f.type === 'set') {
+        const sv = String(v == null ? '' : v);
+        if (f.values && f.values.size && !f.values.has(sv)) return false;
+      } else if (f.type === 'range') {
+        const n = (typeof v === 'number') ? v : parseFloat(v);
+        if (isNaN(n)) {
+          if (f.min != null || f.max != null) return false;
+          continue;
+        }
+        if (f.min != null && n < f.min) return false;
+        if (f.max != null && n > f.max) return false;
+      } else if (f.type === 'text') {
+        if (f.value && !String(v || '').toLowerCase().includes(f.value.toLowerCase())) return false;
+      }
+    }
+    return true;
+  }
+
+  function colFilterActive(k){
+    const f = state.colFilters[k];
+    if (!f) return false;
+    if (f.type === 'set')   return f.values && f.values.size > 0;
+    if (f.type === 'range') return f.min != null || f.max != null;
+    if (f.type === 'text')  return f.value && f.value.length > 0;
+    return false;
+  }
+
   function renderList(){
     const bucket = currentBucket();
     if (!bucket) return;
@@ -196,6 +243,7 @@
       const q = state.searchText.toLowerCase();
       rows = rows.filter(m => (m.material || '').toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q));
     }
+    rows = rows.filter(passesColFilters);
     const k = state.sortKey, dir = state.sortDir;
     rows.sort((a, b) => {
       let av = a[k], bv = b[k];
@@ -210,39 +258,52 @@
       tbl.innerHTML = `<div class="list-empty">no materials match the current filter</div>`;
       return;
     }
-    const cols = [
-      { k:'trafficLight', l:'TL',    type:'tl'   },
-      { k:'material',     l:'Material', type:'mat' },
-      { k:'description',  l:'Description', type:'desc' },
-      { k:'totalNet',     l:'Total', type:'num'  },
-      { k:'p2Rate',       l:'P2/mo', type:'num'  },
-      { k:'recMin',       l:'Rec Min', type:'num' },
-      { k:'recMax',       l:'Rec Max', type:'num' },
-      { k:'pattern',      l:'Pattern', type:'pat' }
-    ];
-    const thead = cols.map(c => {
+
+    const thead = LIST_COLS.map(c => {
       const sorted = state.sortKey === c.k ? `sorted ${state.sortDir === 'asc' ? 'asc' : ''}` : '';
-      return `<th class="sortable ${sorted}" data-k="${c.k}">${c.l}</th>`;
+      const fActive = colFilterActive(c.k);
+      return `
+        <th class="sortable ${sorted}" data-k="${c.k}">
+          <span class="th-inner">
+            <span class="th-label" data-sort="${c.k}">${c.l}</span>
+            <button class="th-filter ${fActive ? 'active' : ''}" data-filter="${c.k}" title="Filter ${c.l}">▾</button>
+          </span>
+        </th>`;
     }).join('');
+
     const tbody = rows.map(m => `
       <tr data-material="${escapeAttr(m.material)}" class="${state.selectedMaterial === m.material ? 'selected' : ''}">
         <td><span class="tl-dot ${m.trafficLight}"></span><span class="tl-label">${m.trafficLight}</span></td>
         <td class="mat">${escapeHtml(m.material)}</td>
         <td class="desc" title="${escapeAttr(m.description)}">${escapeHtml(m.description || '')}</td>
         <td class="num">${m.totalNet?.toLocaleString?.() ?? m.totalNet ?? '—'}</td>
-        <td class="num">${m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : `<span class="amber">${m.p2Flag}</span>`}</td>
+        <td class="num">${m.p1Flag === 'OK' ? m.p1Rate.toFixed(1) : `<span class="amber">${escapeHtml(m.p1Flag || '—')}</span>`}</td>
+        <td class="num">${m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : `<span class="amber">${escapeHtml(m.p2Flag || '—')}</span>`}</td>
         <td class="num">${m.recMin ?? '—'}</td>
         <td class="num">${m.recMax ?? '—'}</td>
-        <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${m.pattern}</td>
+        <td class="num" style="color:var(--text-muted)">${escapeHtml(m.mrpType || '—')}</td>
+        <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${escapeHtml(m.pattern || '—')}</td>
       </tr>`).join('');
-    tbl.innerHTML = `<table class="list-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+    tbl.innerHTML = `<table class="list-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
+                     <div class="list-meta" style="padding:8px 14px;font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted);letter-spacing:.5px;">
+                       ${rows.length.toLocaleString()} of ${bucket.materials.length.toLocaleString()} materials shown
+                     </div>`;
 
-    $$('#listTableWrap th.sortable').forEach(th => {
-      th.addEventListener('click', () => {
-        const k = th.dataset.k;
+    // Sort: click label → toggle sort
+    $$('#listTableWrap .th-label').forEach(lab => {
+      lab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const k = lab.dataset.sort;
         if (state.sortKey === k) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
         else { state.sortKey = k; state.sortDir = 'desc'; }
         renderList();
+      });
+    });
+    // Filter dropdown: click caret → open popover
+    $$('#listTableWrap .th-filter').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openColFilterPopover(btn);
       });
     });
     $$('#listTableWrap tbody tr').forEach(tr => {
@@ -252,6 +313,137 @@
         renderDetail();
       });
     });
+  }
+
+  /* ─── Excel-style per-column filter popover ─────────────────────────────── */
+  function openColFilterPopover(btn){
+    closeColFilterPopover();
+    const colKey = btn.dataset.filter;
+    const col = LIST_COLS.find(c => c.k === colKey);
+    if (!col) return;
+    const bucket = currentBucket();
+    const existing = state.colFilters[colKey] || {};
+
+    const pop = document.createElement('div');
+    pop.className = 'col-filter-pop';
+    pop.dataset.colFilter = colKey;
+    document.body.appendChild(pop);
+
+    // Position relative to button
+    const r = btn.getBoundingClientRect();
+    pop.style.left = `${Math.min(window.innerWidth - 290, r.left + window.scrollX)}px`;
+    pop.style.top  = `${r.bottom + window.scrollY + 4}px`;
+
+    let body = '';
+    if (col.picker === 'set') {
+      const allValues = new Set();
+      bucket.materials.forEach(m => allValues.add(String(m[colKey] == null ? '' : m[colKey])));
+      const sorted = [...allValues].sort();
+      const sel = existing.values || new Set(sorted);
+      body = `
+        <div class="head">Filter · ${escapeHtml(col.l)}</div>
+        <div class="vals" data-vals>
+          ${sorted.map(v => `
+            <label>
+              <input type="checkbox" value="${escapeAttr(v)}" ${sel.has(v) ? 'checked' : ''}>
+              <span>${escapeHtml(v) || '<em style="color:var(--text-muted)">(blank)</em>'}</span>
+            </label>
+          `).join('')}
+        </div>
+        <div class="actions">
+          <button data-act="all">Select all</button>
+          <button data-act="none">Clear</button>
+          <button class="primary" data-act="apply">Apply</button>
+        </div>
+      `;
+    } else if (col.picker === 'range') {
+      body = `
+        <div class="head">Filter · ${escapeHtml(col.l)} (numeric range)</div>
+        <div class="range-row">
+          <input type="number" data-fmin placeholder="min" value="${existing.min == null ? '' : existing.min}">
+          <input type="number" data-fmax placeholder="max" value="${existing.max == null ? '' : existing.max}">
+        </div>
+        <div class="actions">
+          <button data-act="clear">Clear</button>
+          <button class="primary" data-act="apply">Apply</button>
+        </div>
+      `;
+    } else if (col.picker === 'text') {
+      body = `
+        <div class="head">Filter · ${escapeHtml(col.l)} (contains)</div>
+        <div class="range-row">
+          <input type="text" data-ftext placeholder="any text…" value="${escapeAttr(existing.value || '')}">
+        </div>
+        <div class="actions">
+          <button data-act="clear">Clear</button>
+          <button class="primary" data-act="apply">Apply</button>
+        </div>
+      `;
+    }
+    pop.innerHTML = body;
+
+    // Bind actions
+    pop.querySelectorAll('button[data-act]').forEach(b => {
+      b.addEventListener('click', () => {
+        const act = b.dataset.act;
+        if (col.picker === 'set') {
+          const boxes = pop.querySelectorAll('input[type=checkbox]');
+          if (act === 'all')  boxes.forEach(c => c.checked = true);
+          if (act === 'none') boxes.forEach(c => c.checked = false);
+          if (act === 'apply') {
+            const total = boxes.length;
+            const chosen = new Set([...boxes].filter(c => c.checked).map(c => c.value));
+            if (chosen.size === total) delete state.colFilters[colKey];
+            else state.colFilters[colKey] = { type:'set', values:chosen };
+            closeColFilterPopover(); renderList();
+          }
+        } else if (col.picker === 'range') {
+          if (act === 'clear') {
+            delete state.colFilters[colKey];
+            closeColFilterPopover(); renderList();
+          }
+          if (act === 'apply') {
+            const mn = parseFloat(pop.querySelector('[data-fmin]').value);
+            const mx = parseFloat(pop.querySelector('[data-fmax]').value);
+            const f = { type:'range', min: isNaN(mn) ? null : mn, max: isNaN(mx) ? null : mx };
+            if (f.min == null && f.max == null) delete state.colFilters[colKey];
+            else state.colFilters[colKey] = f;
+            closeColFilterPopover(); renderList();
+          }
+        } else if (col.picker === 'text') {
+          if (act === 'clear') {
+            delete state.colFilters[colKey];
+            closeColFilterPopover(); renderList();
+          }
+          if (act === 'apply') {
+            const val = pop.querySelector('[data-ftext]').value.trim();
+            if (!val) delete state.colFilters[colKey];
+            else state.colFilters[colKey] = { type:'text', value:val };
+            closeColFilterPopover(); renderList();
+          }
+        }
+      });
+    });
+
+    // Close on outside click / Esc
+    setTimeout(() => {
+      document.addEventListener('click', dismissOnOutside, { once:false });
+      document.addEventListener('keydown', dismissOnEsc, { once:false });
+    }, 0);
+  }
+  function dismissOnOutside(ev){
+    const pop = document.querySelector('.col-filter-pop');
+    if (!pop) return;
+    if (pop.contains(ev.target)) return;
+    closeColFilterPopover();
+  }
+  function dismissOnEsc(ev){
+    if (ev.key === 'Escape') closeColFilterPopover();
+  }
+  function closeColFilterPopover(){
+    document.querySelectorAll('.col-filter-pop').forEach(p => p.remove());
+    document.removeEventListener('click', dismissOnOutside);
+    document.removeEventListener('keydown', dismissOnEsc);
   }
 
   function bindToolbar(){
