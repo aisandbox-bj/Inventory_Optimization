@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.1.0 · released 2026-05-12
+     Inventory Optimization App · v2.1.1 · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
-     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.0
+     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.1
      This file is the canonical changelog — the version above is the build
      that ships THIS file, not necessarily the version you ran an analysis
      under (that's recorded in metadata.appVersion of each saved JSON).
@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="2.1.0" />
+<meta name="app-version" content="2.1.1" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
@@ -257,6 +257,35 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- ───────── v2.1.1 ───────── -->
+    <article class="roc-entry release">
+      <div class="head">
+        <span class="ver">v2.1.1</span>
+        <span class="date">2026-05-12</span>
+        <span class="tag released">released</span>
+      </div>
+
+      <h4>FIX + ENH · Mass LLM modal — click-through fix, retain results on close, Excel-style column filters</h4>
+      <ul>
+        <li><b>Click-through bug fixed.</b> Clicking a checkbox in the Mass LLM selection table no longer propagates to the underlying analysis page. <code>showMassModal()</code> now locks <code>body</code> scroll and marks every direct body child EXCEPT the modal with the <code>inert</code> attribute, blocking all pointer + keyboard interaction with the background. Focus moves into the dialog's close button on open. Reversed cleanly on close.</li>
+        <li><b>No more forced wipe.</b> Closing the Mass LLM results view no longer prompts to wipe in-memory LLM data. The mass-review session and all per-material verdicts stay available for the rest of the browser-tab session — drill into reviewed materials on the main analysis page anytime, re-open the results modal via the floating chip. Data is still session-only (nothing written to localStorage, per data-security principle 3); tab close / page reload still wipes everything.</li>
+        <li><b>"⌫ Clear LLM data" button</b> (Results view footer, replaces "Close &amp; wipe") — explicit, operator-driven wipe with a single confirm. Closes the modal after wiping.</li>
+        <li><b>Floating chip stays visible</b> after a completed run when the modal is closed. Copy is context-aware: "Mass review: N / M" while running; "Mass review · N reviewed" when done. Click → re-opens the Results view directly (existing <code>state.mass.view = 'results'</code> behaviour, just no longer wiped).</li>
+        <li><b>Excel-style column filters on Mass LLM selection table.</b> Set pickers for TL / Pattern, range pickers for Total / P2/mo, substring search for Material / Description. Sortable column headers. "Select all visible" respects the active filter (only adds filtered rows to selection). Modal-local filter state (<code>state._massSelectFilters</code>) — does NOT affect the main analysis list filters.</li>
+        <li><b>Excel-style column filters on Mass LLM results table.</b> Same column-header sort + filter pattern, applied to both the Run view (during a batch) and the Results view (post-batch). Filterable by status / Pre-LLM TL / verdict / material / description / notes / latency. A "N of M visible" badge appears when filters are active.</li>
+        <li><b>Refactored <code>openColFilterPopover</code></b> to take an <code>opts</code> object (<code>colDefs</code> / <code>colFilters</code> / <code>data</code> / <code>onChange</code>) so one filter implementation now serves three tables — main analysis list, Mass LLM selection, Mass LLM results. <code>passesColFilters</code> and <code>colFilterActive</code> similarly parameterised with an optional filters reference. Same machinery will power the PDF Pack modal in v2.1.2.</li>
+        <li><b>Filter popover z-index bumped to 2000</b> so column-filter popovers triggered inside the Mass LLM modal (modal z-index 1000) sit on top of the dialog.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/canonical-schema.js</code> (APP_VERSION → 2.1.1) · <code>analysis/analysis.js</code> (showMassModal/hideMassModal isolation, softCloseMassReview no-wipe, openColFilterPopover refactor, MASS_SELECT_COLS + MASS_RESULTS_COLS + filter/sort/badge wiring, renderMassRows signature change, updateMassChip copy) · <code>analysis/analysis.css</code> (.col-filter-pop z-index 2000, .mass-filter-badge) · <code>user-manual.html</code> §11c (modal close retention + filter affordances) · <code>record-of-change.html</code> (this entry).
+      </div>
+
+      <div class="commit">
+        <b>Rollback:</b> <code>git checkout v2.1.0</code> in <code>/tmp/peek</code> and copy the files back. No schema change — older intakes are unaffected.
+      </div>
+    </article>
 
     <!-- ───────── v2.1.0 ───────── -->
     <article class="roc-entry release">

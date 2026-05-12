@@ -20,11 +20,16 @@
     searchText:      '',
     llmInflight:     false,
     llmByMaterial:   {},         // material → { verdict, notes, suggestedEdits, raw }
-    colFilters:      {},         // colKey → { type:'set'|'range', values:Set, min, max }
+    colFilters:      {},         // colKey → { type:'set'|'range', values:Set, min, max } — main analysis list
     marked:          {           // user-marked materials (right-click context menu, v2.0)
       review: new Set(),         // → pre-checked in Mass LLM modal
       pdf:    new Set()          // → pre-checked in PDF Pack modal
-    }
+    },
+    // v2.1.1 — Mass LLM modal-local filter state (independent of main list).
+    _massSelectFilters:  {},     // colKey → filter spec, applies to Mass LLM selection table
+    _massResultsFilters: {},     // colKey → filter spec, applies to Mass LLM results table
+    _massSelectSort:     { key:null, dir:'desc' },
+    _massResultsSort:    { key:null, dir:'desc' }
   };
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -221,8 +226,13 @@
     { k:'pattern',      l:'Pattern',     type:'text', picker:'set'   }
   ];
 
-  function passesColFilters(m){
-    for (const [k, f] of Object.entries(state.colFilters)) {
+  /* v2.1.1: passesColFilters and colFilterActive now accept an optional
+     colFilters reference so the same predicates serve mass-select and
+     mass-results filter state. Defaults to state.colFilters for the
+     existing main-list call sites. */
+  function passesColFilters(m, filters){
+    const cf = filters || state.colFilters;
+    for (const [k, f] of Object.entries(cf)) {
       if (!f) continue;
       const v = m[k];
       if (f.type === 'set') {
@@ -243,8 +253,8 @@
     return true;
   }
 
-  function colFilterActive(k){
-    const f = state.colFilters[k];
+  function colFilterActive(k, filters){
+    const f = (filters || state.colFilters)[k];
     if (!f) return false;
     if (f.type === 'set')   return f.values && f.values.size > 0;
     if (f.type === 'range') return f.min != null || f.max != null;
@@ -418,14 +428,23 @@
       : `⤓ Export PDF Pack`;
   }
 
-  /* ─── Excel-style per-column filter popover ─────────────────────────────── */
-  function openColFilterPopover(btn){
+  /* ─── Excel-style per-column filter popover ───────────────────────────────
+     v2.1.1: refactored to accept an opts object so the same popover serves
+     three tables (main list, mass-select, mass-results). Old call sites
+     pass { colDefs: LIST_COLS, colFilters: state.colFilters,
+            data: currentBucket().materials, onChange: renderList }. */
+  function openColFilterPopover(btn, opts){
+    opts = opts || {};
+    const colDefs    = opts.colDefs    || LIST_COLS;
+    const colFilters = opts.colFilters || state.colFilters;
+    const data       = opts.data       || (currentBucket() ? currentBucket().materials : []);
+    const onChange   = opts.onChange   || renderList;
+
     closeColFilterPopover();
     const colKey = btn.dataset.filter;
-    const col = LIST_COLS.find(c => c.k === colKey);
+    const col = colDefs.find(c => c.k === colKey);
     if (!col) return;
-    const bucket = currentBucket();
-    const existing = state.colFilters[colKey] || {};
+    const existing = colFilters[colKey] || {};
 
     const pop = document.createElement('div');
     pop.className = 'col-filter-pop';
@@ -440,7 +459,7 @@
     let body = '';
     if (col.picker === 'set') {
       const allValues = new Set();
-      bucket.materials.forEach(m => allValues.add(String(m[colKey] == null ? '' : m[colKey])));
+      data.forEach(m => allValues.add(String(m[colKey] == null ? '' : m[colKey])));
       const sorted = [...allValues].sort();
       const sel = existing.values || new Set(sorted);
       body = `
@@ -496,33 +515,33 @@
           if (act === 'apply') {
             const total = boxes.length;
             const chosen = new Set([...boxes].filter(c => c.checked).map(c => c.value));
-            if (chosen.size === total) delete state.colFilters[colKey];
-            else state.colFilters[colKey] = { type:'set', values:chosen };
-            closeColFilterPopover(); renderList();
+            if (chosen.size === total) delete colFilters[colKey];
+            else colFilters[colKey] = { type:'set', values:chosen };
+            closeColFilterPopover(); onChange();
           }
         } else if (col.picker === 'range') {
           if (act === 'clear') {
-            delete state.colFilters[colKey];
-            closeColFilterPopover(); renderList();
+            delete colFilters[colKey];
+            closeColFilterPopover(); onChange();
           }
           if (act === 'apply') {
             const mn = parseFloat(pop.querySelector('[data-fmin]').value);
             const mx = parseFloat(pop.querySelector('[data-fmax]').value);
             const f = { type:'range', min: isNaN(mn) ? null : mn, max: isNaN(mx) ? null : mx };
-            if (f.min == null && f.max == null) delete state.colFilters[colKey];
-            else state.colFilters[colKey] = f;
-            closeColFilterPopover(); renderList();
+            if (f.min == null && f.max == null) delete colFilters[colKey];
+            else colFilters[colKey] = f;
+            closeColFilterPopover(); onChange();
           }
         } else if (col.picker === 'text') {
           if (act === 'clear') {
-            delete state.colFilters[colKey];
-            closeColFilterPopover(); renderList();
+            delete colFilters[colKey];
+            closeColFilterPopover(); onChange();
           }
           if (act === 'apply') {
             const val = pop.querySelector('[data-ftext]').value.trim();
-            if (!val) delete state.colFilters[colKey];
-            else state.colFilters[colKey] = { type:'text', value:val };
-            closeColFilterPopover(); renderList();
+            if (!val) delete colFilters[colKey];
+            else colFilters[colKey] = { type:'text', value:val };
+            closeColFilterPopover(); onChange();
           }
         }
       });
@@ -1474,6 +1493,20 @@
     $('#massBucketName').textContent = currentBucket() ? currentBucket().name : '—';
     hideMassChip();
     renderMassView();
+    // v2.1.1: isolate the modal from background interactions.
+    // Locks body scroll + marks every direct body child EXCEPT the modal as
+    // `inert` so pointer/keyboard events on the background page are ignored
+    // entirely. Reversed in hideMassModal.
+    document.body.style.overflow = 'hidden';
+    Array.from(document.body.children).forEach(el => {
+      if (el === modal || el.id === 'massChip' || el.classList.contains('toast')) return;
+      try { el.inert = true; } catch (_) { el.setAttribute('inert', ''); }
+    });
+    // Move focus into the dialog so Tab order starts there.
+    setTimeout(() => {
+      const closeBtn = modal.querySelector('#massClose');
+      if (closeBtn) closeBtn.focus();
+    }, 0);
     // Esc to dismiss (treats as soft close)
     document.addEventListener('keydown', massEscHandler);
   }
@@ -1481,12 +1514,23 @@
     const modal = $('#massModal');
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
+    // v2.1.1: restore background interactions
+    document.body.style.overflow = '';
+    Array.from(document.body.children).forEach(el => {
+      if (el === modal) return;
+      try { el.inert = false; } catch (_) { el.removeAttribute('inert'); }
+    });
     document.removeEventListener('keydown', massEscHandler);
   }
   function massEscHandler(e){ if (e.key === 'Escape') softCloseMassReview(); }
 
-  /* Soft close — close window, keep state in background if a run is live.
-     Hard close (wipe) is triggered from explicit buttons in the Results view. */
+  /* Soft close — close window. State (mass session + cached LLM verdicts) is
+     retained in memory and survives across modal opens/closes for the rest of
+     the browser-tab session. v2.1.1 changed this behaviour: previously, closing
+     the Results view forced a wipe with a confirm dialog. Operators wanted
+     the verdicts to stick around for drill-down and (in later phases) PDF
+     inclusion. Explicit wipe is now driven from the "⌫ Clear LLM data" button
+     in the Results view footer. */
   function softCloseMassReview(){
     if (!state.mass) { hideMassModal(); return; }
     const s = state.mass.session;
@@ -1495,19 +1539,10 @@
       showMassChip();
       return;
     }
-    if (state.mass.view === 'results' && state.mass.session) {
-      const ok = confirm(
-        'Closing this view will WIPE all in-memory LLM data — both this mass-review session AND any single-review notes from this session. ' +
-        'If you haven\'t already downloaded the Excel + JSON, do that first.\n\n' +
-        'Continue closing?'
-      );
-      if (!ok) return;
-      wipeAllLlm();
-      hideMassModal();
-      return;
-    }
-    // No session running or completed (Select view, never started) — just close
+    // v2.1.1: results-view close is no longer destructive. Keep the chip
+    // visible as a "results available — click to reopen" indicator.
     hideMassModal();
+    if (state.mass && state.mass.session) showMassChip();
   }
 
   function wipeAllLlm(){
@@ -1537,7 +1572,16 @@
     const chip = $('#massChip'); if (!chip || !state.mass || !state.mass.session) return;
     const s = state.mass.session;
     const done = s.results.filter(r => r.status === 'done' || r.status === 'error').length;
-    chip.querySelector('.mass-chip-text').textContent = `Mass review: ${done} / ${s.total}`;
+    const txt = chip.querySelector('.mass-chip-text');
+    const reopen = chip.querySelector('.mass-chip-open');
+    if (s.status === 'running' || s.status === 'paused') {
+      txt.textContent = `Mass review: ${done} / ${s.total}`;
+      if (reopen) reopen.textContent = 'Reopen';
+    } else {
+      // v2.1.1: completed/cancelled session — chip stays as a "results available" affordance
+      txt.textContent = `Mass review · ${done} reviewed`;
+      if (reopen) reopen.textContent = 'Reopen results';
+    }
   }
 
   /* ─── View dispatcher ─── */
@@ -1560,6 +1604,16 @@
   }
 
   /* ─── Select view ─── */
+  // v2.1.1: Mass LLM selection table column definitions (Excel-style filterable).
+  const MASS_SELECT_COLS = [
+    { k:'trafficLight', l:'TL',          picker:'set'   },
+    { k:'material',     l:'Material',    picker:'text'  },
+    { k:'description',  l:'Description', picker:'text'  },
+    { k:'totalNet',     l:'Total',       picker:'range' },
+    { k:'p2Rate',       l:'P2/mo',       picker:'range' },
+    { k:'pattern',      l:'Pattern',     picker:'set'   }
+  ];
+
   function renderMassSelect(){
     const bucket = currentBucket();
     const body = $('#massBody');
@@ -1569,18 +1623,43 @@
     const sel = state.mass.selected;
     const max = AppMassLlm.MAX_SELECTION;
     const overCap = sel.size > max;
+    const filters = state._massSelectFilters;
+    const sort    = state._massSelectSort;
 
-    const cols = [
-      { k:'__chk',         l:'',            type:'chk'  },
-      { k:'trafficLight',  l:'TL',          type:'set'  },
-      { k:'material',      l:'Material',    type:'mat'  },
-      { k:'description',   l:'Description', type:'desc' },
-      { k:'totalNet',      l:'Total',       type:'num'  },
-      { k:'p2Rate',        l:'P2/mo',       type:'num'  },
-      { k:'pattern',       l:'Pattern',     type:'pat'  }
-    ];
-    const thead = cols.map(c => `<th>${c.l}</th>`).join('');
-    const tbody = bucket.materials.map(m => {
+    // Filter + sort the bucket's materials
+    let rows = bucket.materials.filter(m => passesColFilters(m, filters));
+    if (sort.key) {
+      rows.sort((a, b) => {
+        const va = a[sort.key], vb = b[sort.key];
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        if (typeof va === 'number' && typeof vb === 'number') {
+          return sort.dir === 'asc' ? va - vb : vb - va;
+        }
+        return sort.dir === 'asc'
+          ? String(va).localeCompare(String(vb))
+          : String(vb).localeCompare(String(va));
+      });
+    }
+
+    const filteredVisible = rows.length;
+    const totalInBucket   = bucket.materials.length;
+
+    // Column headers: checkbox column (no filter) + Excel-style filter headers
+    const thead = `<th class="mass-chk-th"></th>` + MASS_SELECT_COLS.map(c => {
+      const sorted  = sort.key === c.k ? `sorted ${sort.dir === 'asc' ? 'asc' : ''}` : '';
+      const fActive = colFilterActive(c.k, filters);
+      return `
+        <th class="sortable ${sorted}" data-k="${c.k}">
+          <span class="th-inner">
+            <span class="th-label" data-sort="${c.k}">${c.l}</span>
+            <button class="th-filter ${fActive ? 'active' : ''}" data-filter="${c.k}" title="Filter ${c.l}">▾</button>
+          </span>
+        </th>`;
+    }).join('');
+
+    const tbody = rows.map(m => {
       const checked = sel.has(m.material) ? 'checked' : '';
       const disable = (!checked && sel.size >= max) ? 'disabled' : '';
       return `
@@ -1595,18 +1674,24 @@
         </tr>`;
     }).join('');
 
+    const filterBadge = (filteredVisible !== totalInBucket)
+      ? `<span class="mass-filter-badge">${filteredVisible} of ${totalInBucket} visible</span>` : '';
+
     body.innerHTML = `
       <div class="mass-select-info">
         <span>Pick materials to review — max <b>${max}</b>:</span>
         <span class="mass-select-counter ${overCap ? 'over' : ''}" id="massSelCounter">${sel.size} / ${max} selected</span>
+        ${filterBadge}
       </div>
       <div class="list-table-wrap" style="max-height:480px;">
         <table class="list-table">
-          <thead><tr>${thead}</tr></thead>
+          <thead><tr id="massSelHead">${thead}</tr></thead>
           <tbody>${tbody}</tbody>
         </table>
       </div>
     `;
+
+    // Checkbox change handlers
     body.querySelectorAll('input[type=checkbox][data-mat]').forEach(cb => {
       cb.addEventListener('click', (e) => e.stopPropagation());
       cb.addEventListener('change', () => {
@@ -1621,6 +1706,29 @@
       });
     });
 
+    // Sort by clicking column label
+    $$('#massSelHead .th-label').forEach(lab => {
+      lab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const k = lab.dataset.sort;
+        if (sort.key === k) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
+        else { sort.key = k; sort.dir = 'desc'; }
+        renderMassSelect();
+      });
+    });
+    // Filter caret click → popover scoped to mass-select state
+    $$('#massSelHead .th-filter').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openColFilterPopover(btn, {
+          colDefs:    MASS_SELECT_COLS,
+          colFilters: filters,
+          data:       bucket.materials,
+          onChange:   renderMassSelect
+        });
+      });
+    });
+
     foot.innerHTML = `
       <button id="massSelAll" class="ghost">Select all visible</button>
       <button id="massSelClear" class="ghost">Clear</button>
@@ -1629,9 +1737,8 @@
       <button id="massStart" class="primary" ${sel.size === 0 || overCap ? 'disabled' : ''}>✦ Review ${sel.size} material${sel.size === 1 ? '' : 's'}</button>
     `;
     $('#massSelAll').addEventListener('click', () => {
-      const mats = bucket.materials.map(m => m.material);
-      const room = max - sel.size;
-      mats.forEach(m => { if (!sel.has(m) && sel.size < max) sel.add(m); });
+      // v2.1.1: "Select all visible" respects the current filter
+      rows.forEach(m => { if (!sel.has(m.material) && sel.size < max) sel.add(m.material); });
       renderMassSelect();
     });
     $('#massSelClear').addEventListener('click', () => { sel.clear(); renderMassSelect(); });
@@ -1662,6 +1769,81 @@
     state.mass.session = session;
   }
 
+  // v2.1.1: Mass LLM results table column definitions (Excel-style filterable).
+  const MASS_RESULTS_COLS = [
+    { k:'status',      l:'Status',      picker:'set'   },
+    { k:'material',    l:'Material',    picker:'text'  },
+    { k:'description', l:'Description', picker:'text'  },
+    { k:'preTL',       l:'Pre-LLM',     picker:'set'   },
+    { k:'verdict',     l:'LLM verdict', picker:'set'   },
+    { k:'notes',       l:'Notes',       picker:'text'  },
+    { k:'latencyMs',   l:'Latency',     picker:'range' }
+  ];
+
+  /* v2.1.1: filter+sort the results array against modal-local filter state. */
+  function filteredMassResults(results){
+    const filters = state._massResultsFilters;
+    const sort    = state._massResultsSort;
+    let out = results.filter(r => passesColFilters(r, filters));
+    if (sort.key) {
+      out.sort((a, b) => {
+        const va = a[sort.key], vb = b[sort.key];
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        if (typeof va === 'number' && typeof vb === 'number') {
+          return sort.dir === 'asc' ? va - vb : vb - va;
+        }
+        return sort.dir === 'asc'
+          ? String(va).localeCompare(String(vb))
+          : String(vb).localeCompare(String(va));
+      });
+    }
+    return out;
+  }
+
+  /* v2.1.1: shared thead markup + handler binding for Run + Results views. */
+  function massResultsTheadHtml(){
+    const filters = state._massResultsFilters;
+    const sort    = state._massResultsSort;
+    const cols = MASS_RESULTS_COLS.map(c => {
+      const sorted  = sort.key === c.k ? `sorted ${sort.dir === 'asc' ? 'asc' : ''}` : '';
+      const fActive = colFilterActive(c.k, filters);
+      return `
+        <th class="sortable ${sorted}" data-k="${c.k}">
+          <span class="th-inner">
+            <span class="th-label" data-sort="${c.k}">${c.l}</span>
+            <button class="th-filter ${fActive ? 'active' : ''}" data-filter="${c.k}" title="Filter ${c.l}">▾</button>
+          </span>
+        </th>`;
+    }).join('');
+    return `<tr id="massResHead">${cols}</tr>`;
+  }
+
+  function bindMassResultsHeaders(s, refresh){
+    $$('#massResHead .th-label').forEach(lab => {
+      lab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const k = lab.dataset.sort;
+        const sort = state._massResultsSort;
+        if (sort.key === k) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
+        else { sort.key = k; sort.dir = 'desc'; }
+        refresh();
+      });
+    });
+    $$('#massResHead .th-filter').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openColFilterPopover(btn, {
+          colDefs:    MASS_RESULTS_COLS,
+          colFilters: state._massResultsFilters,
+          data:       s.results,
+          onChange:   refresh
+        });
+      });
+    });
+  }
+
   /* ─── Run view ─── */
   function renderMassRun(){
     const s = state.mass && state.mass.session;
@@ -1673,29 +1855,26 @@
                     ? `Now reviewing: ${current.material} · ${escapeHtml((current.description || '').slice(0, 50))}`
                     : (s.status === 'paused' ? 'Paused' : 'Done');
 
+    const visible = filteredMassResults(s.results);
+    const filterBadge = (visible.length !== s.results.length)
+      ? `<span class="mass-filter-badge">${visible.length} of ${s.results.length} visible</span>` : '';
+
     const body = $('#massBody');
     body.innerHTML = `
       <div class="mass-progress">
         <span class="label">Progress</span>
         <span class="now" id="massNow">${escapeHtml(nowText)}</span>
         <div class="mass-progress-bar"><div style="width:${pct}%"></div></div>
-        <span class="mass-progress-pct">${done} / ${s.total}</span>
+        <span class="mass-progress-pct">${done} / ${s.total} ${filterBadge}</span>
       </div>
       <div class="list-table-wrap" style="max-height:440px;">
         <table class="mass-results-table">
-          <thead><tr>
-            <th class="mass-status-cell"></th>
-            <th>Material</th>
-            <th>Description</th>
-            <th>Pre-LLM</th>
-            <th>LLM verdict</th>
-            <th>Notes</th>
-            <th>Latency</th>
-          </tr></thead>
-          <tbody>${renderMassRows(s)}</tbody>
+          <thead>${massResultsTheadHtml()}</thead>
+          <tbody>${renderMassRows(visible)}</tbody>
         </table>
       </div>
     `;
+    bindMassResultsHeaders(s, renderMassRun);
     const foot = $('#massFoot');
     foot.innerHTML = `
       <button id="massCancel" class="danger" ${s.status === 'cancelled' ? 'disabled' : ''}>Cancel batch</button>
@@ -1713,8 +1892,10 @@
     bindMassRowClicks();
   }
 
-  function renderMassRows(s){
-    return s.results.map(r => {
+  // v2.1.1: now accepts a rows array directly (filtered/sorted by caller)
+  // rather than reaching for s.results — same callers, easier composition.
+  function renderMassRows(rows){
+    return rows.map(r => {
       const verdictPill = r.verdict
                             ? `<span class="llm-pill ${r.verdict}">${r.verdict}</span>`
                             : (r.error ? '<span class="llm-pill empty">err</span>'
@@ -1750,6 +1931,9 @@
   function renderMassResults(){
     const s = state.mass && state.mass.session;
     if (!s) return;
+    const visible = filteredMassResults(s.results);
+    const filterBadge = (visible.length !== s.results.length)
+      ? `<span class="mass-filter-badge">${visible.length} of ${s.results.length} visible</span>` : '';
     const body = $('#massBody');
     body.innerHTML = `
       <div class="mass-progress">
@@ -1760,25 +1944,18 @@
           ${s.results.filter(r => r.status === 'skipped').length} skipped ·
           provider ${escapeHtml(s.provider || '—')} · model ${escapeHtml(s.model || '—')}
         </span>
-        <span class="mass-progress-pct">${s.results.filter(r => r.status !== 'pending').length} / ${s.total}</span>
+        <span class="mass-progress-pct">${s.results.filter(r => r.status !== 'pending').length} / ${s.total} ${filterBadge}</span>
       </div>
       <div class="list-table-wrap" style="max-height:540px;">
         <table class="mass-results-table">
-          <thead><tr>
-            <th class="mass-status-cell"></th>
-            <th>Material</th>
-            <th>Description</th>
-            <th>Pre-LLM</th>
-            <th>LLM verdict</th>
-            <th>Notes</th>
-            <th>Latency</th>
-          </tr></thead>
-          <tbody>${renderMassRows(s)}</tbody>
+          <thead>${massResultsTheadHtml()}</thead>
+          <tbody>${renderMassRows(visible)}</tbody>
         </table>
       </div>
       <div class="panel-sub" style="margin-top:12px;font-size:11px;color:var(--text-muted);">
         Click any row to drill into that material's chart + LLM commentary on the main analysis page.
-        Closing this modal <b>wipes all in-memory LLM data</b> — download the Excel + JSON first if you want to keep it.
+        <b>Results are retained in session</b> — closing this modal keeps them available; the floating chip
+        will let you re-open. Click <b>⌫ Clear LLM data</b> when you're done to wipe.
       </div>
     `;
     const foot = $('#massFoot');
@@ -1787,16 +1964,18 @@
       <button id="massDownloadJson" class="primary">⤓ Download JSON</button>
       <span class="spacer"></span>
       <span class="stat">Hash: <b>${escapeHtml(s.promptHash || '—')}</b></span>
-      <button id="massCloseWipe" class="danger">⌫ Close &amp; wipe</button>
+      <button id="massClearData" class="danger">⌫ Clear LLM data</button>
     `;
     $('#massDownloadXlsx').addEventListener('click', downloadMassXlsx);
     $('#massDownloadJson').addEventListener('click', downloadMassJson);
-    $('#massCloseWipe').addEventListener('click', () => {
-      if (confirm('Wipe all in-memory LLM data and close? This cannot be undone — make sure you have downloaded the Excel and / or JSON.')) {
+    $('#massClearData').addEventListener('click', () => {
+      if (confirm('Clear all in-memory LLM data — this mass-review session AND any single-review notes from this session. Make sure you have downloaded the Excel and / or JSON first. Proceed?')) {
         wipeAllLlm();
         hideMassModal();
       }
     });
+    // v2.1.1: bind sortable/filterable headers + row drill-down
+    bindMassResultsHeaders(s, renderMassResults);
     bindMassRowClicks();
   }
 

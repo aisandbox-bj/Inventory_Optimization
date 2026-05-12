@@ -787,9 +787,20 @@
         <div class="um-note crit">
           <span class="lab">In-memory only — never persisted</span>
           The mass-review session lives only in JavaScript memory. <b>Nothing is written to localStorage / IndexedDB at any point during the run</b>. Single-review LLM results from this session are also held only in memory.<br><br>
-          <b>Page reload mid-run = data loss.</b> The orchestrator picks "speed + clean security" over "resumability". You accepted this trade-off at design time.<br><br>
-          <b>Modal close = wipe.</b> Closing the Results view (or clicking ⌫ Close &amp; Wipe) erases <em>all</em> LLM data — both this mass-review session and any single-review entries from this session. Download the Excel + JSON <b>first</b> if you want to keep it.
+          <b>Page reload = data loss.</b> The orchestrator picks "speed + clean security" over "resumability". You accepted this trade-off at design time.<br><br>
+          <b>v2.1.1: modal close no longer wipes.</b> Closing the Results view now keeps all in-memory LLM data. The floating chip stays visible so you can re-open the Results view, and per-material verdicts remain available when you drill into a material on the main analysis page. Click <b>⌫ Clear LLM data</b> in the Results view footer when you're done. Tab close / page reload still wipes everything (no localStorage).
         </div>
+
+        <h4>v2.1.1: Excel-style filters on selection + results tables</h4>
+        <p>Both the Mass LLM <b>selection</b> view (where you pick materials to send) and the <b>results</b> view (live + completed) have the same column-header sort + filter affordances as the main analysis list:</p>
+        <ul>
+          <li>Set pickers (checkbox list) for traffic light / verdict / pattern / status</li>
+          <li>Numeric range pickers for totals / P2/mo / latency</li>
+          <li>Substring search for material number / description / notes</li>
+          <li>Click column label to sort; click ▾ caret to filter</li>
+          <li>"Select all visible" on the selection view respects the active filter (only adds filtered rows to selection)</li>
+        </ul>
+        <p>Modal-local filter state — applying a filter in the modal does NOT change the main analysis list's filters.</p>
 
         <h4>Re-loading a saved review later</h4>
         <p>To revisit a prior batch:</p>

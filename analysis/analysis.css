@@ -224,7 +224,9 @@
 /* Filter popover */
 .col-filter-pop{
   position:absolute;
-  z-index:50;
+  /* v2.1.1: bumped above the Mass LLM modal (z-index 1000) so column-header
+     filter popovers triggered from the modal sit on top of the dialog. */
+  z-index:2000;
   min-width:220px;
   max-width:280px;
   background:var(--bg-panel);
@@ -537,6 +539,17 @@
   letter-spacing:1.2px; color:var(--accent);
 }
 .mass-select-counter.over{ color:var(--status-crit); }
+
+/* v2.1.1: filter-active badge — appears when column filters hide some rows */
+.mass-filter-badge{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:.5px;
+  color:var(--status-warn);
+  border:1px solid var(--status-warn);
+  padding:2px 8px;
+  margin-left:10px;
+}
 
 /* Reuses .list-table styling — we render the same table inside the modal
    with a leading checkbox column. */
