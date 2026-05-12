@@ -81,22 +81,116 @@
    * net = |sum issues in [start,end]| − |sum returns in [start,end]|
    * rate = net / months
    * flag: 'OK' | 'NO_DATA' (no rows in window) | 'NEGATIVE_NET'
+   *
+   * `excludeDates` (optional) is a Set<string> of postingDate values to skip
+   * — used to drop confirmed inventory-adjustment days from the rate. The
+   * row is still counted toward `rows` so we don't mis-flag NO_DATA.
    */
-  function calcPeriodRate(transactions, start, end, months){
+  function calcPeriodRate(transactions, start, end, months, excludeDates){
     let issues = 0, returns = 0, rows = 0;
+    const xd = (excludeDates instanceof Set) ? excludeDates : null;
     for (const r of transactions) {
       if (!inRange(r.postingDate, start, end)) continue;
       const mt = String(r.movementType || '').trim();
       if (!VALID_TYPES.has(mt)) continue;
+      rows++;
+      if (xd && xd.has(r.postingDate)) continue;
       const q = Math.abs(parseFloat(r.quantity) || 0);
       if (ISSUE_TYPES.has(mt))   issues  += q;
       if (RETURN_TYPES.has(mt))  returns += q;
-      rows++;
     }
     if (rows === 0) return { rate: 0, flag: 'NO_DATA' };
     const net = issues - returns;
     if (net < 0)   return { rate: 0, flag: 'NEGATIVE_NET' };
     return { rate: net / months, flag: 'OK' };
+  }
+
+  /* ─── Inventory-adjustment day detector ────────────────────────────────────
+     Groups MB51 issue rows by postingDate, computes the daily-count mean +
+     stddev, and returns dates with count ≥ mean + N·σ as candidates.
+     The user confirms which dates are real cycle-count / adjustment days;
+     confirmed dates' transactions are then excluded from rate calculations
+     (same mechanic as HCE, labelled 'Inv Adj'). */
+  function detectInvAdjCandidates(mb51, params){
+    const sigmaN = (params && params.invAdjSigmaThreshold) || 5;
+    const dailyMap = new Map();   // date → { date, count, materials:Set, totalQty }
+    for (const r of (mb51 || [])) {
+      const mt = String(r.movementType || '').trim();
+      if (!ISSUE_TYPES.has(mt)) continue;          // adjustments post as issues (typically 201)
+      const d = r.postingDate;
+      if (!d) continue;
+      const e = dailyMap.get(d) || { date: d, count: 0, materials: new Set(), totalQty: 0 };
+      e.count++;
+      const m = String(r.material || '').trim();
+      if (m) e.materials.add(m);
+      e.totalQty += Math.abs(parseFloat(r.quantity) || 0);
+      dailyMap.set(d, e);
+    }
+    const days = [...dailyMap.values()];
+    if (days.length < 3) {
+      return { sigmaN, mean: 0, stddev: 0, threshold: 0, dayCount: days.length, candidates: [] };
+    }
+    const counts = days.map(d => d.count);
+    const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+    const variance = counts.reduce((a, b) => a + (b - mean) ** 2, 0) / counts.length;
+    const stddev = Math.sqrt(variance);
+    const threshold = mean + sigmaN * stddev;
+    const candidates = days
+      .filter(d => stddev > 0 && d.count > threshold)
+      .map(d => {
+        const dow = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' });
+        return {
+          date:              d.date,
+          dayOfWeek:         dow,
+          count:             d.count,
+          sigmaAbove:        stddev > 0 ? Math.round((d.count - mean) / stddev * 10) / 10 : 0,
+          materialsAffected: d.materials.size,
+          totalQty:          Math.round(d.totalQty * 10) / 10
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+    return {
+      sigmaN,
+      mean:      Math.round(mean * 10) / 10,
+      stddev:    Math.round(stddev * 10) / 10,
+      threshold: Math.round(threshold * 10) / 10,
+      dayCount:  days.length,
+      candidates
+    };
+  }
+
+  /* ─── Per-material Inv Adj events from confirmed dates ────────────────────
+     For a material's transactions, gather any rows that fall on a confirmed
+     adjustment date. Returns an array shaped like the HCE event array so the
+     downstream UI / Excel can render them with the same shape. */
+  function buildInvAdjEvents(transactions, confirmedDates){
+    if (!Array.isArray(confirmedDates) || confirmedDates.length === 0) return [];
+    const set = new Set(confirmedDates);
+    const byDate = new Map();
+    for (const r of transactions) {
+      const mt = String(r.movementType || '').trim();
+      if (!ISSUE_TYPES.has(mt)) continue;
+      const d = r.postingDate;
+      if (!d || !set.has(d)) continue;
+      const q = Math.abs(parseFloat(r.quantity) || 0);
+      const e = byDate.get(d) || { date: d, qty: 0, orders: new Set(), nRows: 0 };
+      e.qty   += q;
+      e.nRows += 1;
+      const o = String(r.order || '').trim();
+      if (o) e.orders.add(o);
+      byDate.set(d, e);
+    }
+    return [...byDate.values()].map(e => ({
+      kind:      'INV_ADJ',
+      period:    'INV_ADJ',
+      date:      e.date,
+      order:     e.orders.size === 1 ? [...e.orders][0] : `(${e.orders.size} orders)`,
+      equipment: '— Inv Adj —',
+      description: 'Inventory adjustment / cycle count',
+      qty:       Math.round(e.qty * 10) / 10,
+      pct:       null,
+      reasons:   `Confirmed inventory-adjustment date (${e.nRows} rows, ${e.orders.size || 0} orders)`
+    })).sort((a, b) => (a.date < b.date ? -1 : 1));
   }
 
   /* ─── HCE detection (port of detect_hce) ────────────────────────────────── */
@@ -576,6 +670,11 @@
       masterIdx.set(String(r.material || '').trim(), r);
     }
 
+    // Inv-Adj candidates (always detected) + user-confirmed exclusion set
+    const invAdjAnalysis = detectInvAdjCandidates(json.data.mb51 || [], params);
+    const confirmedInvAdjDates = Array.isArray(params.invAdjConfirmedDates) ? params.invAdjConfirmedDates : [];
+    const invAdjSet = new Set(confirmedInvAdjDates);
+
     const buckets = buildBuckets(json);
     const bucketResults = [];
 
@@ -599,16 +698,27 @@
 
       for (const q of qualifying) {
         const tx = txByMat.get(q.material) || [];
-        const { rate: p1r, flag: p1f } = calcPeriodRate(tx, p1Start, p1End, p1Months);
-        const { rate: p2r, flag: p2f } = calcPeriodRate(tx, p2Start, p2End, p2Months);
 
+        // P1/P2 rates exclude any transactions on confirmed Inv-Adj dates
+        const { rate: p1r, flag: p1f } = calcPeriodRate(tx, p1Start, p1End, p1Months, invAdjSet);
+        const { rate: p2r, flag: p2f } = calcPeriodRate(tx, p2Start, p2End, p2Months, invAdjSet);
+
+        // HCE detection runs on the FULL transaction set (HCE flags work-order
+        // events regardless of Inv-Adj exclusion — they're independent signals)
         const hceP1 = detectHce(tx, p1Start, p1End, 'P1', params);
         const hceP2 = detectHce(tx, p2Start, p2End, 'P2', params);
 
+        // Inv Adj events for THIS material (only those on confirmed dates)
+        const invAdj = buildInvAdjEvents(tx, confirmedInvAdjDates);
+
+        // Adjusted P2 rate excludes BOTH HCE work orders AND Inv-Adj dates
         let adjP2 = null;
-        if (hceP2.length) {
+        if (hceP2.length || invAdj.length) {
           const orders = hceP2.map(e => e.order);
-          const r = calcAdjustedP2Rate(tx, p2Start, p2End, orders, p2Months);
+          // Re-implement here so we can pass excludeDates too
+          const excluded = new Set(orders);
+          const filtered = tx.filter(r => !excluded.has(String(r.order || '').trim()));
+          const r = calcPeriodRate(filtered, p2Start, p2End, p2Months, invAdjSet);
           adjP2 = { rate: r.rate, flag: r.flag };
         }
 
@@ -675,6 +785,7 @@
           adjP2Rate:    adjP2 ? Math.round(adjP2.rate * 100) / 100 : null,
           adjP2Flag:    adjP2 ? adjP2.flag : null,
           hceP1, hceP2,
+          invAdj,                                  // events on confirmed Inv-Adj dates (excluded from rate)
           pattern,
           stock, mrpType, cmin, cmax, safetyStock,
           recMin:       tl.recMin,
@@ -710,7 +821,9 @@
       p2Start, p2End,
       p1Start, p1End,
       buckets: bucketResults,
-      summary
+      summary,
+      invAdjAnalysis,                              // { sigmaN, mean, stddev, threshold, dayCount, candidates[] }
+      invAdjConfirmedDates: confirmedInvAdjDates   // currently-applied exclusion list
     };
   }
 
@@ -721,6 +834,8 @@
     calcPeriodRate,
     detectHce,
     calcAdjustedP2Rate,
+    detectInvAdjCandidates,
+    buildInvAdjEvents,
     classifyPattern,
     cumulativeSeries,
     assess,

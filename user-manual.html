@@ -230,6 +230,7 @@
       <a href="#methodology">7 · Analysis methodology ★</a>
       <a class="deep" href="#m-net">7a · Net consumption</a>
       <a class="deep" href="#m-periods">7b · P1 + P2 windows</a>
+      <a class="deep" href="#m-invadj">7b.5 · Inv Adj detection ★ v2</a>
       <a class="deep" href="#m-hce">7c · HCE detection</a>
       <a class="deep" href="#m-lumpy">7d · Lumpy / Smooth</a>
       <a class="deep" href="#m-minmax">7e · Recommended Min/Max</a>
@@ -449,6 +450,30 @@
           rate flag = OK | NO_DATA | NEGATIVE_NET
         </div>
         <p>If P1 rate is 0 and P2 rate is positive, this is a <em>new draw</em> — the material started consuming inside the recent window. Rate Change shows as <code>N/A</code> because there's no P1 baseline to divide by.</p>
+
+        <!-- ── 7b.5 Inv Adj detection ── -->
+        <h3 id="m-invadj">7b.5 · Inventory Adjustment detection ★ v2.0</h3>
+        <p>SAP cycle counts and stock-adjustment events post as issue transactions (typically movement type 201, goods issue to cost center). They capture <em>accumulated</em> bookkeeping rather than genuine consumption, and because they hit many materials on the same date, they make the rate look spiky and the pattern look LUMPY when the underlying consumption is in fact smooth.</p>
+        <p>The detector finds these dates statistically:</p>
+        <div class="um-formula">
+          <span class="lab">Inv-Adj day detection</span>
+          For each posting date in MB51, count issue transactions (movement types 261 + 201).<br>
+          Compute mean μ and stddev σ across the daily-count distribution.<br>
+          A date with <code>count ≥ μ + N·σ</code> is a <b>candidate</b>.<br>
+          Default N = <code>invAdjSigmaThreshold</code> = <b>5</b>. Lower (2–3σ) → more candidates; raise (7–10σ) → only extreme spikes.
+        </div>
+        <p><b>The operator confirms.</b> After the pipeline runs, a modal pops up (only when candidates exist and the canonical JSON has no prior confirmations) listing each candidate date with: day-of-week, transaction count, sigma-above-mean, materials affected, and total quantity. The operator ticks the dates to <em>exclude</em> from rate calculations. Skipping leaves rates unchanged; confirming re-runs the pipeline with those dates excluded.</p>
+        <p>Confirmed dates persist on <code>parameters.invAdjConfirmedDates</code> in the canonical JSON. Reloading the same intake remembers the confirmations.</p>
+
+        <h4>How Inv Adj exclusion works</h4>
+        <p>Same mechanic as HCE but labelled differently:</p>
+        <ul>
+          <li>P1 and P2 rate calculations skip any transactions whose posting date is in <code>invAdjConfirmedDates</code>.</li>
+          <li>The Adjusted P2 rate (already used for HCE exclusion) also excludes Inv Adj dates — both signals stack.</li>
+          <li>Per-material results carry an <code>invAdj</code> array, rendered as a distinct table on the detail panel (purple-tinted) and a separate section in the Excel per-material sheet.</li>
+          <li>The chart shows vertical dashed purple lines at Inv Adj dates with an "INV ADJ" label — visually distinct from amber HCE work-order markers.</li>
+        </ul>
+        <p>The "Inv Adj review" button on the analysis page re-opens the modal anytime — useful for tuning the sigma threshold or revisiting decisions.</p>
 
         <!-- ── 7c HCE ── -->
         <h3 id="m-hce">7c · High Consumption Event (HCE) detection</h3>

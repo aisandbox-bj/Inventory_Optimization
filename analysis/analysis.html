@@ -85,6 +85,23 @@
     <button class="mass-chip-open">Reopen</button>
   </div>
 
+  <!-- ─── Inventory Adjustment Review modal ─── -->
+  <div id="invAdjModal" class="mass-modal hidden" aria-hidden="true">
+    <div class="mass-backdrop"></div>
+    <div class="mass-dialog">
+      <div class="mass-head">
+        <div class="mass-title">
+          <span class="lab">Inventory Adjustment Review</span>
+          <h3>Confirm cycle-count / adjustment dates</h3>
+        </div>
+        <div class="mass-mode-pill" id="invAdjPill">Review</div>
+        <button id="invAdjClose" class="mass-close" title="Close">✕</button>
+      </div>
+      <div class="mass-body" id="invAdjBody"></div>
+      <div class="mass-foot" id="invAdjFoot"></div>
+    </div>
+  </div>
+
   <!-- ─── Mass LLM Review modal ─── -->
   <div id="massModal" class="mass-modal hidden" aria-hidden="true">
     <div class="mass-backdrop"></div>

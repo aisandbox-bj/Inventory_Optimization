@@ -17,17 +17,19 @@
 
   /* ─── Factory defaults — seeded from the existing Python skill ──────────── */
   const FACTORY_DEFAULTS = Object.freeze({
-    minMaxMethod:        'monthsBased',          // 'monthsBased' | 'leadTimeBased'
-    p1Start:             '2025-04-01',
-    p1End:               '2025-08-31',
-    p2Months:            3,
-    minMonths:           3,
-    maxMonths:           6,
-    threshold:           10,
-    hcePctThreshold:     0.50,                   // 50% of period total
-    hceMultThreshold:    3.0,                    // 3× avg WO qty
-    lumpyCvThreshold:    1.2,
-    lumpyTopWoThreshold: 0.40                    // 40% top-WO share
+    minMaxMethod:           'monthsBased',          // 'monthsBased' | 'leadTimeBased'
+    p1Start:                '2025-04-01',
+    p1End:                  '2025-08-31',
+    p2Months:               3,
+    minMonths:              3,
+    maxMonths:              6,
+    threshold:              10,
+    hcePctThreshold:        0.50,                   // 50% of period total
+    hceMultThreshold:       3.0,                    // 3× avg WO qty
+    lumpyCvThreshold:       1.2,
+    lumpyTopWoThreshold:    0.40,                   // 40% top-WO share
+    invAdjSigmaThreshold:   5,                      // Inv-Adj day-spike detector: count ≥ mean + N·σ
+    invAdjConfirmedDates:   []                      // User-confirmed cycle-count dates (excluded from rate)
   });
 
   const SCOPE_MODES = ['fleet', 'manual', 'byClassification', 'byVendor', 'parameterSearch'];
@@ -58,8 +60,10 @@
     threshold:           'Minimum net consumption (units) over the analysis window for a material to qualify for analysis.',
     hcePctThreshold:     'Single WO ≥ this share of the period total flags as a <b>High Consumption Event</b> (one-off spike — e.g. rebuild).',
     hceMultThreshold:    'Single WO ≥ this many times the average WO quantity also flags as an HCE.',
-    lumpyCvThreshold:    'Coefficient of variation above this classifies a material as <b>LUMPY</b> (clustered demand, not steady draw-down).',
-    lumpyTopWoThreshold: 'If a single WO represents this share or more of total consumption, classify as LUMPY.'
+    lumpyCvThreshold:       'Coefficient of variation above this classifies a material as <b>LUMPY</b> (clustered demand, not steady draw-down).',
+    lumpyTopWoThreshold:    'If a single WO represents this share or more of total consumption, classify as LUMPY.',
+    invAdjSigmaThreshold:   'Standard-deviation threshold for flagging MB51 dates as likely <b>cycle-count / inventory adjustment</b> days. Daily issue-transaction counts above <em>mean + Nσ</em> become candidates the operator can confirm. Default 5σ is conservative; lower this (2–3σ) to surface more candidates, raise it (7–10σ) to flag only extreme spikes.',
+    invAdjConfirmedDates:   'Dates the operator has confirmed as inventory adjustments. Transactions on these dates are excluded from the rate calculation (same mechanic as HCE, but labelled <b>Inv Adj</b>).'
   });
 
   /* ─── Empty scope (one of each mode pre-shaped) ─────────────────────────── */

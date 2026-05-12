@@ -249,6 +249,21 @@
       trendLine(material.p2Start, material.p2End, material.p2Rate, PAL.p2Line, `P2 · ${material.p2Rate.toFixed(1)}/mo`);
     }
 
+    // ─── Inv Adj annotations (vertical dashed purple lines on confirmed dates) ─
+    const invAdj = material.invAdj || [];
+    for (const ev of invAdj) {
+      const t = new Date(ev.date).getTime();
+      if (t < xMin || t > xMax) continue;
+      const x = xScale(t);
+      // Vertical dashed line across plot, distinct purple to differentiate from HCE
+      svg.appendChild(line(x, MARGIN.top, x, MARGIN.top + innerH, {
+        stroke: '#B07CC6', width: 1.5, dash: '4 3', opacity: 0.85
+      }));
+      svg.appendChild(text(x + 3, MARGIN.top + 12, `INV ADJ`, {
+        fill: '#B07CC6', size: 9, weight: 600, tracking: 1.2
+      }));
+    }
+
     // ─── WO annotations (HCE events, top 3 by qty) ────────────────────────
     const hceAll = (material.hceP1 || []).concat(material.hceP2 || []);
     const annots = hceAll.slice().sort((a, b) => b.qty - a.qty).slice(0, 3);

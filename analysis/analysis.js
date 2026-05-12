@@ -107,7 +107,7 @@
   /* ═════════════════════════════════════════════════════════════════════════
      PIPELINE
   ═════════════════════════════════════════════════════════════════════════ */
-  async function runPipelineNow(){
+  async function runPipelineNow(autoPopupIfCandidates){
     const status = $('#pipelineStatus');
     status.querySelector('.meta').textContent = 'running…';
     // Defer so the UI repaints
@@ -116,11 +116,25 @@
       const t0 = performance.now();
       state.result = AppPipeline.runPipeline(state.json, { runDate: new Date().toISOString().slice(0, 10) });
       const t1 = performance.now();
-      status.querySelector('.meta').textContent = `${state.result.summary.total} materials across ${state.result.buckets.length} bucket${state.result.buckets.length === 1 ? '' : 's'} · ${Math.round(t1 - t0)} ms`;
+      const ia = state.result.invAdjAnalysis || { candidates: [] };
+      const iaCount = ia.candidates.length;
+      const iaSummary = iaCount > 0
+        ? ` · <span style="color:var(--status-warn);cursor:pointer;text-decoration:underline;" id="iaMetaLink" title="${iaCount} possible inventory-adjustment date${iaCount===1?'':'s'} detected — click to review">${iaCount} Inv-Adj candidate${iaCount===1?'':'s'}</span>`
+        : '';
+      status.querySelector('.meta').innerHTML = `${state.result.summary.total} materials across ${state.result.buckets.length} bucket${state.result.buckets.length === 1 ? '' : 's'} · ${Math.round(t1 - t0)} ms${iaSummary}`;
+      const iaLink = document.getElementById('iaMetaLink');
+      if (iaLink) iaLink.addEventListener('click', () => openInvAdjModal());
       renderSummaryTiles();
       renderBucketTabs();
       if (state.result.buckets.length) selectBucket(state.result.buckets[0].key);
       renderExportActions();
+      // Auto-popup Inv Adj modal on first run when candidates exist
+      // and no prior confirmation has been recorded for this session
+      if (autoPopupIfCandidates !== false && iaCount > 0 && !state._invAdjSeen) {
+        state._invAdjSeen = true;
+        // Slight delay so the analysis UI paints first
+        setTimeout(() => openInvAdjModal(), 250);
+      }
     } catch (e) {
       console.error(e);
       status.querySelector('.meta').innerHTML = `<span class="crit">error: ${escapeHtml(e.message || String(e))}</span>`;
@@ -504,6 +518,7 @@
       </div>
 
       ${renderMrpCompare(mat)}
+      ${renderInvAdjTable(mat)}
 
       ${renderHceTable(mat)}
 
@@ -569,6 +584,30 @@
         </table>
       </div>
     `;
+  }
+
+  /* ─── Inv Adj events table (rendered below MRP comparison, before HCE) ─ */
+  function renderInvAdjTable(mat){
+    const evs = mat.invAdj || [];
+    if (!evs.length) return '';
+    const rows = evs.map(e => `
+      <tr>
+        <td>${escapeHtml(e.date)}</td>
+        <td>${escapeHtml(e.order || '—')}</td>
+        <td>${escapeHtml(e.equipment || '—')}</td>
+        <td class="q">${e.qty}</td>
+        <td title="${escapeAttr(e.reasons)}">${escapeHtml(e.reasons.length > 50 ? e.reasons.slice(0, 50) + '…' : e.reasons)}</td>
+      </tr>`).join('');
+    return `
+      <div style="margin-bottom:14px;">
+        <div class="label" style="margin-bottom:6px;color:var(--status-warn);">
+          Inventory Adjustments (excluded from rate)
+        </div>
+        <table class="hce-table">
+          <thead><tr><th>Date</th><th>Order</th><th>Equip</th><th>Qty</th><th>Reason</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
 
   function renderHceTable(mat){
@@ -657,6 +696,7 @@
     const host = $('#exportActions');
     host.innerHTML = `
       <div class="label" style="margin-right:auto;">Bulk operations</div>
+      <button id="btnInvAdj" class="ghost" title="Re-open the Inventory Adjustment Review modal. Flags MB51 dates with anomalously high issue-transaction counts (likely cycle counts) and excludes confirmed dates from rate calculations.">⚠ Inv Adj review</button>
       <button id="btnMassReview" class="primary" title="Pick up to 50 materials from this bucket and run the LLM against each one in sequence. Produces an Excel + JSON deliverable. In-memory only — wiped on modal close.">✦ Mass LLM Review</button>
       <button id="btnLoadMassReview" class="ghost" title="Reload a previously-downloaded mass-review JSON. Use this after a session was wiped (closed) to view the saved LLM annotations again. The matching canonical intake JSON must already be loaded on this page.">⤒ Reload saved review</button>
       <button id="btnExportBucket" class="primary">⤓ Export this bucket</button>
@@ -665,6 +705,7 @@
       <span id="exportProgress" class="export-progress" style="display:none;"></span>
       <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
     `;
+    $('#btnInvAdj').addEventListener('click', openInvAdjModal);
     $('#btnMassReview').addEventListener('click', openMassReview);
     $('#btnLoadMassReview').addEventListener('click', () => $('#loadMassReviewInput').click());
     $('#loadMassReviewInput').addEventListener('change', handleMassReviewUpload);
@@ -732,6 +773,187 @@
       console.error(e);
       prog.textContent = `✗ ${e.message || e}`;
     }
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     INVENTORY ADJUSTMENT REVIEW (v2.0)
+     Auto-popup after first analysis when day-count spikes (≥ N·σ) are
+     detected. User checks dates to confirm; pipeline re-runs with those
+     dates excluded from rate calculations (HCE-equivalent, labelled Inv Adj).
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  function openInvAdjModal(){
+    const modal = $('#invAdjModal');
+    if (!modal || !state.result) return;
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    renderInvAdjModal();
+    // Close handlers (idempotent — same handler added each open)
+    const closeBtn = $('#invAdjClose');
+    if (closeBtn && !closeBtn._iaBound) {
+      closeBtn.addEventListener('click', closeInvAdjModal);
+      closeBtn._iaBound = true;
+    }
+    const backdrop = modal.querySelector('.mass-backdrop');
+    if (backdrop && !backdrop._iaBound) {
+      backdrop.addEventListener('click', closeInvAdjModal);
+      backdrop._iaBound = true;
+    }
+  }
+  function closeInvAdjModal(){
+    const modal = $('#invAdjModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function renderInvAdjModal(){
+    const ia = state.result && state.result.invAdjAnalysis;
+    const body = $('#invAdjBody');
+    const foot = $('#invAdjFoot');
+    if (!ia) { body.innerHTML = '<div class="ia-empty">no analysis loaded</div>'; foot.innerHTML = ''; return; }
+
+    const confirmed = new Set(state.json.parameters.invAdjConfirmedDates || []);
+
+    // Summary tiles
+    const summaryHtml = `
+      <div class="ia-summary">
+        <div class="ia-stat">
+          <span class="lab">Days analysed</span>
+          <div class="v">${ia.dayCount.toLocaleString()}</div>
+        </div>
+        <div class="ia-stat">
+          <span class="lab">Avg daily issues</span>
+          <div class="v">${ia.mean.toLocaleString()} <small>/ day</small></div>
+        </div>
+        <div class="ia-stat">
+          <span class="lab">Std deviation</span>
+          <div class="v">${ia.stddev.toLocaleString()} <small>σ</small></div>
+        </div>
+        <div class="ia-stat">
+          <span class="lab">Threshold</span>
+          <div class="v">${ia.threshold.toLocaleString()} <small>mean + ${ia.sigmaN}σ</small></div>
+        </div>
+      </div>
+    `;
+
+    // Empty state
+    if (ia.candidates.length === 0) {
+      body.innerHTML = summaryHtml + `
+        <div class="ia-empty">
+          <span class="big">✓ No anomalies</span>
+          No MB51 days exceed <b>mean + ${ia.sigmaN}σ</b> issue counts at the current threshold.
+          Lower <code>invAdjSigmaThreshold</code> in Settings to surface more candidates.
+        </div>
+      `;
+      foot.innerHTML = `
+        <span class="ia-foot-info">Threshold configurable in Settings → Parameter defaults.</span>
+        <span class="spacer"></span>
+        <button id="iaSkip" class="ghost">Close</button>
+      `;
+      $('#iaSkip').addEventListener('click', closeInvAdjModal);
+      return;
+    }
+
+    // Find the max count to scale the bar visualisation
+    const maxCount   = Math.max(...ia.candidates.map(c => c.count), ia.mean);
+    const avgFracPct = Math.min(100, (ia.mean / maxCount) * 100);
+
+    const rowsHtml = ia.candidates.map(c => {
+      const dayFracPct = Math.min(100, (c.count / maxCount) * 100);
+      const wasConfirmed = confirmed.has(c.date);
+      return `
+        <tr class="${wasConfirmed ? 'previously-confirmed' : ''}">
+          <td class="chk">
+            <input type="checkbox" data-date="${escapeAttr(c.date)}" ${wasConfirmed ? 'checked' : ''} />
+          </td>
+          <td class="date">${escapeHtml(c.date)}</td>
+          <td class="dow">${escapeHtml(c.dayOfWeek)}</td>
+          <td class="num">${c.count.toLocaleString()}</td>
+          <td class="ia-bar-cell">
+            <div class="ia-bar">
+              <div class="day-fill" style="width:${dayFracPct.toFixed(1)}%"></div>
+              <div class="avg-marker" style="left:${avgFracPct.toFixed(1)}%"></div>
+              <div class="day-count">${c.count}</div>
+            </div>
+          </td>
+          <td class="sigma">${c.sigmaAbove}σ</td>
+          <td class="num">${c.materialsAffected.toLocaleString()}</td>
+          <td class="num">${c.totalQty.toLocaleString()}</td>
+        </tr>
+      `;
+    }).join('');
+
+    body.innerHTML = summaryHtml + `
+      <div class="ia-intro">
+        <b>${ia.candidates.length} MB51 date${ia.candidates.length === 1 ? '' : 's'}</b> exceed the
+        <b>${ia.sigmaN}σ</b> threshold — these days have an unusually high count of issue
+        transactions and are likely cycle counts or stock adjustments rather than genuine
+        consumption. Tick the dates you want to <b>exclude from the rate calculation</b>; the
+        pipeline will re-run and treat those transactions as <em>Inv Adj</em> events (same
+        exclusion mechanic as HCE, different label).
+        <span class="hint">Sigma threshold configurable in <a href="../settings/settings.html#params">Settings</a> · current default ${ia.sigmaN}σ.</span>
+      </div>
+
+      <table class="ia-table">
+        <thead>
+          <tr>
+            <th class="chk">✓</th>
+            <th>Date</th>
+            <th>Day</th>
+            <th class="num">Count</th>
+            <th>Avg vs day</th>
+            <th class="num">σ above</th>
+            <th class="num">Materials</th>
+            <th class="num">Total qty</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `;
+
+    foot.innerHTML = `
+      <span class="ia-foot-info"><b id="iaSelectedCount">${ia.candidates.filter(c => confirmed.has(c.date)).length}</b> of ${ia.candidates.length} selected</span>
+      <button id="iaAllOn"  class="ghost">Select all</button>
+      <button id="iaAllOff" class="ghost">Clear</button>
+      <span class="spacer"></span>
+      <button id="iaSkip" class="ghost">Skip / Cancel</button>
+      <button id="iaConfirm" class="primary">✓ Confirm &amp; re-run analysis</button>
+    `;
+
+    // Wire checkbox change → live counter
+    body.querySelectorAll('input[type=checkbox][data-date]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const n = body.querySelectorAll('input[type=checkbox][data-date]:checked').length;
+        const el = $('#iaSelectedCount');
+        if (el) el.textContent = n;
+      });
+    });
+    $('#iaAllOn').addEventListener('click', () => {
+      body.querySelectorAll('input[type=checkbox][data-date]').forEach(cb => cb.checked = true);
+      body.querySelectorAll('input[type=checkbox][data-date]').forEach(cb => cb.dispatchEvent(new Event('change')));
+    });
+    $('#iaAllOff').addEventListener('click', () => {
+      body.querySelectorAll('input[type=checkbox][data-date]').forEach(cb => cb.checked = false);
+      body.querySelectorAll('input[type=checkbox][data-date]').forEach(cb => cb.dispatchEvent(new Event('change')));
+    });
+    $('#iaSkip').addEventListener('click', closeInvAdjModal);
+    $('#iaConfirm').addEventListener('click', applyInvAdjConfirmations);
+  }
+
+  async function applyInvAdjConfirmations(){
+    const body  = $('#invAdjBody');
+    const dates = [...body.querySelectorAll('input[type=checkbox][data-date]:checked')]
+                    .map(cb => cb.dataset.date)
+                    .sort();
+    state.json.parameters.invAdjConfirmedDates = dates;
+    // Persist back to the canonical JSON in storage so re-loads keep the choice
+    try { await AppStorage.set('intake.current', state.json); } catch {}
+    closeInvAdjModal();
+    toast(`Excluded ${dates.length} inventory-adjustment date${dates.length===1?'':'s'} — re-running analysis…`, 'ok');
+    // Re-run pipeline (don't re-popup the modal)
+    await runPipelineNow(false);
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

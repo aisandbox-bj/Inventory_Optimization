@@ -409,6 +409,42 @@
       r++;
     }
 
+    // Inv Adj section — only renders if there are confirmed Inv-Adj events for this material
+    if (m.invAdj && m.invAdj.length) {
+      r += 2;
+      ws.mergeCells(`B${r}:G${r}`);
+      const iaTitle = ws.getCell(`B${r}`);
+      iaTitle.value = 'Inventory Adjustments (excluded from rate)';
+      iaTitle.font  = { name:'Calibri', size:11, bold:true, color:{ argb:'FFFFFFFF' } };
+      iaTitle.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF9B59B6' } };
+      iaTitle.alignment = { horizontal:'left', vertical:'middle' };
+      ws.getRow(r).height = 20;
+      r++;
+      const iaHdrs = ['Date', 'Order', 'Equipment', 'Qty', 'Reason'];
+      iaHdrs.forEach((h, i) => {
+        const c = ws.getRow(r).getCell(i + 2);
+        c.value = h;
+        c.font  = { bold:true, color:{ argb:'FFFFFFFF' }, name:'Calibri', size:10 };
+        c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + C.headerGrey } };
+        c.alignment = { horizontal:'center', vertical:'middle' };
+        c.border = thinBorder();
+      });
+      r++;
+      for (const e of m.invAdj) {
+        const row = ws.getRow(r);
+        const vals = [e.date, e.order || '—', e.equipment || '—', e.qty, e.reasons || ''];
+        vals.forEach((v, i) => {
+          const c = row.getCell(i + 2);
+          c.value = v;
+          c.font  = { name:'Calibri', size:10 };
+          c.alignment = { horizontal: (i === 3) ? 'right' : 'left', vertical:'middle' };
+          c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFE8D8F0' } };   // light purple
+          c.border = thinBorder();
+        });
+        r++;
+      }
+    }
+
     // MRP Settings Comparison — placed at row 31 (matches reference) or below HCE if longer
     r = Math.max(r + 2, 31);
     ws.mergeCells(`B${r}:D${r}`);

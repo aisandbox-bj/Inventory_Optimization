@@ -266,6 +266,18 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Inventory Adjustment detection + exclusion</h4>
+      <ul>
+        <li><b>New detector</b> in <code>shared/pipeline.js</code>: groups MB51 issue rows by posting date, computes mean μ and stddev σ of daily counts, flags dates with <code>count ≥ μ + N·σ</code> as candidates. N is configurable via <code>parameters.invAdjSigmaThreshold</code> (default 5).</li>
+        <li><b>Auto-popup modal</b> after pipeline runs when candidates exist + no prior confirmations. Shows: days analysed, avg daily issues, stddev, threshold. Candidate table with date / day-of-week / count / inline avg-vs-day bar viz / σ above mean / materials affected / total qty. Operator ticks dates to exclude. Confirming saves to <code>parameters.invAdjConfirmedDates</code> and re-runs the pipeline.</li>
+        <li><b>Pipeline rate exclusion</b>: <code>calcPeriodRate()</code> accepts an optional <code>excludeDates</code> Set. P1 and P2 rates skip rows on confirmed Inv-Adj dates. Adjusted P2 (HCE-excluded) ALSO excludes Inv-Adj dates — both signals stack.</li>
+        <li><b>Per-material output</b>: new <code>invAdj</code> array on each result, shaped like the existing <code>hceP2</code> array (date, qty, order(s), reason). Rendered as a purple-tinted table on the material detail panel and a dedicated section on the Excel per-material sheet.</li>
+        <li><b>Chart annotation</b>: vertical dashed purple line at each Inv-Adj date with "INV ADJ" label — distinct from amber HCE markers.</li>
+        <li><b>Settings + Intake §5</b>: <code>invAdjSigmaThreshold</code> added to the parameter editor with full descriptor.</li>
+        <li><b>"Inv Adj review" button</b> on the analysis page (Bulk operations row) re-opens the modal anytime.</li>
+        <li>Confirmations persist on the canonical JSON — reloading the intake remembers the operator's decisions.</li>
+      </ul>
+
       <h4>v2.0.0-dev follow-ups (2026-05-12 pm)</h4>
       <ul>
         <li><b>Material-column aliases expanded</b> — header "Material No." (with period) now auto-maps. Previously normalized to <code>materialno</code> but only <code>matno</code> / <code>materialnumber</code> were in the alias list. Added "Material No.", "Material No", "Part No", "Part Number" variants across MB51 / Inventory Master / userList / materialVendor parsers. This was breaking the user-list parser silently (Materials count showed 0 even though analysis still worked downstream because <code>buildJson()</code> re-derives at save time).</li>

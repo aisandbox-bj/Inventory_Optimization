@@ -1208,7 +1208,8 @@
       { key:'hcePctThreshold',     label:'HCE % threshold', type:'number', step:0.05 },
       { key:'hceMultThreshold',    label:'HCE multiplier',  type:'number', step:0.5 },
       { key:'lumpyCvThreshold',    label:'Lumpy CV',        type:'number', step:0.1 },
-      { key:'lumpyTopWoThreshold', label:'Lumpy top-WO',    type:'number', step:0.05 }
+      { key:'lumpyTopWoThreshold', label:'Lumpy top-WO',    type:'number', step:0.05 },
+      { key:'invAdjSigmaThreshold',label:'Inv Adj σ threshold', type:'number', step:0.5 }
     ];
 
     const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};
