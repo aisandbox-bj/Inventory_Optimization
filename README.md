@@ -6,14 +6,19 @@ Architecture follows the NumaCore Lens shape — front-end shell loading modular
 
 ## Status
 
-**v1.0 — all four phases built. End-to-end workflow runs: intake → JSON → analysis → Excel.**
+**v1.1.0-dev — Assessment Type selector + Parameter Search filter panel on top of the v1.0.0 baseline.**
 
-| Phase | Component | Status |
+Releases & rollback live in [`record-of-change.html`](record-of-change.html). Roll back any release with a clone + `git checkout v1.x.x`.
+
+| Phase / Release | What's in it | Status |
 |---|---|---|
-| 1 | Foundations (`shared/*`) | ✓ done |
-| 2 | Intake engine | ✓ done |
-| 3 | Settings tab + dashboard shell | ✓ done |
-| 4 | Analysis engine + chart + LLM review + Excel export | ✓ done |
+| Phase 1 — Foundations (`shared/*`) | brand tokens, schema, storage, parsers, config | ✓ in v1.0.0 |
+| Phase 2 — Intake engine | 6-step workflow, DQ gate, scope selector | ✓ in v1.0.0 |
+| Phase 3 — Settings + shell | parameter defaults, LLM keys, alias overrides | ✓ in v1.0.0 |
+| Phase 4 — Analysis engine | pipeline, chart, LLM review, Excel export | ✓ in v1.0.0 |
+| v1.1.0 — Assessment Type selector | Step 0: UNIT/FLOC · User list · Parameter search, non-applicable upload zones greyed | ✓ dev |
+| v1.1.0 — Parameter Search panel | PBI-style drag-drop filter builder, Simple/Advanced modes, live preview | ✓ dev |
+| v1.1.0 — Record of Change | rollback-safe versioning, HTML changelog linked from every page | ✓ dev |
 
 ## Structure
 
