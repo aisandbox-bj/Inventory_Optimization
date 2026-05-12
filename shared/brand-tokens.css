@@ -233,6 +233,20 @@ a:hover{ color:var(--accent-glow); }
   color:var(--accent);
   letter-spacing:1.5px;
   margin-left:6px;
+  text-decoration:none;
+  border:1px solid transparent;
+  padding:2px 6px;
+  transition:border-color .15s, background .15s, color .15s;
+  cursor:pointer;
+}
+.appnav .brand a.sub:hover{
+  border-color:rgba(31,206,216,0.5);
+  background:rgba(31,206,216,0.06);
+  color:var(--accent-glow);
+}
+.appnav .brand a.sub.active{
+  background:rgba(31,206,216,0.10);
+  border-color:rgba(31,206,216,0.5);
 }
 .appnav .links{ display:flex; gap:6px; margin-left:auto; }
 .appnav .links a{

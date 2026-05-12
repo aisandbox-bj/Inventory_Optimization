@@ -1,4 +1,10 @@
-/* ═══════════════════════════════════════════════════════════════════════════
+/* ═══ BUILD-STAMP ═══════════════════════════════════════════════════════════
+   Inventory Optimization App · v1.1.0-dev · released 2026-05-11
+   Single source of truth for SCHEMA_VERSION and APP_VERSION (line ~17).
+   Repo : https://github.com/aisandbox-bj/Inventory_Optimization
+   RoC  : record-of-change.html
+═══════════════════════════════════════════════════════════════════════════════
+
    Canonical JSON Schema — the contract between Intake and Analysis engines.
    Versioned. Changes here are breaking changes; bump SCHEMA_VERSION accordingly.
 ═══════════════════════════════════════════════════════════════════════════ */
