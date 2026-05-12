@@ -1212,7 +1212,10 @@
       { key:'hceMultThreshold',    label:'HCE multiplier',  type:'number', step:0.5 },
       { key:'lumpyCvThreshold',    label:'Lumpy CV',        type:'number', step:0.1 },
       { key:'lumpyTopWoThreshold', label:'Lumpy top-WO',    type:'number', step:0.05 },
-      { key:'invAdjSigmaThreshold',label:'Inv Adj σ threshold', type:'number', step:0.5 }
+      { key:'invAdjSigmaThreshold',label:'Inv Adj σ threshold', type:'number', step:0.5 },
+      { key:'wrSoftMonths',        label:'WR soft months',  type:'number', step:1 },
+      { key:'wrHardMonths',        label:'WR hard months',  type:'number', step:1 },
+      { key:'wrMrpTypes',          label:'WR MRP types',    type:'list',   placeholder:'PD, ZE' }
     ];
 
     const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};
@@ -1220,26 +1223,39 @@
     host.innerHTML = '';
     for (const f of fields) {
       const cell = document.createElement('div');
-      cell.className = 'param-cell' + (run[f.key] !== saved[f.key] ? ' dirty' : '');
+      cell.className = 'param-cell' + (JSON.stringify(run[f.key]) !== JSON.stringify(saved[f.key]) ? ' dirty' : '');
 
       let input;
       if (f.type === 'select') {
         input = `<select data-pkey="${f.key}">${f.opts.map(o => `<option value="${o}" ${run[f.key]===o?'selected':''}>${o}</option>`).join('')}</select>`;
       } else if (f.type === 'date') {
         input = `<input type="date" data-pkey="${f.key}" value="${run[f.key] || ''}">`;
+      } else if (f.type === 'list') {
+        const v = Array.isArray(run[f.key]) ? run[f.key].join(', ') : '';
+        input = `<input type="text" data-pkey="${f.key}" value="${escapeAttr(v)}" placeholder="${escapeAttr(f.placeholder || '')}">`;
       } else {
         input = `<input type="number" data-pkey="${f.key}" value="${run[f.key]}" step="${f.step || 1}">`;
       }
       const desc = descs[f.key] || '';
-      const factoryNote = factory[f.key] !== saved[f.key] ? `<div class="factory-note">factory: ${factory[f.key]} · saved: ${saved[f.key]}</div>` : '';
+      const factoryDiff = JSON.stringify(factory[f.key]) !== JSON.stringify(saved[f.key]);
+      const factoryDisplay = Array.isArray(factory[f.key]) ? factory[f.key].join(', ') : factory[f.key];
+      const savedDisplay   = Array.isArray(saved[f.key])   ? saved[f.key].join(', ')   : saved[f.key];
+      const factoryNote = factoryDiff ? `<div class="factory-note">factory: ${escapeHtml(String(factoryDisplay))} · saved: ${escapeHtml(String(savedDisplay))}</div>` : '';
       cell.innerHTML = `<label>${f.label}</label><div class="param-desc">${desc}</div>${input}${factoryNote}`;
       host.appendChild(cell);
     }
     $$('#paramsGrid [data-pkey]').forEach(el => {
       el.addEventListener('change', (e) => {
         const k = el.dataset.pkey;
+        const f = fields.find(x => x.key === k);
         let v;
         if (el.type === 'number') v = parseFloat(el.value);
+        else if (f && f.type === 'list') {
+          v = String(el.value || '')
+            .split(',')
+            .map(s => s.trim().toUpperCase())
+            .filter(Boolean);
+        }
         else                       v = el.value;
         state.paramsRun[k] = v;
         if (k === 'minMaxMethod') toggleLeadTimesDrop();

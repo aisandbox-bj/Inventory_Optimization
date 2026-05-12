@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.0.0-dev · released 2026-05-12
+     Inventory Optimization App · v2.0.1 · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
-     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.0
+     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.1
      This file is the canonical changelog — the version above is the build
      that ships THIS file, not necessarily the version you ran an analysis
      under (that's recorded in metadata.appVersion of each saved JSON).
@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="2.0.0-dev" />
+<meta name="app-version" content="2.0.1" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
@@ -257,6 +257,39 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- ───────── v2.0.1 ───────── -->
+    <article class="roc-entry release">
+      <div class="head">
+        <span class="ver">v2.0.1</span>
+        <span class="date">2026-05-12</span>
+        <span class="tag released">released</span>
+      </div>
+
+      <h4>TWEAK · Configurable Working Redundant thresholds</h4>
+      <ul>
+        <li>The PURPLE / Working Redundant classifier is now driven by three operator-configurable parameters instead of hardcoded literals:
+          <ul>
+            <li><code>wrSoftMonths</code> (default <b>6</b>) — stock-runway threshold for <em>Possible</em> WR (PURPLE soft).</li>
+            <li><code>wrHardMonths</code> (default <b>9</b>, <b>lowered from previous hardcoded 12</b>) — stock-runway threshold for <em>Likely</em> WR (PURPLE hard — write-down review).</li>
+            <li><code>wrMrpTypes</code> (default <code>['PD']</code>) — MRP types that trigger the WR check at all. Comma-separated list in the parameter editor; uppercase-normalised on save.</li>
+          </ul>
+        </li>
+        <li>Defaults reflect operator input that 12 months was too lenient on PD items — 9 months of stock at P2 rate on a PD item is already a strong write-down candidate.</li>
+        <li><b>Action-text now interpolates the active threshold and the MRP type that tripped</b> — e.g. <em>"Likely Working Redundant — 11.3 months of stock at P2 rate (&gt;9mo with PD). Review for destocking / write-down."</em> Widening <code>wrMrpTypes</code> to include e.g. <code>ZE</code> produces an unambiguous message naming the specific code.</li>
+        <li>Editable in <b>Settings → Parameter defaults</b> (persistent) and per-intake in <b>Step 5</b> (one-off override with the same dirty/reset UX as every other parameter). A new <code>type:'list'</code> input pattern was added to both parameter editors to support comma-separated MRP-type lists; first list-typed parameter in the app, generic and re-usable for future list parameters.</li>
+        <li><b>Fully back-compatible</b>: older intake JSONs without the new keys fall through to factory defaults at pipeline time (guarded reads in <code>assess()</code> and <code>validateParameters</code>). <b>No <code>SCHEMA_VERSION</code> change</b> — still <code>1.0.0</code>. Older intakes saved before v2.0.1 continue to load and run identically, picking up the new 9-month "likely" threshold on re-run (which may shift some materials from "possible" to "likely" WR — expected behaviour reflecting the tighter operator standard).</li>
+        <li>User-manual §7f updated to reflect parameter-driven phrasing (rules 4 & 5 in the traffic-light table + explanatory paragraph).</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/canonical-schema.js</code> (APP_VERSION → 2.0.1, +3 defaults, +3 descriptions, +4 guarded validators) · <code>shared/pipeline.js</code> (<code>assess()</code> signature gains <code>params</code>, WR block now configurable, call site passes params) · <code>settings/settings.js</code> (3 field defs + new <code>list</code> input type) · <code>intake/intake.js</code> (same 3 field defs + same <code>list</code> input + array-aware dirty detection) · <code>user-manual.html</code> §7f · this file.
+      </div>
+
+      <div class="commit">
+        <b>Rollback:</b> revert <code>pipeline.js</code> WR block to literals <code>6</code> and <code>12</code>, drop the three keys from <code>FACTORY_DEFAULTS</code>. Older intakes continue to work either way. Or simply <code>git checkout v2.0.0</code> if that tag is later added retroactively. The pre-v2.0.1 HEAD on origin/main is the rollback point.
+      </div>
+    </article>
 
     <!-- ───────── v2.0.0-dev ───────── -->
     <article class="roc-entry dev">

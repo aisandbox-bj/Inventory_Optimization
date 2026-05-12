@@ -13,7 +13,7 @@
   'use strict';
 
   const SCHEMA_VERSION = '1.0.0';
-  const APP_VERSION    = '2.0.0-dev';
+  const APP_VERSION    = '2.0.1';
 
   /* ─── Factory defaults — seeded from the existing Python skill ──────────── */
   const FACTORY_DEFAULTS = Object.freeze({
@@ -29,7 +29,10 @@
     lumpyCvThreshold:       1.2,
     lumpyTopWoThreshold:    0.40,                   // 40% top-WO share
     invAdjSigmaThreshold:   5,                      // Inv-Adj day-spike detector: count ≥ mean + N·σ
-    invAdjConfirmedDates:   []                      // User-confirmed cycle-count dates (excluded from rate)
+    invAdjConfirmedDates:   [],                     // User-confirmed cycle-count dates (excluded from rate)
+    wrSoftMonths:           6,                      // Stock-runway ≥ this AND mt ∈ wrMrpTypes → PURPLE soft (Possible WR)
+    wrHardMonths:           9,                      // Stock-runway ≥ this → PURPLE hard (Likely WR). Lowered from 12 in v2.0.1.
+    wrMrpTypes:             ['PD']                  // MRP types that trigger the WR check at all. PD-only is the safe default (V1 self-corrects via draw-down).
   });
 
   const SCOPE_MODES = ['fleet', 'manual', 'byClassification', 'byVendor', 'parameterSearch'];
@@ -65,7 +68,10 @@
     lumpyCvThreshold:       'Coefficient of variation above this classifies a material as <b>LUMPY</b> (clustered demand, not steady draw-down).',
     lumpyTopWoThreshold:    'If a single WO represents this share or more of total consumption, classify as LUMPY.',
     invAdjSigmaThreshold:   'Standard-deviation threshold for flagging MB51 dates as likely <b>cycle-count / inventory adjustment</b> days. Daily issue-transaction counts above <em>mean + Nσ</em> become candidates the operator can confirm. Default 5σ is conservative; lower this (2–3σ) to surface more candidates, raise it (7–10σ) to flag only extreme spikes.',
-    invAdjConfirmedDates:   'Dates the operator has confirmed as inventory adjustments. Transactions on these dates are excluded from the rate calculation (same mechanic as HCE, but labelled <b>Inv Adj</b>).'
+    invAdjConfirmedDates:   'Dates the operator has confirmed as inventory adjustments. Transactions on these dates are excluded from the rate calculation (same mechanic as HCE, but labelled <b>Inv Adj</b>).',
+    wrSoftMonths:           'Stock-runway threshold (months at P2 rate) above which a material on a watched MRP type is flagged as <b>Possible Working Redundant</b> (PURPLE soft). Default 6 mo.',
+    wrHardMonths:           'Stock-runway threshold (months at P2 rate) above which a material on a watched MRP type is flagged as <b>Likely Working Redundant</b> (PURPLE hard — write-down review). Default 9 mo (lowered from 12 in v2.0.1).',
+    wrMrpTypes:             'MRP types that trigger the Working Redundant check. Comma-separated. Default <code>PD</code> only; V1 is consumption-driven and self-corrects via draw-down. Add codes (e.g. <code>ZE</code>) if the site uses non-standard MRP types that should also be evaluated.'
   });
 
   /* ─── Empty scope (one of each mode pre-shaped) ─────────────────────────── */
@@ -170,6 +176,11 @@
     if (p.lumpyTopWoThreshold < 0 || p.lumpyTopWoThreshold > 1) errors.push('lumpyTopWoThreshold must be 0–1');
     if (p.p1Start && p.p1End && p.p1Start > p.p1End)            errors.push('p1Start > p1End');
     if (!['monthsBased','leadTimeBased'].includes(p.minMaxMethod)) errors.push('minMaxMethod invalid');
+    // WR / PURPLE thresholds (v2.0.1) — guarded so older intakes without the keys still pass
+    if (typeof p.wrSoftMonths === 'number' && p.wrSoftMonths < 0) errors.push('wrSoftMonths cannot be negative');
+    if (typeof p.wrHardMonths === 'number' && p.wrHardMonths < 0) errors.push('wrHardMonths cannot be negative');
+    if (typeof p.wrSoftMonths === 'number' && typeof p.wrHardMonths === 'number' && p.wrHardMonths < p.wrSoftMonths) errors.push('wrHardMonths must be ≥ wrSoftMonths');
+    if (p.wrMrpTypes !== undefined && (!Array.isArray(p.wrMrpTypes) || p.wrMrpTypes.length === 0)) errors.push('wrMrpTypes must be a non-empty array');
     return { ok: errors.length === 0, errors };
   }
 

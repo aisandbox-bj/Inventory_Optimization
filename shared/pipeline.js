@@ -341,7 +341,7 @@
    * outcome is upgraded to ORANGE with a "few events" rationale. RED, GREY,
    * and PURPLE keep their priority (they're already review-priority).
    */
-  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount){
+  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params){
     // ── GREY gates ───────────────────────────────────────────────────────
     if (p2f !== 'OK' || p2r === 0) {
       return finalise({ code:'GREY', action:'Refer for manual review — no recent (P2) consumption', recMin:null, recMax:null }, woCount);
@@ -354,23 +354,30 @@
     }
     const mt = String(mrpType || '').trim().toUpperCase();
 
-    // ── PURPLE — Working Redundant check (PD with surplus stock runway) ──
-    // Runway = months of cover at the P2 rate. PD = fixed Min/Max, so a
-    // surplus of stock indicates the Min/Max are mis-sized or the item
-    // shouldn't be stocked at this level.
-    if (mt === 'PD' && typeof stock === 'number' && stock > 0 && p2r > 0) {
+    // ── PURPLE — Working Redundant check (configurable thresholds, v2.0.1) ─
+    // Runway = months of cover at the P2 rate. Items on a watched MRP type
+    // (default PD) with a surplus runway indicate the Min/Max are mis-sized
+    // or the item shouldn't be stocked at this level. V1 is consumption-driven
+    // and self-corrects; not in the default watch-list.
+    const wrSoft  = (params && typeof params.wrSoftMonths === 'number') ? params.wrSoftMonths : 6;
+    const wrHard  = (params && typeof params.wrHardMonths === 'number') ? params.wrHardMonths : 9;
+    const wrTypes = (params && Array.isArray(params.wrMrpTypes) && params.wrMrpTypes.length)
+                    ? params.wrMrpTypes.map(s => String(s || '').trim().toUpperCase()).filter(Boolean)
+                    : ['PD'];
+
+    if (wrTypes.includes(mt) && typeof stock === 'number' && stock > 0 && p2r > 0) {
       const runway = stock / p2r;
-      if (runway > 12) {
+      if (runway > wrHard) {
         return finalise({
           code:'PURPLE',
-          action:`Likely Working Redundant — ${runway.toFixed(1)} months of stock at P2 rate (>12mo with PD). Review for destocking / write-down.`,
+          action:`Likely Working Redundant — ${runway.toFixed(1)} months of stock at P2 rate (>${wrHard}mo with ${mt}). Review for destocking / write-down.`,
           recMin: rmin, recMax: rmax
         }, woCount);
       }
-      if (runway > 6) {
+      if (runway > wrSoft) {
         return finalise({
           code:'PURPLE',
-          action:`Possible Working Redundant — ${runway.toFixed(1)} months of stock at P2 rate (>6mo with PD). Review stocking necessity.`,
+          action:`Possible Working Redundant — ${runway.toFixed(1)} months of stock at P2 rate (>${wrSoft}mo with ${mt}). Review stocking necessity.`,
           recMin: rmin, recMax: rmax
         }, woCount);
       }
@@ -743,7 +750,7 @@
         const rmax = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
 
         const woCount = countIssueWorkOrders(tx);
-        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount);
+        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params);
         bucketSummary[tl.code] = (bucketSummary[tl.code] || 0) + 1;
         bucketSummary.total++;
         summary[tl.code]  = (summary[tl.code]  || 0) + 1;
