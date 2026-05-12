@@ -211,6 +211,7 @@
     <a href="analysis/analysis.html">Analysis</a>
     <a href="settings/settings.html">Settings</a>
     <a href="record-of-change.html" class="active">RoC</a>
+    <a href="user-manual.html">Manual</a>
   </div>
 </nav>
 
@@ -264,6 +265,13 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="date">2026-05-11</span>
         <span class="tag dev">dev</span>
       </div>
+
+      <h4>User Manual + chart sparse-data fix</h4>
+      <ul>
+        <li>New <a href="user-manual.html">user-manual.html</a> — deep operator manual (TOC + 13 sections) covering quick-start, assessment types, data files / SAP movement-type semantics, scope strategies, Parameter Search, <b>full analysis methodology</b> (net consumption, P1/P2 windows, HCE rules, lumpy/smooth, recommended Min/Max, the 8-rule traffic-light tree, bucketing + MULTI detection), chart anatomy + why charts may not match expectations, Excel deliverable structure, LLM review, troubleshooting, and versioning / rollback.</li>
+        <li><b>Chart bug fixed</b> — earlier versions rendered "no consumption data" when a material's cumulative series collapsed to a single posting date, even though P1/P2 rates and recommendations existed. The cumulative groups by unique date; if all transactions hit one calendar day, only one point existed and the chart bailed. Now the cumulative is padded with a synthetic <code>{p1Start, 0}</code> anchor when needed (and a trailing flat plateau to <code>p2End</code>) so the step line + trend chord always render. The "no consumption" message now reads "no consumption transactions found" and only triggers on a true zero-transactions case.</li>
+        <li>Manual linked from every page's nav.</li>
+      </ul>
 
       <h4>Analysis — full-width material table + Excel-style sortable / filterable headers</h4>
       <ul>

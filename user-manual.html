@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
+     Inventory Optimization App · v1.1.0-dev · released 2026-05-11
+     Repo : https://github.com/aisandbox-bj/Inventory_Optimization
+     RoC  : record-of-change.html
+     This document is a deep-dive user manual — written for the operator
+     (you) and engineering reference, not for client distribution.
+═════════════════════════════════════════════════════════════════════════-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Inventory Optimization · User Manual</title>
+<meta name="app-version" content="1.1.0-dev" />
+<link rel="stylesheet" href="shared/brand-tokens.css" />
+<style>
+.um-shell{ max-width:1140px; margin:0 auto; padding:0 12px 60px; }
+
+.um-hero{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:34px 38px 30px;
+  margin-bottom:24px;
+  position:relative;
+  overflow:hidden;
+}
+.um-hero::before{
+  content:"";position:absolute;width:360px;height:360px;border-radius:50%;
+  background:rgba(31,206,216,0.10);filter:blur(80px);
+  top:-160px;right:-150px;pointer-events:none;z-index:0;
+}
+.um-hero > *{ position:relative;z-index:1; }
+.um-hero .pre{
+  font-family:var(--font-mono);font-size:11px;letter-spacing:2.5px;
+  color:var(--accent);text-transform:uppercase;margin-bottom:12px;
+}
+.um-hero h1{
+  font-family:var(--font-display);font-weight:700;font-size:44px;
+  letter-spacing:3px;line-height:1;text-transform:uppercase;
+  color:var(--text-pri);margin-bottom:12px;
+}
+.um-hero .sub{
+  font-family:var(--font-body);font-size:14px;line-height:1.55;
+  color:var(--text-sec);max-width:780px;
+}
+
+.um-layout{
+  display:grid;
+  grid-template-columns:240px 1fr;
+  gap:26px;
+}
+@media (max-width:980px){ .um-layout{ grid-template-columns:1fr; } .um-toc{ position:relative; top:auto; } }
+
+.um-toc{
+  position:sticky;
+  top:80px;
+  align-self:start;
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:18px 16px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.6px;
+}
+.um-toc .lab{
+  font-size:9.5px;letter-spacing:1.5px;color:var(--text-muted);
+  text-transform:uppercase;margin-bottom:12px;display:block;
+}
+.um-toc a{
+  display:block;color:var(--text-sec);text-decoration:none;
+  padding:5px 8px;border-left:2px solid transparent;
+  margin-bottom:1px;
+}
+.um-toc a:hover{ color:var(--accent); border-left-color:var(--accent); background:rgba(31,206,216,.04); }
+.um-toc a.deep{ padding-left:20px;font-size:10.5px;color:var(--text-muted); }
+
+.um-body{ min-width:0; }
+
+.um-section{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  padding:24px 30px;
+  margin-bottom:18px;
+}
+.um-section h2{
+  font-family:var(--font-display);font-weight:700;font-size:22px;
+  letter-spacing:1.8px;text-transform:uppercase;color:var(--text-pri);
+  margin-bottom:6px;border-bottom:1px solid var(--border-soft);
+  padding-bottom:10px;
+}
+.um-section h2 .num{ color:var(--accent);font-family:var(--font-mono);font-size:13px;margin-right:8px; }
+.um-section h3{
+  font-family:var(--font-heading);font-weight:600;font-size:15px;
+  letter-spacing:1px;color:var(--accent);margin:18px 0 8px;
+  text-transform:uppercase;
+}
+.um-section h4{
+  font-family:var(--font-heading);font-weight:600;font-size:13px;
+  letter-spacing:.6px;color:var(--text-pri);margin:14px 0 6px;
+}
+.um-section p, .um-section li{
+  font-family:var(--font-body);font-size:13.5px;line-height:1.65;
+  color:var(--text-sec);
+}
+.um-section p{ margin-bottom:10px; }
+.um-section ul{ margin:6px 0 12px 22px;padding:0; }
+.um-section li{ margin-bottom:4px; }
+.um-section b{ color:var(--text-pri); }
+.um-section em{ color:var(--accent); font-style:italic; }
+.um-section code{
+  font-family:var(--font-mono);font-size:11.5px;
+  background:rgba(0,0,0,0.30);color:var(--accent);
+  padding:1px 6px;border-radius:2px;
+}
+.um-section pre{
+  background:rgba(0,0,0,0.30);color:var(--text-sec);
+  padding:12px 14px;font-family:var(--font-mono);font-size:11.5px;
+  line-height:1.55;border-left:2px solid var(--accent);
+  overflow-x:auto;margin:8px 0 12px;
+}
+.um-section a{ color:var(--accent); text-decoration:none; }
+.um-section a:hover{ color:var(--accent-glow); text-decoration:underline; }
+
+.um-formula{
+  background:rgba(31,206,216,0.06);
+  border:1px solid rgba(31,206,216,.35);
+  border-left:3px solid var(--accent);
+  padding:14px 18px;
+  margin:10px 0 14px;
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--text-pri);
+  line-height:1.7;
+}
+.um-formula .lab{
+  font-size:9px;letter-spacing:1.5px;
+  color:var(--accent);text-transform:uppercase;margin-bottom:6px;display:block;
+}
+
+.um-table{
+  width:100%;border-collapse:collapse;font-size:12.5px;
+  margin:8px 0 12px;
+}
+.um-table th{
+  background:var(--bg-elevated);color:var(--text-muted);
+  text-align:left;padding:8px 12px;
+  font-family:var(--font-mono);font-weight:500;letter-spacing:1px;
+  text-transform:uppercase;font-size:10px;
+  border-bottom:1px solid var(--border-soft);
+}
+.um-table td{
+  padding:8px 12px;border-bottom:1px solid rgba(155,171,168,.08);
+  color:var(--text-sec);font-family:var(--font-body);
+}
+.um-table td b{ color:var(--text-pri); }
+.um-table .ok{ color:var(--status-ok); font-family:var(--font-mono); }
+.um-table .warn{ color:var(--status-warn); font-family:var(--font-mono); }
+.um-table .crit{ color:var(--status-crit); font-family:var(--font-mono); }
+
+.um-note{
+  background:var(--bg-elevated);
+  border-left:3px solid var(--accent);
+  padding:14px 18px;
+  margin:10px 0;
+  font-family:var(--font-body);font-size:13px;line-height:1.6;
+  color:var(--text-sec);
+}
+.um-note.warn{ border-left-color:var(--status-warn); background:rgba(241,196,15,0.06); }
+.um-note.crit{ border-left-color:var(--status-crit); background:rgba(231,76,60,0.06); }
+.um-note .lab{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:1.3px;
+  color:var(--accent);text-transform:uppercase;margin-bottom:5px;display:block;
+}
+.um-note.warn .lab{ color:var(--status-warn); }
+.um-note.crit .lab{ color:var(--status-crit); }
+
+.tl-pill{
+  display:inline-block;padding:2px 9px;font-family:var(--font-mono);
+  font-size:10px;letter-spacing:1.3px;font-weight:700;
+  text-transform:uppercase;border-radius:2px;margin-right:4px;
+}
+.tl-pill.GREEN{ background:#00B050;color:#fff; }
+.tl-pill.BLUE { background:#3498DB;color:#fff; }
+.tl-pill.ORANGE{background:#FF8C00;color:#fff; }
+.tl-pill.RED  { background:#C00000;color:#fff; }
+.tl-pill.GREY { background:#BFBFBF;color:#000; }
+</style>
+</head>
+<body>
+
+<nav class="appnav">
+  <div class="brand">
+    <span class="dot"></span>
+    Inventory Optimization
+    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v1.1.0-dev · Manual</a>
+  </div>
+  <div class="links">
+    <a href="index.html">Dashboard</a>
+    <a href="intake/intake.html">Intake</a>
+    <a href="analysis/analysis.html">Analysis</a>
+    <a href="settings/settings.html">Settings</a>
+    <a href="record-of-change.html">RoC</a>
+    <a href="user-manual.html" class="active">Manual</a>
+  </div>
+</nav>
+
+<main class="um-shell">
+
+  <section class="um-hero">
+    <div class="pre">Operator manual · internal · v1.1.0-dev</div>
+    <h1>Inventory Optimization · User Manual</h1>
+    <div class="sub">
+      A complete walkthrough of how the tool works — from drag-and-drop intake to Excel deliverable —
+      with the analytical methodology spelled out line-by-line. Written for the operator's eyes,
+      not the client deliverable. When something on the screen doesn't match expectations,
+      this is the document that explains why.
+    </div>
+  </section>
+
+  <div class="um-layout">
+
+    <aside class="um-toc">
+      <span class="lab">Contents</span>
+      <a href="#overview">1 · Overview</a>
+      <a href="#quickstart">2 · Quick start</a>
+      <a href="#assessment-types">3 · Assessment types</a>
+      <a href="#data-files">4 · Data files &amp; SAP exports</a>
+      <a href="#scope-selection">5 · Scope selection</a>
+      <a href="#parameter-search">6 · Parameter Search</a>
+      <a href="#methodology">7 · Analysis methodology ★</a>
+      <a class="deep" href="#m-net">7a · Net consumption</a>
+      <a class="deep" href="#m-periods">7b · P1 + P2 windows</a>
+      <a class="deep" href="#m-hce">7c · HCE detection</a>
+      <a class="deep" href="#m-lumpy">7d · Lumpy / Smooth</a>
+      <a class="deep" href="#m-minmax">7e · Recommended Min/Max</a>
+      <a class="deep" href="#m-tl">7f · Traffic-light tree</a>
+      <a class="deep" href="#m-buckets">7g · Buckets &amp; MULTI</a>
+      <a href="#chart">8 · Charts — what they show</a>
+      <a href="#analysis-ui">9 · Analysis page UI</a>
+      <a href="#excel">10 · Excel deliverable</a>
+      <a href="#llm">11 · LLM review surface</a>
+      <a href="#troubleshooting">12 · Troubleshooting</a>
+      <a href="#versions">13 · Versions &amp; rollback</a>
+    </aside>
+
+    <div class="um-body">
+
+      <!-- ───────────── 1 · Overview ───────────── -->
+      <section class="um-section" id="overview">
+        <h2><span class="num">01</span>Overview</h2>
+        <p>The Inventory Optimization App replaces the legacy Python-script + Excel-handoff workflow with a self-contained, browser-only tool. Drop SAP exports on the intake page, the app validates them, lets you pick a scope, runs the consumption-profiling pipeline, lets you review per-material findings (with optional LLM second opinion), and ships an Excel pack matching the legacy deliverable shape.</p>
+        <p>The app is <b>deterministic</b>. Same inputs + same parameters always produce the same canonical JSON, the same recommendations, and the same Excel output. The LLM, when invoked, only annotates — it never changes the numbers.</p>
+        <p>Architecture:</p>
+        <ul>
+          <li><b>Intake engine</b> (<code>intake/intake.html</code>) — upload, schema-map, DQ-gate, scope, parameter, review, export.</li>
+          <li><b>Canonical JSON</b> (<code>shared/canonical-schema.js</code>) — the contract between intake and analysis. Versioned (currently <code>1.0.0</code>).</li>
+          <li><b>Analysis engine</b> (<code>analysis/analysis.html</code>) — consumes the JSON, runs the pipeline, surfaces per-material detail, hosts the LLM review, exports Excel.</li>
+          <li><b>Settings</b> (<code>settings/settings.html</code>) — parameter defaults, LLM keys, alias overrides, factory reset.</li>
+        </ul>
+      </section>
+
+      <!-- ───────────── 2 · Quick start ───────────── -->
+      <section class="um-section" id="quickstart">
+        <h2><span class="num">02</span>Quick start</h2>
+        <ol>
+          <li>From the Dashboard, click <b>Intake</b>.</li>
+          <li><b>Step 0 — Assessment type.</b> Pick one of UNIT/FLOC, User list, or Parameter Search. Non-applicable upload zones grey out.</li>
+          <li><b>Step 1 — Upload.</b> Drag SAP exports onto the highlighted drop zones. Each card shows row counts and cross-file match percentages.</li>
+          <li><b>Step 2 — Schema mapping.</b> Confirm auto-mapped headers; manually override any unmatched columns.</li>
+          <li><b>Step 3 — Data Quality gate.</b> Green = continue, amber = warnings shown but continue, red = halt and fix.</li>
+          <li><b>Step 4 — Scope.</b> For UNIT/FLOC, pick fleet model(s) / classification / vendor. For Parameter Search, configure filters in Step 4b.</li>
+          <li><b>Step 5 — Parameters.</b> Per-run override of saved defaults. Reset button reverts overrides without touching Settings.</li>
+          <li><b>Step 6 — Final scope summary.</b> Confirms exactly how many materials will be analyzed, bucket-by-bucket. Mismatch advisories shown.</li>
+          <li><b>Step 7 — Review &amp; Export.</b> Save to localStorage, download <code>.json</code>, or "Open in Analysis Engine →" to run the pipeline.</li>
+          <li>On the Analysis page: pick a bucket, filter / sort the material list, click a row for the detail panel. Use <b>Export this bucket</b> for the per-bucket workbook, <b>Export ALL (combined)</b> for the master index.</li>
+        </ol>
+      </section>
+
+      <!-- ───────────── 3 · Assessment types ───────────── -->
+      <section class="um-section" id="assessment-types">
+        <h2><span class="num">03</span>Assessment types</h2>
+        <p>Step 0 picks the analysis flavour. This determines which SAP exports are required and which scope strategies are valid downstream.</p>
+        <table class="um-table">
+          <thead><tr><th>Type</th><th>Required inputs</th><th>Scope strategy</th><th>Use it when…</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>UNIT / FLOC</b></td>
+              <td>MB51 · IW39 · Fleet Master · Inventory Master</td>
+              <td>Fleet model / Classification / Vendor</td>
+              <td>Fleet-driven assessment. Filter MB51 through IW39 to fleet-relevant work orders only.</td>
+            </tr>
+            <tr>
+              <td><b>User list</b></td>
+              <td>MB51 · Inventory Master · user list (CSV/XLSX)</td>
+              <td>Manual (auto-populated from list)</td>
+              <td>Running the pipeline against a known list of materials. No fleet filter applied.</td>
+            </tr>
+            <tr>
+              <td><b>Parameter search</b></td>
+              <td>MB51 · Inventory Master</td>
+              <td>Parameter Search filter panel (Step 4b)</td>
+              <td>Discovering a set of materials by Inv Master attributes (Mat Group, Manufacturer, Value, Qty, etc.) plus MB51 movement.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ───────────── 4 · Data files ───────────── -->
+      <section class="um-section" id="data-files">
+        <h2><span class="num">04</span>Data files &amp; SAP exports</h2>
+
+        <h3>MB51 — Material Movements</h3>
+        <p>The transactional backbone — every goods issue and return.</p>
+        <p>Required columns (alias-resolved, case-insensitive, punctuation-stripped):</p>
+        <ul>
+          <li><code>postingDate</code> — Posting Date / Pstng Date / Date</li>
+          <li><code>order</code> — Order / Order Number (joins to IW39)</li>
+          <li><code>material</code> — Material / Material Number</li>
+          <li><code>description</code> — Material Description / Material descr.</li>
+          <li><code>quantity</code> — Quantity / Qty (always taken as <em>absolute value</em>; sign comes from movement type)</li>
+          <li><code>movementType</code> — Movement Type / MvT</li>
+        </ul>
+        <p>Movement types the pipeline recognises:</p>
+        <table class="um-table">
+          <thead><tr><th>Code</th><th>Meaning</th><th>Sign</th><th>Included in</th></tr></thead>
+          <tbody>
+            <tr><td><b>261</b></td><td>Goods issue to order</td><td class="warn">+ (consumption)</td><td>P1, P2, cumulative</td></tr>
+            <tr><td><b>201</b></td><td>Goods issue to cost center</td><td class="warn">+ (consumption)</td><td>P1, P2, cumulative</td></tr>
+            <tr><td><b>262</b></td><td>Reversal of 261 (return)</td><td class="ok">− (return)</td><td>P1, P2, cumulative</td></tr>
+            <tr><td><b>202</b></td><td>Reversal of 201 (return)</td><td class="ok">− (return)</td><td>P1, P2, cumulative</td></tr>
+            <tr><td colspan="4" style="color:var(--text-muted);">All other movement types are dropped silently during processing (transfers, receipts, etc.).</td></tr>
+          </tbody>
+        </table>
+        <p>The DQ gate warns if the file spans &lt; 12 months, if 261 is missing, or if 262 is missing (in which case net = gross).</p>
+
+        <h3>IW39 — Work Orders</h3>
+        <p>The bridge from MB51 transactions to fleet equipment. Required only for UNIT/FLOC assessment type.</p>
+        <ul>
+          <li><code>order</code> — joins to MB51</li>
+          <li><code>sortField</code> — equipment unit (e.g. <code>TD403</code>); joins to Fleet Master</li>
+          <li><code>basicStartDate</code> — used to filter out future-dated orders</li>
+          <li><code>description</code> — WO description, surfaces in HCE annotations on charts</li>
+        </ul>
+
+        <h3>Fleet Master</h3>
+        <p>Equipment-unit roster. Required for UNIT/FLOC.</p>
+        <ul>
+          <li><code>model</code> — fleet model code (e.g. <code>775G</code>, <code>D9T</code>); defines buckets</li>
+          <li><code>sortField</code> — equipment unit, bridges through to IW39</li>
+          <li><code>unitType</code>, <code>manufacturer</code>, <code>functLocDescription</code> — display only</li>
+        </ul>
+
+        <h3>Inventory Master</h3>
+        <p>Stock + MRP settings + classification metadata. Required for all three assessment types.</p>
+        <ul>
+          <li><code>material</code> — join key against MB51 materials</li>
+          <li><code>totQtyOh</code> — current stock on hand (drives Runway @ P2)</li>
+          <li><code>totValueOh</code> — current on-hand value (optional, used in Parameter Search)</li>
+          <li><code>mrpInd</code> — MRP type (PD, V1, ZE…) — feeds the traffic-light rules</li>
+          <li><code>mrpMin</code> / <code>mrpMax</code> — current MRP min/max</li>
+          <li><code>inventoryType</code> — NORM / INSP / etc. — filter dimension</li>
+          <li><code>materialGroup</code> / <code>manufacturer</code> — Parameter Search dimensions; surfaced on per-material Excel sheet</li>
+          <li><code>primaryVendor</code> — optional vendor fallback</li>
+        </ul>
+        <p>Missing optional columns degrade gracefully — that filter dimension just shows "no values available".</p>
+
+        <h3>Material → Vendor mapping</h3>
+        <p>Conditional. Required <em>only</em> when scope mode is "By Vendor".</p>
+
+        <h3>Lead Times (deferred)</h3>
+        <p>Per-material lead-time + safety-stock data. Optional. Enables <code>leadTimeBased</code> Min/Max method when present. The data isn't typically available yet; v1 schema accommodates it for the future without breaking changes.</p>
+      </section>
+
+      <!-- ───────────── 5 · Scope selection ───────────── -->
+      <section class="um-section" id="scope-selection">
+        <h2><span class="num">05</span>Scope selection</h2>
+        <p>For UNIT/FLOC assessments, the scope tab drives which materials get bucketed and how.</p>
+        <h3>Fleet</h3>
+        <p>Pick one or more fleet model codes. MB51 is filtered to transactions whose <code>order</code> matches an IW39 row whose <code>sortField</code> matches a Fleet Master unit attached to a selected model. <b>Each fleet model becomes its own bucket.</b> Materials qualifying on 2+ models are routed to a <code>MULTI</code> cross-fleet bucket (see §7g).</p>
+        <h3>By Classification</h3>
+        <p>Inventory-Master-driven filter: Inventory Type ∈ {…} AND MRP classifier ∈ {…} AND movement amount in [min, max]. All filters AND together. Single bucket.</p>
+        <h3>By Vendor</h3>
+        <p>Multi-select of vendors from the Material→Vendor mapping. <b>One bucket per vendor.</b> Materials present under 2+ vendors go to MULTI.</p>
+      </section>
+
+      <!-- ───────────── 6 · Parameter Search ───────────── -->
+      <section class="um-section" id="parameter-search">
+        <h2><span class="num">06</span>Parameter Search</h2>
+        <p>Only visible when assessment type = Parameter Search. PBI-style filter builder.</p>
+        <h3>Dimensions</h3>
+        <ul>
+          <li><b>MB51 movement</b> — net consumption over the analysis window (numeric)</li>
+          <li><b>Material Group</b> — from Inventory Master (string)</li>
+          <li><b>Manufacturer</b> — from Inventory Master (string)</li>
+          <li><b>Value on hand</b> — <code>totValueOh</code> from Inventory Master (numeric)</li>
+          <li><b>Qty on hand</b> — <code>totQtyOh</code> from Inventory Master (numeric)</li>
+          <li><b>Inventory Type</b> — from Inventory Master (string)</li>
+          <li><b>MRP indicator</b> — from Inventory Master (string)</li>
+        </ul>
+        <h3>Filter modes</h3>
+        <p>Each filter card has a <b>Simple</b> mode and an <b>Advanced</b> mode:</p>
+        <ul>
+          <li><b>Simple, string:</b> chip multi-select of distinct values</li>
+          <li><b>Simple, number:</b> min / max numeric inputs</li>
+          <li><b>Advanced, string:</b> comma-separated value list, or regex (regex overrides values when set)</li>
+          <li><b>Advanced, number:</b> same min / max with precise decimals</li>
+        </ul>
+        <p>Multiple filters AND together — a material must satisfy <em>every</em> active filter to qualify. Live preview shows matching material count, total net consumption, and total on-hand value.</p>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════
+           7 · ANALYSIS METHODOLOGY (★)
+           ═══════════════════════════════════════════════════════════════ -->
+      <section class="um-section" id="methodology">
+        <h2><span class="num">07</span>Analysis methodology ★</h2>
+        <p>This is the section that matters when an output doesn't match expectations. Every number on the analysis page and in the Excel deliverable comes from one of the formulas below. Source: ports of <code>scripts/02_extract_model.py</code>, <code>03_build_charts.py</code>, <code>04_mrp_analysis.py</code> — semantics preserved line-for-line.</p>
+
+        <!-- ── 7a Net consumption ── -->
+        <h3 id="m-net">7a · Net consumption</h3>
+        <p>The atomic unit of measurement. For every MB51 row:</p>
+        <div class="um-formula">
+          <span class="lab">Net consumption rule</span>
+          IF movementType ∈ {261, 201} → <b>+|quantity|</b> (issue)<br>
+          IF movementType ∈ {262, 202} → <b>−|quantity|</b> (return)<br>
+          ELSE → <b>row dropped</b>
+        </div>
+        <p>Aggregated per material, this gives the <b>Total Consumed</b> column in the Index sheet and the chart's Y-axis (cumulative).</p>
+        <p>Notes:</p>
+        <ul>
+          <li>Quantity is taken as absolute value, then signed by movement type. If SAP exports quantities already signed, this is still correct because <code>|q|</code> reverses sign back to magnitude.</li>
+          <li>Negative net consumption (more returns than issues over the period) → flagged as <code>NEGATIVE_NET</code>; rate forced to 0 and material routes to <span class="tl-pill GREY">GREY</span> for manual review.</li>
+          <li>Materials with zero qualifying transactions get <code>NO_DATA</code>.</li>
+        </ul>
+
+        <!-- ── 7b Periods ── -->
+        <h3 id="m-periods">7b · P1 baseline window &amp; P2 rolling window</h3>
+        <p>Two windows are computed per material:</p>
+        <table class="um-table">
+          <thead><tr><th></th><th>Window definition</th><th>Months divisor</th><th>Used for</th></tr></thead>
+          <tbody>
+            <tr><td><b>P1</b></td><td>Fixed: <code>p1Start</code> → <code>p1End</code> from parameters (default 2025-04-01 → 2025-08-31)</td><td>5 (hard-coded)</td><td>Baseline rate to compare against P2 (rate-change %).</td></tr>
+            <tr><td><b>P2</b></td><td>Rolling: <code>(runDate − p2Months)</code> → <code>runDate</code> (default 3 months back from run date)</td><td><code>parameters.p2Months</code></td><td><b>The Min/Max recommendation driver.</b> P2 reflects current consumption.</td></tr>
+          </tbody>
+        </table>
+        <div class="um-formula">
+          <span class="lab">Period rate formula</span>
+          rate = (Σ issues − Σ returns) ÷ months<br>
+          rate flag = OK | NO_DATA | NEGATIVE_NET
+        </div>
+        <p>If P1 rate is 0 and P2 rate is positive, this is a <em>new draw</em> — the material started consuming inside the recent window. Rate Change shows as <code>N/A</code> because there's no P1 baseline to divide by.</p>
+
+        <!-- ── 7c HCE ── -->
+        <h3 id="m-hce">7c · High Consumption Event (HCE) detection</h3>
+        <p>A single work order is flagged as an HCE inside a period if <b>either</b>:</p>
+        <div class="um-formula">
+          <span class="lab">HCE rules — period-scoped</span>
+          A) WO qty ≥ <code>hcePctThreshold</code> × (period total)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp; default: 50% of the period<br><br>
+          B) WO qty ≥ <code>hceMultThreshold</code> × (avg WO qty in period)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp; default: 3 × average
+        </div>
+        <p>When an HCE is detected in P2, an <b>Adjusted P2 Rate</b> is also computed by recomputing the period rate with the HCE work order(s) excluded. This gives a "but what would the rate be without that one big spike" answer. The official P2 Rate is <em>unchanged</em> — both are reported.</p>
+        <p>HCE detection runs separately for P1 and P2. The reference Excel deliverable shows P2 HCEs only (because they affect the Min/Max recommendation), but P1 HCEs are preserved in the per-material JSON output for completeness.</p>
+
+        <!-- ── 7d Lumpy/Smooth ── -->
+        <h3 id="m-lumpy">7d · Lumpy vs Smooth classification</h3>
+        <p>Operates on all qualifying transactions in the analysis window (not period-scoped). A material is <code>LUMPY</code> if <b>any</b> of:</p>
+        <div class="um-formula">
+          <span class="lab">Lumpy rules — full-window scope</span>
+          (A) top-WO share ≥ <code>lumpyTopWoThreshold</code> (default 40%)<br>
+          (B) coefficient of variation (CV) &gt; <code>lumpyCvThreshold</code> (default 1.2)<br>
+          (C) WO count ≤ 3 AND total qty ≥ <code>threshold</code> (catches small-n big-batch materials that CV under-rates)
+        </div>
+        <p>Otherwise the material is <code>SMOOTH</code>. The classification drives the Recommended MRP Type (see 7e) — Lumpy materials are recommended for <code>V1</code> (consumption-driven) over <code>PD</code> (fixed Min/Max).</p>
+
+        <!-- ── 7e Min/Max ── -->
+        <h3 id="m-minmax">7e · Recommended Min / Max</h3>
+        <p>Two methods are available; <code>monthsBased</code> is the v1 default. <code>leadTimeBased</code> is roadmap, requires per-material lead-time data not yet typically available.</p>
+        <div class="um-formula">
+          <span class="lab">monthsBased method (default)</span>
+          recMin = round(P2 rate × <code>minMonths</code>)&nbsp;&nbsp;&nbsp; // default minMonths = 3<br>
+          recMax = round(P2 rate × <code>maxMonths</code>)&nbsp;&nbsp;&nbsp; // default maxMonths = 6
+        </div>
+        <div class="um-formula">
+          <span class="lab">leadTimeBased method (roadmap)</span>
+          recMin = round(P2 rate × leadTimeMonths + safetyStock)<br>
+          recMax = round(recMin + P2 rate × orderCycleMonths)
+        </div>
+        <p>If P2 rate is 0 / NO_DATA / NEGATIVE_NET, both values are <code>null</code> and the material lands in <span class="tl-pill GREY">GREY</span>.</p>
+        <p>The <b>Recommended MRP Type</b> on the per-material Excel sheet is derived: <code>V1</code> when the pattern is LUMPY <em>or</em> any HCE was flagged in P2 (a fixed Min/Max would be a poor fit), otherwise mirrors the current MRP type. This is a heuristic — the human reviewer can override.</p>
+
+        <!-- ── 7f Traffic light ── -->
+        <h3 id="m-tl">7f · Traffic-light decision tree (8 rules, priority order)</h3>
+        <p>The <code>assess()</code> function evaluates rules in order; the first matching rule wins.</p>
+        <table class="um-table">
+          <thead><tr><th>#</th><th>Condition</th><th>Result</th><th>Action shown</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>P2 flag ≠ OK OR P2 rate = 0</td><td><span class="tl-pill GREY">GREY</span></td><td>Refer for manual review — no recent (P2) consumption</td></tr>
+            <tr><td>2</td><td>MRP type = NOT IN MASTER</td><td><span class="tl-pill GREY">GREY</span></td><td>Material missing from Inventory Master — exclude or fix master first</td></tr>
+            <tr><td>3</td><td>Total &lt; threshold</td><td><span class="tl-pill GREY">GREY</span></td><td>Below qualifying threshold (default 10 units / window)</td></tr>
+            <tr><td>4</td><td>MRP type ∈ {ZE, KP, …} (non-MRP-driven)</td><td><span class="tl-pill GREY">GREY</span></td><td>Manual MRP type — recommendation not applicable</td></tr>
+            <tr><td>5</td><td>Current Min &amp; Max both null/zero</td><td><span class="tl-pill ORANGE">ORANGE</span></td><td>Set Min/Max to {recMin} / {recMax}</td></tr>
+            <tr><td>6</td><td>Recommended differs &gt; ±20% from current</td><td><span class="tl-pill RED">RED</span></td><td>Material change required — review with planner</td></tr>
+            <tr><td>7</td><td>Recommended differs within ±20%</td><td><span class="tl-pill BLUE">BLUE</span></td><td>Minor tweak — adjust Min to {recMin} or Max to {recMax}</td></tr>
+            <tr><td>8</td><td>All criteria within tolerance</td><td><span class="tl-pill GREEN">GREEN</span></td><td>Current settings adequate — no action</td></tr>
+          </tbody>
+        </table>
+        <p>The traffic-light value is what colours the cell in Excel + on the analysis page. The Action Required text is rendered verbatim from the rule.</p>
+
+        <!-- ── 7g Buckets ── -->
+        <h3 id="m-buckets">7g · Buckets, MULTI detection, and the analysis loop</h3>
+        <p>"Bucket" is the analysis unit. The pipeline runs the full assessment (period rates → HCE → lumpy → traffic light) once <em>per material per bucket</em>.</p>
+        <p>Bucketing strategy:</p>
+        <ul>
+          <li><b>Fleet</b> — one bucket per fleet model. Plus a <code>MULTI</code> bucket containing materials that qualify on 2+ models. MULTI materials are <em>removed</em> from the per-model buckets to avoid double-counting.</li>
+          <li><b>Manual / User list</b> — single bucket.</li>
+          <li><b>By Classification</b> — single bucket.</li>
+          <li><b>By Vendor</b> — one bucket per vendor. Plus a MULTI bucket for materials present under 2+ vendors. Same de-duplication rule.</li>
+          <li><b>Parameter Search</b> — single bucket whose materials list is exactly the resolved filter intersection.</li>
+        </ul>
+        <p>Multi-model qualification rule: a material's net consumption ≥ <code>threshold</code> in <em>each</em> of 2+ models. The MULTI bucket's transactions are the union of that material's transactions across all qualifying models.</p>
+      </section>
+
+      <!-- ───────────── 8 · Charts ───────────── -->
+      <section class="um-section" id="chart">
+        <h2><span class="num">08</span>Charts — what they show and why some look the way they do</h2>
+
+        <h3>The cumulative consumption chart</h3>
+        <p>X axis: time, spanning the full analysis window (typically the MB51 export range). Y axis: <b>cumulative net consumption</b> (units), starting at 0 on the left.</p>
+        <ul>
+          <li><b>Amber step line</b> — actual cumulative net consumption over time. Steps up on issue dates, down on return dates. Built from MB51, grouped by unique posting date.</li>
+          <li><b>Cyan dashed chord</b> — P1 trend. Connects (P1 start, cumulative at P1 start) → (P1 end, cumulative at P1 end). The slope equals the P1 rate; the label shows the rate.</li>
+          <li><b>Green dashed chord</b> — P2 trend. Same construction over the P2 window. Labelled with P2 rate.</li>
+          <li><b>Filled circles</b> at the start and end of each trend chord — these mark the actual cumulative values at the period endpoints. The chord is literally drawn between two points on the cumulative curve, so the slope is the average net consumption rate over that period.</li>
+          <li><b>Background tinting</b> — cyan strip = P1 window; green strip = P2 window.</li>
+          <li><b>WO annotations</b> — top-3 HCE events by quantity get a marker dot + leader line + label (WO number, description, equipment, qty).</li>
+          <li><b>LUMPY badge</b> — top-left, only when the material was classified LUMPY.</li>
+          <li><b>Legend</b> — top-right.</li>
+        </ul>
+
+        <h3>Why a chart might not render the expected shape</h3>
+        <div class="um-note warn">
+          <span class="lab">Known issue addressed in v1.1.0-dev</span>
+          Prior to v1.1.0-dev, the chart bailed with the message <em>"no consumption data"</em> when the material's cumulative series collapsed to a single posting date — even though P1, P2 rates and recommendations all showed numbers. This was a real bug, not a data issue, and it's fixed.
+        </div>
+        <h4>The single-date collapse — why the bug existed</h4>
+        <p>The cumulative series is built by grouping transactions by <em>unique posting date</em>. If a material had:</p>
+        <ul>
+          <li>One work order with 12 line items all posted on the same date — that's one cumulative point.</li>
+          <li>Multiple WOs that happened to share the same posting date — still one cumulative point.</li>
+        </ul>
+        <p>The chart's polyline needs at least two points to draw a step line. The rates (P1 / P2) bypass this problem entirely because they sum quantities directly without grouping by date.</p>
+        <h4>The fix</h4>
+        <p>Cumulative-series padding now applies automatically:</p>
+        <ul>
+          <li>If the first cumulative point's date is after the P1 start AND its value isn't already 0, a synthetic <code>{date: p1Start, cum: 0}</code> point is prepended.</li>
+          <li>If the last cumulative point's date is before the P2 end, a trailing flat <code>{date: p2End, cum: lastValue}</code> point is appended so the chart shows the post-event plateau.</li>
+          <li>If, after both passes, only one point remains (genuinely a single date with no later flat tail), the synthetic 0-point is added regardless so the step line has somewhere to step from.</li>
+        </ul>
+        <p>The empty-state message now reads "no consumption transactions found" and only triggers when <em>zero</em> qualifying transactions exist for the material — a true data-absence case, not a date-collapse case.</p>
+
+        <h3>Other appearance quirks worth knowing</h3>
+        <ul>
+          <li><b>Trend chord "looks too low"</b> — earlier versions anchored the trend at the cumulative value <em>just before</em> the period started; if there was a big jump on day 1 of the period, the trend visually started below the curve. Since v1.0.0, trends anchor on actual cumulative values at both endpoints — the chord is a straight line between two points on the curve, not a projection from the pre-period level.</li>
+          <li><b>P2 chord with no P1 data</b> — if P1 flag ≠ OK, only the P2 chord renders. The chart still draws; the P1 background tint just sits empty.</li>
+          <li><b>Cumulative goes <em>down</em></b> — happens when a return (262/202) hits before the next issue. Y axis extends below 0 if cumulative ever turns negative.</li>
+          <li><b>Lone tall step at the right edge</b> — typical for a material whose only consumption was a single recent rebuild WO. The chord still shows the rate; the badge will read LUMPY.</li>
+        </ul>
+      </section>
+
+      <!-- ───────────── 9 · Analysis page UI ───────────── -->
+      <section class="um-section" id="analysis-ui">
+        <h2><span class="num">09</span>Analysis page UI</h2>
+        <h3>Layout</h3>
+        <p>Loaded JSON banner → pipeline status with TL summary tiles → bucket tabs → full-width material list → material detail panel below the list → export actions at the bottom. Detail panel renders only when a material is selected.</p>
+        <h3>Material list table</h3>
+        <p>Columns: <b>TL · Material · Description · Total · P1/mo · P2/mo · Rec Min · Rec Max · MRP · Pattern</b>.</p>
+        <p>Every column header has:</p>
+        <ul>
+          <li><b>Sort label</b> — click to sort asc/desc on that column. Sort indicator (↓ / ↑) appears next to the label.</li>
+          <li><b>Filter caret (▾)</b> — opens an Excel-style popover. Three flavours by column type:
+            <ul>
+              <li><b>Set picker</b> (TL · Material · MRP · Pattern) — checkbox list of distinct values, with Select all / Clear / Apply.</li>
+              <li><b>Range picker</b> (Total · P1/mo · P2/mo · Rec Min · Rec Max) — numeric min / max inputs.</li>
+              <li><b>Text contains</b> (Description) — substring search.</li>
+            </ul>
+          </li>
+        </ul>
+        <p>Active filter caret highlights in cyan with a border. Filters AND together with the TL pill filters and the toolbar search. Bucket switch clears all column filters. Footer below the table reads "X of Y materials shown".</p>
+        <h3>Material detail panel</h3>
+        <p>Pill (TL colour), description, action banner, chart, stat grid (P1 / P2 / Adj P2 / Rate Change / Total / Pattern / Stock / MRP / Current Min/Max / Rec Min/Max), HCE table (if any), LLM review button + result.</p>
+        <h3>Export actions</h3>
+        <ul>
+          <li><b>Export this bucket</b> — per-bucket reference-matched workbook (see §10).</li>
+          <li><b>Export ALL (combined)</b> — single workbook with Master Index, per-bucket sheets, cross-bucket Summary.</li>
+          <li><b>Export all (separate files)</b> — one workbook per bucket, individual downloads.</li>
+        </ul>
+      </section>
+
+      <!-- ───────────── 10 · Excel deliverable ───────────── -->
+      <section class="um-section" id="excel">
+        <h2><span class="num">10</span>Excel deliverable structure</h2>
+        <p>Per-bucket workbook (reference shape — matches <code>775G_Analysis.xlsx</code>):</p>
+        <h3>Index sheet</h3>
+        <ul>
+          <li><b>Row 1</b>: title merged A1:Q1 — <code>{bucket} — Consumption Profile &amp; MRP Assessment | P1: … | P2: … | Run: … | Rates: full MB51 (261+201 issues, 262+202 returns)</code>. Navy fill, white bold.</li>
+          <li><b>Row 2</b>: 17-column header — Material No. / Material Description / Total Consumed / P1 Rate (u/mo) / P2 Rate (u/mo) / Rate Change % / Current Stock / MRP Type / Current Min / Current Max / Recommended Min / Recommended Max / Traffic Light / Action Required / HCE Flag (P2) / Adj P2 Rate (excl HCE) / Multi-Model Flag. Frozen at row 2. <b>AutoFilter active on the header row</b> — every column has Excel's native filter dropdown.</li>
+          <li><b>Material No. cells (column A)</b> are hyperlinks to the corresponding per-material sheet. Cyan blue underline styling.</li>
+          <li><b>Traffic-light cells (column M)</b> are colour-filled green / blue / orange / red / grey, bold white text (or black for grey).</li>
+          <li><b>HCE columns (O, P)</b> amber-tinted when an HCE was flagged in P2.</li>
+          <li>Row striping on data rows; thin grey borders throughout.</li>
+        </ul>
+        <h3>Per-material sheet</h3>
+        <p>Sheet name = material number. Layout:</p>
+        <ul>
+          <li><b>Row 1</b>: <code>← Index</code> back-link in B1:C1 merged, hyperlink to <code>'Index'!A1</code>.</li>
+          <li><b>Row 2</b>: title merged B2:D2 — <code>{material} — {description}</code>. Navy fill.</li>
+          <li><b>Row 3</b>: Field / Value / Notes header. Dark grey fill.</li>
+          <li><b>Rows 4–24</b>: 21-row Field/Value/Notes table — Material No., Description, Material Group, Manufacturer, Multi-Model Flag, Total Consumed, P1 Net Qty, P1 Rate, P2 Net Qty, P2 Rate, Adj P2 Rate, Rate Change P1→P2, Current Stock, Runway @ P2, MRP Type, Current Min, Current Max, Rec Min, Rec Max, Traffic Light, Action Required. Striped rows; Traffic Light value cell colour-filled; HCE-adjacent rows amber-tinted.</li>
+          <li><b>Row 27</b>: <code>High Consumption Events — P2</code> header (merged B27:D27, orange fill).</li>
+          <li><b>Row 28+</b>: WO table — Work Order / Date / Equipment / Qty / % of P2 / Reason (cols B–G). Amber-tinted rows. If no HCE: shows "— no high-consumption events flagged in P2 —".</li>
+          <li><b>Row 31+</b>: <code>MRP Settings Comparison</code> header. Then a 3-row Current vs Recommended table (MRP Type · Min · Max). Rows where Recommended differs from Current are amber-tinted.</li>
+          <li><b>Chart image</b>: ~1100 × 470 px embedded at the F2 anchor.</li>
+        </ul>
+        <h3>Summary + Run sheets</h3>
+        <p>Two utility sheets per workbook — TL count summary and run-metadata block (parameters, dates, exported-at timestamp).</p>
+        <h3>Combined workbook (Export ALL)</h3>
+        <p>Single file with Master Index (every material across every bucket, bucket name as first column, AutoFilter active) + cross-bucket Summary (per-bucket TL counts + totals) + Run metadata. Lighter than per-bucket workbooks (no per-material chart sheets) so it opens fast for comparison views.</p>
+      </section>
+
+      <!-- ───────────── 11 · LLM ───────────── -->
+      <section class="um-section" id="llm">
+        <h2><span class="num">11</span>LLM review surface</h2>
+        <p>Provider-agnostic. Configure on the Settings page: pick provider (Anthropic / OpenAI), paste API key, pick model (model list is fetched dynamically from the provider).</p>
+        <p>On a material's detail panel, "Run LLM review" captures the rendered chart as PNG, sends it to the chosen provider's chat-completions endpoint with a multimodal input (image + structured prompt including the material's stats and current recommendation), and parses the JSON response:</p>
+        <pre>{
+  "verdict": "ok" | "tweak" | "review",
+  "notes":   "free-form analyst notes",
+  "suggestedEdits": [
+    { "field": "parameters.threshold", "newValue": 15, "rationale": "…" }
+  ]
+}</pre>
+        <p>Suggested edits are <em>not</em> applied automatically — they appear as a list in the LLM panel; you decide what to action.</p>
+        <p><b>Browser CORS:</b> Anthropic requires the <code>anthropic-dangerous-direct-browser-access: true</code> header (sent automatically). OpenAI accepts in-browser keys directly. Both expose the key to the page — fine for personal / internal use; route through a server proxy if ever shipped client-side.</p>
+        <p>If the call fails with "Failed to fetch", you likely opened the page via <code>file://</code> — serve over HTTP instead: <code>cd App/v1 &amp;&amp; python -m http.server 8000</code>.</p>
+      </section>
+
+      <!-- ───────────── 12 · Troubleshooting ───────────── -->
+      <section class="um-section" id="troubleshooting">
+        <h2><span class="num">12</span>Troubleshooting</h2>
+
+        <div class="um-note">
+          <span class="lab">Chart shows "no consumption transactions found"</span>
+          The material has zero qualifying MB51 transactions (no rows of types 261/201/262/202). Common causes:
+          ① wrong movement-type filter on the SAP export;
+          ② case mismatch in material number between MB51 and Inventory Master;
+          ③ all transactions in the file are non-issue types (e.g. transfers).
+        </div>
+
+        <div class="um-note">
+          <span class="lab">Numbers show in P1/P2 but chart looks sparse</span>
+          Fixed in v1.1.0-dev — was caused by single-date cumulative collapse. If still seeing this, hard-reload (<code>Ctrl+Shift+R</code>); GH Pages might be serving cached HTML.
+        </div>
+
+        <div class="um-note warn">
+          <span class="lab">Recommendations differ from prior Python output</span>
+          Check: (1) parameters match between the two runs (compare <code>parameters</code> block in the JSON against the Python script's defaults); (2) DQ gate's reconciliation % between MB51 and Inventory Master is the same — different join coverage will produce different qualifying material sets; (3) threshold setting is identical (default 10).
+        </div>
+
+        <div class="um-note crit">
+          <span class="lab">Export Excel fails with "sum.column is not a function"</span>
+          You're on a stale cached version of <code>excel.js</code>. Hard-reload, or in DevTools → Application → Storage → Clear site data, then reload. Fixed in v1.0.0 baseline.
+        </div>
+
+        <div class="um-note">
+          <span class="lab">LLM review fails with "Failed to fetch"</span>
+          Almost always a CORS issue from opening the page via <code>file://</code>. Serve over HTTP: from <code>App/v1/</code> run <code>python -m http.server 8000</code> then open <code>http://localhost:8000</code>.
+        </div>
+
+        <div class="um-note">
+          <span class="lab">"Wipe all local data" to start clean</span>
+          Settings page → About section → "Wipe all local data" clears every saved intake, every alias override, every LLM key. Can also be done via DevTools → Application → Clear site data.
+        </div>
+      </section>
+
+      <!-- ───────────── 13 · Versions ───────────── -->
+      <section class="um-section" id="versions">
+        <h2><span class="num">13</span>Versions &amp; rollback</h2>
+        <p>Full release history with per-version change notes: <a href="record-of-change.html">Record of Change</a>. Every release tagged on the GitHub repo for rollback:</p>
+        <pre>
+# Inspect any release (read-only)
+git clone https://github.com/aisandbox-bj/Inventory_Optimization.git /tmp/peek
+git -C /tmp/peek checkout v1.0.0
+
+# Roll main back to a tag (destructive — only when intended)
+git -C /tmp/peek checkout main
+git -C /tmp/peek reset --hard v1.0.0
+git -C /tmp/peek push --force-with-lease origin main
+</pre>
+        <p>Local archive of v1.0.0 lives at <code>App/archive/v1.0.0/</code> in the project folder. Future releases get the same treatment.</p>
+        <p>Every HTML file in the deployed app carries a BUILD-STAMP comment at the top of the source — visible in the browser's raw-source view — and exposes <code>&lt;meta name="app-version"&gt;</code> for programmatic inspection. The version chip in every page's nav is a clickable link to this page's parent, the Record of Change.</p>
+      </section>
+
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

@@ -112,10 +112,34 @@
     svg.appendChild(rect(0, 0, W, H, { fill: PAL.bg }));
 
     // Build domain
-    const cum = material.cumulative || [];
-    if (cum.length < 2) {
-      svg.appendChild(text(W/2, H/2, 'no consumption data', { anchor: 'middle', fill: PAL.textDim, size: 12 }));
+    let cum = material.cumulative || [];
+
+    // ── Empty-state: truly no transactions on file ─────────────────────────
+    if (cum.length === 0) {
+      svg.appendChild(text(W/2, H/2, 'no consumption transactions found', { anchor: 'middle', fill: PAL.textDim, size: 12 }));
       return svg;
+    }
+
+    // ── Sparse-data pad ─────────────────────────────────────────────────────
+    // A material whose issues all landed on a single posting date (typical for
+    // a one-shot rebuild or a single batch order) collapses to ONE cumulative
+    // point. Without padding the chart bails. Add a synthetic zero-anchor at
+    // the start of the P1 window so the step-line can render, and a trailing
+    // flat point at the analysis end (run date / P2 end) so the post-event
+    // plateau is visible.
+    const startISO = material.p1Start || cum[0].date;
+    const endISO   = material.p2End   || cum[cum.length - 1].date;
+    if (new Date(startISO).getTime() < new Date(cum[0].date).getTime() && cum[0].cum !== 0) {
+      cum = [{ date: startISO, delta: 0, cum: 0 }, ...cum];
+    }
+    if (new Date(endISO).getTime() > new Date(cum[cum.length - 1].date).getTime()) {
+      cum = [...cum, { date: endISO, delta: 0, cum: cum[cum.length - 1].cum }];
+    }
+    // Final safety: if we still have < 2 points, duplicate the lone point so
+    // the polyline has somewhere to step to.
+    if (cum.length < 2) {
+      const only = cum[0];
+      cum = [{ date: startISO, delta: 0, cum: 0 }, only];
     }
 
     const dates = cum.map(p => new Date(p.date).getTime());
