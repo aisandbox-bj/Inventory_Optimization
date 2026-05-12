@@ -118,7 +118,7 @@
     await new Promise(r => setTimeout(r, 30));
     try {
       const t0 = performance.now();
-      state.result = AppPipeline.runPipeline(state.json, { runDate: new Date().toISOString().slice(0, 10) });
+      state.result = AppPipeline.runPipeline(state.json, { runDate: AppLocale.localDateISO() });
       const t1 = performance.now();
       const ia = state.result.invAdjAnalysis || { candidates: [] };
       const iaCount = ia.candidates.length;
@@ -603,6 +603,7 @@
         <div class="stat-cell"><span class="lab">Total (window)</span><div class="v">${mat.totalNet}</div></div>
         <div class="stat-cell"><span class="lab">Pattern</span><div class="v ${mat.pattern === 'LUMPY' ? 'warn' : ''}">${mat.pattern}</div></div>
         <div class="stat-cell"><span class="lab">Stock on hand</span><div class="v">${mat.stock ?? '—'}</div></div>
+        <div class="stat-cell"><span class="lab">Stock value (CAD)</span><div class="v">${AppLocale.fmtCAD(mat.totValueOh)}</div></div>
         <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
       </div>
 
@@ -1231,7 +1232,7 @@
     doc.setFontSize(7);
     doc.setTextColor(140, 140, 150);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')}  ·  Inventory Optimization v2.0.0-dev  ·  github.com/aisandbox-bj/Inventory_Optimization`, M, H - 6);
+    doc.text(`Generated ${AppLocale.localDateTimeISO().slice(0, 16)}  ·  Inventory Optimization v2.0.0-dev  ·  CAD  ·  github.com/aisandbox-bj/Inventory_Optimization`, M, H - 6);
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

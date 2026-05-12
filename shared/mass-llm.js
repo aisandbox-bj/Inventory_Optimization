@@ -122,7 +122,7 @@
 
   async function runLoop(session, materials, bucketName, parameters, onProgress, onComplete){
     if (!session.startedAt) {
-      session.startedAt = new Date().toISOString();
+      session.startedAt = AppLocale.localDateTimeISO();
       session.status = 'running';
       // Capture provider + prompt hash up-front for audit trail
       try {
@@ -161,7 +161,7 @@
       const m = materials[i];
       const row = session.results[i];
       row.status = 'inflight';
-      row.timestamp = new Date().toISOString();
+      row.timestamp = AppLocale.localDateTimeISO();
       onProgress(session);
 
       try {
@@ -186,7 +186,7 @@
     if (session.status !== 'cancelled' && session.status !== 'paused') {
       session.status = 'done';
     }
-    session.completedAt = new Date().toISOString();
+    session.completedAt = AppLocale.localDateTimeISO();
     onComplete(session);
     session._resolvers.forEach(r => r(session));
     session._resolvers.length = 0;

@@ -233,7 +233,7 @@
     const d = new Date(runDate);
     if (isNaN(d.getTime())) return runDate;
     d.setMonth(d.getMonth() - (params.p2Months || 3));
-    return d.toISOString().slice(0, 10);
+    return AppLocale.localDateISO(d);
   }
 
   function alignFor(col){
@@ -304,6 +304,7 @@
       ['Adj P2 Rate',          (m.hceP2 && m.hceP2.length && m.adjP2Flag === 'OK') ? `${m.adjP2Rate} u/mo` : '—',   'Excl. HCE work orders'],
       ['Rate Change P1→P2', m.rateChange != null ? `${m.rateChange}%` : 'N/A',   ''],
       ['Current Stock',        (m.stock == null ? '—' : m.stock),                ''],
+      ['Stock Value',          (m.totValueOh != null ? AppLocale.fmtCAD(m.totValueOh) : '—'),  'CAD'],
       ['Runway @ P2',          (m.runway != null ? m.runway : '—'),              'months'],
       ['MRP Type',             m.mrpType || '—',                                 ''],
       ['Current Min',          (m.cmin == null ? '—' : m.cmin),                  ''],
@@ -588,7 +589,7 @@
       ['Lumpy CV',         parameters.lumpyCvThreshold],
       ['Lumpy top-WO',     parameters.lumpyTopWoThreshold],
       ['Min/Max method',   parameters.minMaxMethod],
-      ['Exported at',      new Date().toISOString()]
+      ['Exported at',      AppLocale.localDateTimeISO()]
     ];
     rows.forEach((rr, i) => {
       meta.getCell(`A${i + 3}`).value = rr[0];
@@ -619,7 +620,7 @@
   async function downloadBucket(bucket, parameters, opts){
     opts = opts || {};
     if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS not loaded — include the CDN script.');
-    const wb = await buildWorkbookForBucket(bucket, parameters, opts.runDate || new Date().toISOString().slice(0, 10), opts.progress);
+    const wb = await buildWorkbookForBucket(bucket, parameters, opts.runDate || AppLocale.localDateISO(), opts.progress);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const fname = sanitizeFile(opts.filename || `${(bucket.name || 'bucket').replace(/[^A-Za-z0-9_-]+/g,'_')}_Analysis.xlsx`);
@@ -757,7 +758,7 @@
       ['Lumpy CV',         parameters.lumpyCvThreshold],
       ['Lumpy top-WO',     parameters.lumpyTopWoThreshold],
       ['Min/Max method',   parameters.minMaxMethod],
-      ['Exported at',      new Date().toISOString()]
+      ['Exported at',      AppLocale.localDateTimeISO()]
     ];
     metaRows.forEach((rr, i) => {
       meta.getCell(`A${i + 3}`).value = rr[0];
@@ -778,7 +779,7 @@
     const wb = await buildCombinedWorkbook(result, opts.progress);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const fname = sanitizeFile(opts.filename || `Combined_Analysis_${result.runDate || new Date().toISOString().slice(0,10)}.xlsx`);
+    const fname = sanitizeFile(opts.filename || `Combined_Analysis_${result.runDate || AppLocale.localDateISO()}.xlsx`);
     triggerDownload(blob, fname);
     return { filename: fname, sizeBytes: buf.byteLength };
   }
@@ -942,7 +943,7 @@
       ['Run date',         runDate],
       ['P2 months',        parameters.p2Months],
       ['Threshold',        parameters.threshold],
-      ['Exported at',      new Date().toISOString()]
+      ['Exported at',      AppLocale.localDateTimeISO()]
     ];
     rows.forEach((rr, i) => {
       meta.getCell(`A${i + 3}`).value = rr[0];
@@ -1010,7 +1011,7 @@
   async function downloadMassReview(bucket, session, parameters, opts){
     opts = opts || {};
     if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS not loaded.');
-    const wb = await buildMassReviewWorkbook(bucket, session, parameters, opts.runDate || new Date().toISOString().slice(0, 10), opts.progress);
+    const wb = await buildMassReviewWorkbook(bucket, session, parameters, opts.runDate || AppLocale.localDateISO(), opts.progress);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const fname = sanitizeFile(opts.filename || `Mass_LLM_Review_${bucket.name.replace(/[^A-Za-z0-9_-]+/g,'_')}.xlsx`);

@@ -91,7 +91,7 @@
       schemaVersion: SCHEMA_VERSION,
       metadata: {
         assessmentName: '',
-        createdAt:      new Date().toISOString(),
+        createdAt:      (typeof AppLocale !== 'undefined' ? AppLocale.localStampCompact() : new Date().toISOString()),
         createdBy:      '',
         appVersion:     APP_VERSION,
         assessmentType: null

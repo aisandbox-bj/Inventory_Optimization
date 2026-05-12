@@ -88,7 +88,7 @@
     paramsSaved: { ...CanonicalSchema.FACTORY_DEFAULTS },
     paramsRun:   { ...CanonicalSchema.FACTORY_DEFAULTS },
     aliases:  {},
-    runDate:  new Date().toISOString().slice(0, 10),
+    runDate:  (typeof AppLocale !== 'undefined' ? AppLocale.localDateISO() : new Date().toISOString().slice(0, 10)),
     name:     '',
     assessmentType: null,                            // 'unitFloc' | 'userList' | 'paramSearch'
     psFilters: []                                    // Parameter-Search filter cards
@@ -1170,11 +1170,11 @@
       const v = parseFloat(r.totValueOh);
       if (!isNaN(v)) valSum += v;
     }
-    const fmt = (n) => Math.round(n).toLocaleString();
+    const fmt = (n) => Math.round(n).toLocaleString('en-CA');
 
-    if ($('#psMatCount'))      $('#psMatCount').textContent      = matched.size.toLocaleString();
+    if ($('#psMatCount'))      $('#psMatCount').textContent      = matched.size.toLocaleString('en-CA');
     if ($('#psNetConsumption'))$('#psNetConsumption').textContent= fmt(netSum);
-    if ($('#psOnHandValue'))   $('#psOnHandValue').textContent   = fmt(valSum);
+    if ($('#psOnHandValue'))   $('#psOnHandValue').textContent   = AppLocale.fmtCAD(valSum);
 
     // Update resolvedMaterials on scope object for JSON serialization
     state.scope.parameterSearch = {
@@ -1482,7 +1482,7 @@
     const json = CanonicalSchema.emptyJson();
     json.metadata.assessmentName = state.name || $('#assessmentName').value || '';
     json.metadata.createdBy      = $('#createdBy').value || '';
-    json.metadata.createdAt      = new Date().toISOString();
+    json.metadata.createdAt      = AppLocale.localStampCompact();
     json.metadata.assessmentType = state.assessmentType;
     json.scope                   = JSON.parse(JSON.stringify(state.scope));
     // For userList type: scope.manual.materials is already maintained by
@@ -1538,7 +1538,7 @@
 
     $('#btnSaveLocal').addEventListener('click', async () => {
       const json = buildJson();
-      const name = state.name || `intake-${new Date().toISOString().slice(0,10)}`;
+      const name = state.name || `intake-${AppLocale.localDateISO()}`;
       const result = await AppStorage.set('intake.' + name, json);
       // also update an "intakes" index list
       const idx = (await AppStorage.get('intakes.index')) || [];
@@ -1555,7 +1555,7 @@
       const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      const name = (state.name || `intake-${new Date().toISOString().slice(0,10)}`).replace(/[^A-Za-z0-9_-]+/g, '_');
+      const name = (state.name || `intake-${AppLocale.localDateISO()}`).replace(/[^A-Za-z0-9_-]+/g, '_');
       a.href = url; a.download = `${name}.json`;
       a.click();
       URL.revokeObjectURL(url);
@@ -1727,7 +1727,9 @@
     const nameInput = $('#assessmentName');
     if (nameInput && !nameInput.value) {
       const base = (json.metadata && json.metadata.assessmentName) || sourceName;
-      nameInput.value = `${base} — batch ${new Date().toISOString().slice(11, 16).replace(':', '')}`;
+      const now = new Date();
+      const hhmm = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+      nameInput.value = `${base} — batch ${hhmm}`;
       state.name = nameInput.value;
     }
 

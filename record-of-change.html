@@ -266,6 +266,23 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Locale fix — host-clock time + CAD currency</h4>
+      <ul>
+        <li><b>Time was off by your UTC offset.</b> Every <code>new Date().toISOString()</code> through the app converted local clock → UTC, which is hours later than your wall clock west of UTC. After ~5pm local time, the "Run date" was already showing tomorrow's UTC date. Same for "Created at", "Exported at", PDF footer, mass-review timestamps.</li>
+        <li><b>New <code>shared/locale.js</code> module</b> with <code>AppLocale.localDateISO()</code>, <code>localDateTimeISO()</code>, <code>localStampCompact()</code>, <code>localDateTimeLabel()</code> — all read from the host machine's clock (Date object's local getters), never converting to UTC. Loaded on every page.</li>
+        <li>Replaced 20+ usages of <code>toISOString()</code> across <code>analysis.js</code>, <code>intake.js</code>, <code>shared/canonical-schema.js</code>, <code>shared/excel.js</code>, <code>shared/mass-llm.js</code> with the appropriate local helper.</li>
+        <li><b>Parser kept on ISO</b> — the parser's <code>toIsoDate()</code> still uses <code>toISOString().slice(0,10)</code> for Excel date-serial conversion (no timezone ambiguity for stored dates from SAP). Only the app-generated timestamps switched.</li>
+        <li><b>CAD currency formatting</b> via <code>AppLocale.fmtCAD()</code> (<code>Intl.NumberFormat 'en-CA'</code>, no fractional digits by default). Applied to:
+          <ul>
+            <li>Parameter Search preview tile → "Total on-hand value (CAD)"</li>
+            <li>Material detail panel → new "Stock value (CAD)" stat tile</li>
+            <li>Excel per-material sheet → new "Stock Value" row in the field/value/notes table</li>
+            <li>PDF footer → "CAD" tag alongside the timestamp + version</li>
+          </ul>
+        </li>
+        <li>Helper also exposes <code>EXCEL_CURRENCY_FORMAT</code> = <code>"$"#,##0</code> for future numFmt usage on Excel cells.</li>
+      </ul>
+
       <h4>Batch-mode workflow — reuse common data + manual paste for user lists</h4>
       <ul>
         <li><b>New "Reuse common data" panel</b> at the top of the Intake page (only shown when at least one intake is already saved). Operator picks a previously-saved intake from a dropdown → MB51 / IW39 / Fleet / Inventory Master / Material→Vendor / Lead Times slots are all hydrated from that intake's canonical JSON. Upload zones show <em>↻ reused from "{name}"</em> instead of "drag here". DQ gate auto-re-runs.</li>
