@@ -132,17 +132,20 @@
     state.assessmentType = type;
     $$('.atype-card').forEach(c => c.classList.toggle('selected', c.dataset.atype === type));
 
-    // Grey out drop zones not needed by this type
-    const needed = new Set(CanonicalSchema.ASSESSMENT_TYPE_REQUIRES[type] || []);
+    // Grey out drop zones not OFFERED by this type. A drop is "offered" if its
+    // data-needed-by attribute includes the current type. This is a superset
+    // of ASSESSMENT_TYPE_REQUIRES — e.g. userList file is offered (optional)
+    // for the userList type even though it's not required for DQ pass.
     $$('.drop[data-source]').forEach(drop => {
       const source = drop.dataset.source;
       // The conditional zones (materialVendor, leadTimes) are managed by scope/method toggles —
       // don't override their hidden state from here.
       if (source === 'materialVendor' || source === 'leadTimes') return;
-      const requiredHere = needed.has(source);
-      drop.classList.toggle('atype-disabled', !requiredHere);
+      const neededBy = (drop.getAttribute('data-needed-by') || '').split(',').map(s => s.trim());
+      const offered = neededBy.includes(type);
+      drop.classList.toggle('atype-disabled', !offered);
       const inp = drop.querySelector('input[type=file]');
-      if (inp) inp.disabled = !requiredHere;
+      if (inp) inp.disabled = !offered;
     });
 
     // Scope tab visibility — restrict to scope modes valid for this assessment type
@@ -1482,13 +1485,19 @@
     json.metadata.createdAt      = new Date().toISOString();
     json.metadata.assessmentType = state.assessmentType;
     json.scope                   = JSON.parse(JSON.stringify(state.scope));
-    // For userList type, derive scope.manual.materials from the uploaded list
-    if (state.assessmentType === 'userList' && state.parsed.userList) {
-      const mats = state.parsed.userList.canonical
-        .map(r => String(r.material || '').trim())
-        .filter(Boolean);
+    // For userList type: scope.manual.materials is already maintained by
+    // either the file-upload handler (onParseUpdated) OR the textarea paste
+    // handler (setupManualPaste). Whichever was most recent is the source
+    // of truth. We just lock scope.mode = 'manual'.
+    if (state.assessmentType === 'userList') {
       json.scope.mode = 'manual';
-      json.scope.manual = { materials: uniq(mats) };
+      // If neither file nor paste populated, fall back to userList canonical
+      if ((!json.scope.manual || !json.scope.manual.materials || !json.scope.manual.materials.length) && state.parsed.userList) {
+        const mats = state.parsed.userList.canonical
+          .map(r => String(r.material || '').trim())
+          .filter(Boolean);
+        json.scope.manual = { materials: uniq(mats) };
+      }
     }
     json.parameters              = { ...state.paramsRun };
     for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
@@ -1636,6 +1645,114 @@
      Boot
   ═════════════════════════════════════════════════════════════════════════ */
 
+  /* ═════════════════════════════════════════════════════════════════════════
+     REUSE COMMON DATA FROM SAVED INTAKE (batch mode, v2.1)
+     Lets the operator skip re-uploading MB51 / IW39 / Fleet / Inv Master
+     when running multiple batches against the same SAP extracts.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  async function setupReusePanel(){
+    const panel  = $('#reusePanel');
+    const select = $('#reuseSelect');
+    const btnLoad = $('#reuseLoad');
+    const btnFresh = $('#reuseStartFresh');
+    if (!panel || !select) return;
+
+    // Populate dropdown from intakes.index
+    const idx = (await AppStorage.get('intakes.index')) || [];
+    if (idx.length === 0) {
+      // No saved intakes → hide the panel entirely (nothing to reuse from)
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    select.innerHTML = `
+      <option value="">— pick a saved intake to reuse data from —</option>
+      ${idx.map(e => `<option value="${escapeAttr(e.name)}">${escapeHtml(e.name)} · ${escapeHtml(e.mode || '—')} · ${escapeHtml((e.createdAt || '').replace('T', ' ').slice(0, 16))}</option>`).join('')}
+    `;
+    select.addEventListener('change', () => {
+      btnLoad.disabled = !select.value;
+    });
+    btnLoad.addEventListener('click', async () => {
+      const name = select.value;
+      if (!name) return;
+      const json = await AppStorage.get('intake.' + name);
+      if (!json) { toast('Saved intake not found: ' + name, 'crit'); return; }
+      await hydrateFromSavedIntake(json, name);
+    });
+    btnFresh.addEventListener('click', () => {
+      panel.hidden = true;
+      toast('Starting fresh — upload your files in Step 1.', 'ok');
+    });
+  }
+
+  /**
+   * Hydrate state.parsed.* + state.scope + state.paramsRun from a saved
+   * canonical JSON. After this runs, the operator can skip Steps 1-2-3
+   * and jump straight to Step 0 (pick new assessment type) + Step 4 (scope)
+   * + Step 5 (parameters) + Step 7 (save as a new named intake).
+   */
+  async function hydrateFromSavedIntake(json, sourceName){
+    const reusedSources = [];
+    for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
+      const arr = json.data && json.data[s];
+      if (Array.isArray(arr) && arr.length > 0) {
+        state.parsed[s] = {
+          canonical: arr,
+          headers:   Object.keys(arr[0] || {}),
+          fieldMap:  Object.fromEntries(Object.keys(arr[0] || {}).map(k => [k, k])),
+          rowCount:  arr.length,
+          unmatched: [],
+          missingFields: []
+        };
+        reusedSources.push(s);
+        const drop = document.querySelector(`.drop[data-source="${s}"]`);
+        if (drop) {
+          drop.classList.add('loaded');
+          const fileEl = drop.querySelector('.file');
+          if (fileEl) fileEl.textContent = `↻ reused from "${sourceName}" · ${arr.length.toLocaleString()} rows`;
+        }
+      }
+    }
+    // Carry over parameters as starting point (operator can change per-run)
+    if (json.parameters) {
+      state.paramsRun = Object.assign({}, state.paramsSaved, json.parameters);
+    }
+    // Do NOT carry over the scope — that's exactly what we want to change.
+    // We DO carry the assessmentType as a starting point (operator can change Step 0).
+    if (json.metadata && json.metadata.assessmentType) {
+      applyAssessmentType(json.metadata.assessmentType);
+    }
+    // Suggest a default new name (don't overwrite if user typed one)
+    const nameInput = $('#assessmentName');
+    if (nameInput && !nameInput.value) {
+      const base = (json.metadata && json.metadata.assessmentName) || sourceName;
+      nameInput.value = `${base} — batch ${new Date().toISOString().slice(11, 16).replace(':', '')}`;
+      state.name = nameInput.value;
+    }
+
+    // Re-render everything that depends on parsed data
+    renderAllDropStats();
+    renderSchema();
+    runDqGate();
+    renderParams();
+    populateScopeOptions();
+    renderScopePreview();
+    renderJsonPreview();
+    renderScopeSummary();
+
+    const statusEl = $('#reuseStatus');
+    if (statusEl) {
+      statusEl.style.display = '';
+      statusEl.innerHTML = `✓ Reused <b>${reusedSources.length}</b> source${reusedSources.length === 1 ? '' : 's'} from <span class="src">${escapeHtml(sourceName)}</span> · <b>${reusedSources.join(' · ')}</b><br>Now pick a new <b>assessment type + scope</b> below, then save as a new named intake.`;
+    }
+    toast(`Loaded ${reusedSources.length} source${reusedSources.length===1?'':'s'} from ${sourceName} — set new scope + save as new intake.`, 'ok');
+
+    // Scroll the metadata header into view so the user sees the rename prompt
+    $('#assessmentName').focus();
+    $('#assessmentName').select();
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     await loadDefaults();
     setupAssessmentType();
@@ -1646,6 +1763,7 @@
     setupParamSearch();
     setupParamButtons();
     setupReviewActions();
+    await setupReusePanel();
     renderJsonPreview();
 
     // Keyboard hint: Esc clears toasts

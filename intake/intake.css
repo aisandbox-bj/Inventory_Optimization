@@ -815,3 +815,32 @@
   letter-spacing:1px;
   color:var(--accent);
 }
+
+/* ─── Reuse common data panel (batch mode, v2.1) ────────────────────────── */
+.reuse-panel{
+  border-left:3px solid var(--accent-glow, var(--accent));
+  background:linear-gradient(90deg, rgba(31,206,216,0.05), transparent 70%);
+}
+.reuse-panel select{
+  background:var(--bg-elevated);
+  border:1px solid var(--border-soft);
+  color:var(--text-pri);
+  padding:8px 12px;
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  letter-spacing:.3px;
+}
+.reuse-panel select:focus{ outline:none; border-color:var(--accent); }
+.reuse-status{
+  margin-top:14px;
+  padding:10px 14px;
+  background:var(--bg-elevated);
+  border:1px solid var(--border-soft);
+  border-left:3px solid var(--accent-green, var(--accent));
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  letter-spacing:.4px;
+  color:var(--text-sec);
+}
+.reuse-status b{ color:var(--text-pri); }
+.reuse-status .src{ color:var(--accent); }

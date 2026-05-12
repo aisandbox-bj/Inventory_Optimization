@@ -35,6 +35,31 @@
 <main class="shell">
   <div class="intake-grid">
 
+    <!-- ─── REUSE COMMON DATA FROM SAVED INTAKE ─── -->
+    <section class="panel reuse-panel" id="reusePanel" hidden>
+      <div class="panel-eyebrow" style="color:var(--accent-glow, var(--accent));">Batch mode · v2.1</div>
+      <div class="panel-title">Reuse common data from a saved intake.</div>
+      <div class="panel-sub" style="margin-bottom:14px;">
+        Running multiple batches against the same SAP extracts? Pick a previously-saved intake to
+        skip re-uploading MB51 / IW39 / Fleet Master / Inventory Master. You'll then only need to
+        set the new <b>assessment type + scope + parameters</b> for the new batch. Heavy data stays
+        in memory across batches.
+      </div>
+      <div class="row" style="gap:14px;align-items:flex-end;flex-wrap:wrap;">
+        <div style="flex:1.5;min-width:300px;">
+          <label class="label" style="display:block;margin-bottom:4px;">Source intake</label>
+          <select id="reuseSelect" style="width:100%;"></select>
+        </div>
+        <div>
+          <button id="reuseLoad" class="primary" disabled>↻ Load common data</button>
+        </div>
+        <div>
+          <button id="reuseStartFresh" class="ghost">Start fresh instead →</button>
+        </div>
+      </div>
+      <div id="reuseStatus" class="reuse-status" style="display:none;"></div>
+    </section>
+
     <!-- ─── METADATA HEADER ─── -->
     <section class="panel">
       <div class="panel-eyebrow">Intake engine</div>
@@ -138,8 +163,8 @@
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
           <label class="drop drop-cond" data-source="userList" data-needed-by="userList" data-conditional="userList">
-            <div class="name">User material list</div>
-            <div class="hint">Required for User-list assessment. One material per row — or comma/tab-delimited.</div>
+            <div class="name">User material list <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional)</em></div>
+            <div class="hint">Convenience input for User-list assessment. One material per row — or comma/tab-delimited.<br><b>Or skip this and paste materials directly in Step 4 (Manual) below.</b></div>
             <span class="file">drag .xlsx / .csv / .txt here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv,.txt" />
           </label>
@@ -213,7 +238,11 @@
 
         <!-- Manual pane -->
         <div class="scope-pane hidden" data-mode="manual">
-          <h5>Paste material numbers (one per line, comma- or tab-delimited tolerated)</h5>
+          <h5>Paste material numbers (one per line; commas, tabs, semicolons also OK)</h5>
+          <div class="panel-sub" style="margin-bottom:8px;font-size:11.5px;color:var(--text-muted);">
+            For <b>User-list</b> assessments: paste materials directly here — no file upload needed.
+            If you also dropped a user-list file in Step 1, it pre-fills this box; you can edit / append freely.
+          </div>
           <textarea id="manualPaste" placeholder="10001234&#10;10005678&#10;10009999"></textarea>
           <div class="scope-preview">no materials provided</div>
         </div>

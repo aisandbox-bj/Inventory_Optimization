@@ -39,7 +39,9 @@
   const ASSESSMENT_TYPES = ['unitFloc', 'userList', 'paramSearch'];
   const ASSESSMENT_TYPE_REQUIRES = Object.freeze({
     unitFloc:    ['mb51', 'iw39', 'fleetMaster', 'inventoryMaster'],
-    userList:    ['mb51', 'inventoryMaster', 'userList'],
+    // userList file is OPTIONAL — operator can also paste materials directly
+    // in Step 4's manual pane. v2.1: removed userList from required set.
+    userList:    ['mb51', 'inventoryMaster'],
     paramSearch: ['mb51', 'inventoryMaster']
   });
   const ASSESSMENT_TYPE_SCOPE = Object.freeze({

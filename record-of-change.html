@@ -266,6 +266,17 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Batch-mode workflow — reuse common data + manual paste for user lists</h4>
+      <ul>
+        <li><b>New "Reuse common data" panel</b> at the top of the Intake page (only shown when at least one intake is already saved). Operator picks a previously-saved intake from a dropdown → MB51 / IW39 / Fleet / Inventory Master / Material→Vendor / Lead Times slots are all hydrated from that intake's canonical JSON. Upload zones show <em>↻ reused from "{name}"</em> instead of "drag here". DQ gate auto-re-runs.</li>
+        <li>Each subsequent batch only needs the operator to: pick a new assessment type + new scope + (optionally) tweak parameters + save as a new named intake. Heavy data stays in memory across batches — no re-uploading.</li>
+        <li>Default new-intake name auto-suggested as <code>{source name} — batch HHmm</code>; operator can rename. Parameters carry over as a starting point (per-run override mechanic unchanged). Scope is intentionally reset — that's the point of a new batch.</li>
+        <li><b>User-list file is now OPTIONAL</b> for User-list assessment type. The drop zone is still offered (badged "(optional)") but isn't required for DQ pass. Required-sources for userList type is now just <code>['mb51', 'inventoryMaster']</code>.</li>
+        <li><b>Direct paste in Step 4's Manual pane</b> — operator types / pastes materials straight into the textarea once MB51 + Inventory Master are loaded. The Manual pane now shows an inline hint explaining "paste materials directly here — no file upload needed". If both a file AND a paste are present, the paste wins (most recent edit is source of truth).</li>
+        <li><b>Grey-out logic switched to <code>data-needed-by</code></b> — the Step-0 grey-out now reads each drop's HTML attribute (which can list more types than the hard-required set), so the userList drop remains active-but-optional under the userList type instead of being greyed.</li>
+        <li><code>buildJson()</code> stops force-overwriting <code>scope.manual.materials</code> from the userList file; it now only auto-derives if the manual textarea is empty AND a userList file is present (defensive fallback).</li>
+      </ul>
+
       <h4>PDF Pack export + Right-click mark workflow</h4>
       <ul>
         <li><b>Right-click any row</b> in the analysed material list to open a custom context menu with four actions: <em>Mark for LLM review</em>, <em>Unmark from LLM review</em>, <em>Mark for PDF print</em>, <em>Unmark from PDF print</em>, plus <em>Open detail panel</em>. The menu auto-swaps "Mark"/"Unmark" based on current state.</li>
