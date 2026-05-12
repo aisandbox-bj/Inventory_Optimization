@@ -273,6 +273,152 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
+     OPERATIONAL CONTEXT (v2.1.0) — fixed-pick library + capped Custom slot
+     with privacy lint. See shared/client-context.js for the boundary rules.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  async function renderCtxPanel(){
+    if (typeof AppClientContext === 'undefined') return;
+    const sel = $('#ctxActive');
+    const preview = $('#ctxPreview');
+    const custom  = $('#ctxCustomText');
+    const counter = $('#ctxCustomCounter');
+    const block   = $('#ctxCustomBlock');
+    const saveBtn = $('#ctxCustomSave');
+    if (!sel || !preview) return;
+
+    // Populate dropdown: factory entries + a Custom slot.
+    const lib = AppClientContext.list();
+    const activeId = await AppClientContext.getActiveId();
+    sel.innerHTML = lib.map(e =>
+      `<option value="${escapeAttr(e.id)}" ${e.id === activeId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`
+    ).join('') + `<option value="${AppClientContext.CUSTOM_ID}" ${activeId === AppClientContext.CUSTOM_ID ? 'selected' : ''}>Custom (advanced)</option>`;
+
+    // Custom textarea + counter
+    if (custom) {
+      const customText = await AppClientContext.getCustomText();
+      custom.value = customText;
+      if (counter) counter.textContent = `${customText.length}/${AppClientContext.MAX_CUSTOM_CHARS}`;
+      if (block && activeId === AppClientContext.CUSTOM_ID) block.open = true;
+      renderCtxLint(custom.value, saveBtn);
+    }
+
+    // Preview reflects the currently-saved active selection
+    const active = await AppClientContext.getActive();
+    renderCtxPreview(preview, active);
+  }
+
+  function renderCtxPreview(host, active){
+    const txt = String(active.text || '');
+    if (!txt) {
+      host.innerHTML = `<span class="ctx-preview-empty">(no context — {customerContext} will resolve to "(none)")</span>`;
+    } else {
+      host.innerHTML = `<span class="ctx-preview-text">${escapeHtml(txt)}</span>` +
+                      `<span class="ctx-preview-meta">${active.isCustom ? 'Custom' : 'Library'} · ${txt.length} chars</span>`;
+    }
+  }
+
+  function renderCtxLint(text, saveBtn){
+    const host = $('#ctxLint');
+    if (!host) return;
+    const hits = AppClientContext.lintCustomText(text);
+    if (!hits.length) {
+      host.innerHTML = '';
+      host.classList.remove('has-hits');
+      if (saveBtn) saveBtn.textContent = 'Save Custom';
+      return;
+    }
+    host.classList.add('has-hits');
+    const tokens = hits.map(h =>
+      `<span class="ctx-lint-token ${h.kind}" title="${escapeAttr(AppClientContext.lintKindLabel(h.kind))}">${escapeHtml(h.token)}</span>`
+    ).join('');
+    host.innerHTML = `<span class="ctx-lint-lab">⚠ Possible client identifiers:</span> ${tokens}`;
+    if (saveBtn) saveBtn.textContent = 'Save Custom (lint warnings)';
+  }
+
+  function setupCtxPanel(){
+    if (typeof AppClientContext === 'undefined') return;
+    const sel     = $('#ctxActive');
+    const custom  = $('#ctxCustomText');
+    const counter = $('#ctxCustomCounter');
+    const saveBtn = $('#ctxCustomSave');
+    const clearBtn= $('#ctxCustomClear');
+    const useBtn  = $('#ctxCustomUse');
+    const preview = $('#ctxPreview');
+    if (!sel) return;
+
+    sel.addEventListener('change', async () => {
+      await AppClientContext.setActive(sel.value);
+      const active = await AppClientContext.getActive();
+      renderCtxPreview(preview, active);
+      toast(`Active context: ${active.name}`, 'ok');
+    });
+
+    if (custom) {
+      custom.addEventListener('input', () => {
+        if (counter) counter.textContent = `${custom.value.length}/${AppClientContext.MAX_CUSTOM_CHARS}`;
+        renderCtxLint(custom.value, saveBtn);
+      });
+    }
+
+    if (saveBtn) saveBtn.addEventListener('click', async () => {
+      const text = (custom && custom.value) || '';
+      const hits = AppClientContext.lintCustomText(text);
+      if (hits.length) {
+        const flagged = hits.map(h => `${h.token} (${AppClientContext.lintKindLabel(h.kind)})`).join('\n  ');
+        const ok = confirm(
+          'Lint detected possible client identifiers in your Custom context:\n  ' + flagged +
+          '\n\nThis text will cross the browser → LLM provider boundary if you set Custom as active. Save anyway?'
+        );
+        if (!ok) return;
+      }
+      try {
+        await AppClientContext.saveCustomText(text);
+        toast('Custom context saved' + (hits.length ? ' · lint warnings logged' : ''), hits.length ? 'warn' : 'ok');
+        const active = await AppClientContext.getActive();
+        renderCtxPreview(preview, active);
+      } catch (e) {
+        toast('Save failed: ' + (e.message || e), 'crit');
+      }
+    });
+
+    if (clearBtn) clearBtn.addEventListener('click', async () => {
+      await AppClientContext.clearCustomText();
+      if (custom) custom.value = '';
+      if (counter) counter.textContent = `0/${AppClientContext.MAX_CUSTOM_CHARS}`;
+      renderCtxLint('', saveBtn);
+      // If Custom was active, preview now shows empty Custom
+      const active = await AppClientContext.getActive();
+      renderCtxPreview(preview, active);
+      toast('Custom context cleared', 'ok');
+    });
+
+    if (useBtn) useBtn.addEventListener('click', async () => {
+      // Save (with lint confirm if needed) AND set Custom as active.
+      const text = (custom && custom.value) || '';
+      const hits = AppClientContext.lintCustomText(text);
+      if (hits.length) {
+        const flagged = hits.map(h => `${h.token} (${AppClientContext.lintKindLabel(h.kind)})`).join('\n  ');
+        const ok = confirm(
+          'Lint detected possible client identifiers in your Custom context:\n  ' + flagged +
+          '\n\nSet Custom as active and use this text in every LLM prompt? It will cross the browser → LLM provider boundary.'
+        );
+        if (!ok) return;
+      }
+      try {
+        await AppClientContext.saveCustomText(text);
+        await AppClientContext.setActive(AppClientContext.CUSTOM_ID);
+        sel.value = AppClientContext.CUSTOM_ID;
+        const active = await AppClientContext.getActive();
+        renderCtxPreview(preview, active);
+        toast('Custom context is now active', hits.length ? 'warn' : 'ok');
+      } catch (e) {
+        toast('Save failed: ' + (e.message || e), 'crit');
+      }
+    });
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
      ABOUT
   ═════════════════════════════════════════════════════════════════════════ */
 
@@ -326,6 +472,7 @@
     renderParams();
     renderLlm('anthropic');
     renderLlm('openai');
+    await renderCtxPanel();
     renderAliases();
     await renderPromptEditor();
     await renderAbout();
@@ -391,6 +538,7 @@
     await loadAll();
     setupParamButtons();
     setupLlmCards();
+    setupCtxPanel();
     setupAliasButtons();
     setupPromptButtons();
     setupAboutButtons();

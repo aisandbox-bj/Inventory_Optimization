@@ -256,3 +256,169 @@
   color:var(--accent);
   background:transparent;
 }
+
+/* ─── Operational context panel (v2.1.0) ──────────────────────────────── */
+.ctx-row{
+  display:flex; align-items:center; gap:12px;
+  margin-bottom:14px;
+}
+.ctx-row label{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  color:var(--text-muted);
+  min-width:120px;
+}
+.ctx-row select{
+  flex:1;
+  padding:7px 10px;
+  background:var(--bg-elevated);
+  color:var(--text-pri);
+  border:1px solid var(--border-soft);
+  font-family:var(--font-body);
+  font-size:13px;
+}
+.ctx-preview-wrap{
+  display:flex; flex-direction:column; gap:6px;
+  margin-bottom:14px;
+}
+.ctx-preview-lab{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:var(--text-muted);
+}
+.ctx-preview-lab code{
+  color:var(--accent);
+  background:transparent;
+  text-transform:none;
+  letter-spacing:0;
+}
+.ctx-preview{
+  background:var(--bg-elevated);
+  border:1px solid var(--border-soft);
+  border-left:3px solid var(--accent);
+  padding:10px 14px;
+  font-family:var(--font-body);
+  font-size:12.5px;
+  line-height:1.55;
+  color:var(--text-sec);
+  min-height:34px;
+  display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+}
+.ctx-preview-text{ flex:1; }
+.ctx-preview-meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-muted);
+  white-space:nowrap;
+  letter-spacing:.5px;
+}
+.ctx-preview-empty{
+  font-style:italic;
+  color:var(--text-muted);
+}
+
+.ctx-custom{
+  background:var(--bg-elevated);
+  border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);
+}
+.ctx-custom > summary{
+  list-style:none;
+  cursor:pointer;
+  padding:10px 14px;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:var(--text-pri);
+  user-select:none;
+}
+.ctx-custom > summary::-webkit-details-marker{ display:none; }
+.ctx-custom > summary::before{
+  content:'▸';
+  margin-right:8px;
+  color:var(--accent);
+  transition:transform .15s ease;
+}
+.ctx-custom[open] > summary::before{ transform:rotate(90deg); display:inline-block; }
+.ctx-custom-title{ flex:1; }
+.ctx-custom-counter{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-muted);
+  letter-spacing:.5px;
+}
+.ctx-custom-warn{
+  margin:0 14px 12px;
+  padding:8px 12px;
+  background:rgba(255,158,76,0.10);
+  border-left:3px solid var(--status-warn);
+  font-family:var(--font-body);
+  font-size:11.5px;
+  line-height:1.5;
+  color:var(--text-sec);
+}
+.ctx-custom textarea{
+  margin:0 14px;
+  width:calc(100% - 28px);
+  display:block;
+  padding:10px 12px;
+  background:var(--bg-panel);
+  color:var(--text-pri);
+  border:1px solid var(--border-soft);
+  font-family:var(--font-mono);
+  font-size:12px;
+  line-height:1.55;
+  resize:vertical;
+  min-height:80px;
+}
+.ctx-custom textarea:focus{
+  outline:1px solid var(--accent);
+  outline-offset:-1px;
+}
+.ctx-custom .actions-row{
+  padding:0 14px 14px;
+}
+
+.ctx-lint{
+  margin:8px 14px 0;
+  padding:8px 12px;
+  background:transparent;
+  border:1px dashed transparent;
+  font-family:var(--font-body);
+  font-size:11.5px;
+  line-height:1.6;
+  color:var(--text-sec);
+}
+.ctx-lint.has-hits{
+  background:rgba(255,158,76,0.06);
+  border-color:rgba(255,158,76,0.35);
+}
+.ctx-lint-lab{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:.8px;
+  text-transform:uppercase;
+  color:var(--status-warn);
+  margin-right:8px;
+}
+.ctx-lint-token{
+  display:inline-block;
+  padding:1px 7px;
+  margin:2px 4px 2px 0;
+  font-family:var(--font-mono);
+  font-size:11px;
+  border:1px solid currentColor;
+  border-radius:3px;
+  background:rgba(0,0,0,0.25);
+}
+.ctx-lint-token.longNumeric,
+.ctx-lint-token.allCapsToken{ color:var(--status-warn); }
+.ctx-lint-token.companySuffix,
+.ctx-lint-token.emailLike,
+.ctx-lint-token.ipLike{ color:var(--status-crit); }

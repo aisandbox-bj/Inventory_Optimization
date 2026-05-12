@@ -241,7 +241,9 @@
       <a href="#excel">10 · Excel deliverable</a>
       <a class="deep" href="#pdf-pack">10b · PDF Pack ★ v2</a>
       <a href="#llm">11 · LLM review surface</a>
-      <a class="deep" href="#llm-mass">11b · Mass LLM Review ★ v2</a>
+      <a class="deep" href="#llm-ctx">11a · Operational Context ★ v2.1</a>
+      <a class="deep" href="#llm-signals">11b · Signal-aware prompt ★ v2.1</a>
+      <a class="deep" href="#llm-mass">11c · Mass LLM Review ★ v2</a>
       <a href="#troubleshooting">12 · Troubleshooting</a>
       <a href="#versions">13 · Versions &amp; rollback</a>
     </aside>
@@ -728,16 +730,38 @@
         <p>On a material's detail panel, "Run LLM review" captures the rendered chart as PNG, sends it to the chosen provider's chat-completions endpoint with a multimodal input (image + structured prompt including the material's stats and current recommendation), and parses the JSON response:</p>
         <pre>{
   "verdict": "ok" | "tweak" | "review",
-  "notes":   "free-form analyst notes",
+  "signals": ["negativeNet","sharpDrop", ...],
+  "notes":   "specific analyst notes naming the signal seen",
   "suggestedEdits": [
-    { "field": "parameters.threshold", "newValue": 15, "rationale": "…" }
+    { "field": "recMin", "newValue": 15, "rationale": "…" }
   ]
 }</pre>
+        <p><b>Structured signals (v2.1.0):</b> the model is asked to name the specific signal that drove its verdict from a fixed list — <code>negativeNet</code>, <code>sharpDrop</code>, <code>sharpRise</code>, <code>spikeNoHce</code>, <code>flatTail</code>, <code>fewEvents</code>, <code>workingRedundant</code>, <code>seasonal</code>, <code>other</code>. The signal-rendering chips on the detail panel land in v2.1.1; v2.1.0 captures the data and ships the prompt overhaul.</p>
         <p>Suggested edits are <em>not</em> applied automatically — they appear as a list in the LLM panel; you decide what to action.</p>
         <p><b>Browser CORS:</b> Anthropic requires the <code>anthropic-dangerous-direct-browser-access: true</code> header (sent automatically). OpenAI accepts in-browser keys directly. Both expose the key to the page — fine for personal / internal use; route through a server proxy if ever shipped client-side.</p>
         <p>If the call fails with "Failed to fetch", you likely opened the page via <code>file://</code> — serve over HTTP instead: <code>cd App/v2 &amp;&amp; python -m http.server 8000</code>.</p>
 
-        <h3 id="llm-mass">11b · Mass LLM Review ★ (v2.0)</h3>
+        <h3 id="llm-ctx">11a · Operational Context (v2.1.0)</h3>
+        <p>Every LLM prompt now begins with a generic <em>Operational Context</em> block injected as <code>{customerContext}</code>. The intent is to let the model know it's reviewing for, e.g. an open-pit mining client without putting any client identifiers across the browser → LLM-provider boundary.</p>
+        <p>Pick the active context in <b>Settings → 03 · Operational context</b>:</p>
+        <ul>
+          <li><b>Open-pit mining (default)</b> · <b>Underground mining</b> · <b>Heavy civil / construction</b> · <b>Minimal — no context</b> — fixed-pick library entries, deliberately generic. No fleet codes, no site names.</li>
+          <li><b>Custom (advanced)</b> — operator-authored, capped at <b>300 characters</b>, lint-checked for long numeric IDs, company suffixes (<code>Inc</code> / <code>Ltd</code> / etc.), 3+-character all-caps tokens (potential site codes), emails, and IPs. Lint <em>warns</em> but does not block — you confirm in a dialog before send.</li>
+        </ul>
+        <p>Active selection and Custom text live in <code>settings.client.*</code> localStorage keys. <b>Never written to the canonical intake JSON</b> — the math deliverable stays free of LLM-coupling metadata.</p>
+
+        <h3 id="llm-signals">11b · Signal-aware prompt (v2.1.0)</h3>
+        <p>The factory prompt was restructured to surface the specific signals the operator cares about. New tokens available in the template editor:</p>
+        <ul>
+          <li><code>{customerContext}</code> — resolved Operational Context (see 11a)</li>
+          <li><code>{netSign}</code> — <code>POSITIVE</code> / <code>NEGATIVE (returns dominate)</code> / <code>MIXED</code> / <code>NO_DATA</code> — surfaces materials flowing back to stores</li>
+          <li><code>{rateChangeFlag}</code> — empty, or <code>⚠ SHARP DROP</code> (P2 ≤ 60% of P1) or <code>⚠ SHARP RISE</code> (P2 ≥ 160% of P1)</li>
+          <li><code>{invAdjCount}</code> — count of operator-confirmed Inv-Adj dates excluded from rate</li>
+          <li><code>{daysSinceLastIssue}</code> — integer days since last issue WO, or <code>no issues in window</code></li>
+        </ul>
+        <p>The new factory prompt also includes an explicit <b>WATCH FOR</b> block instructing the model to name specific signals (negative consumption, steep drop, spike-without-HCE, long flat tail, few events, working-redundant). Operators on the previous v2.0.x factory default are silently upgraded; customised prompts are preserved untouched — click <b>↺ Reset to factory</b> in Settings if you want to adopt the v2.1.0 prompt.</p>
+
+        <h3 id="llm-mass">11c · Mass LLM Review ★ (v2.0)</h3>
         <p>A second LLM entry point that lets you select up to <b>50</b> materials from the current bucket and run the LLM against each one in sequence, producing a single consolidated results table you can drill into and export.</p>
 
         <h4>Workflow</h4>

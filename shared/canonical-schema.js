@@ -13,7 +13,7 @@
   'use strict';
 
   const SCHEMA_VERSION = '1.0.0';
-  const APP_VERSION    = '2.0.1';
+  const APP_VERSION    = '2.1.0';
 
   /* ─── Factory defaults — seeded from the existing Python skill ──────────── */
   const FACTORY_DEFAULTS = Object.freeze({

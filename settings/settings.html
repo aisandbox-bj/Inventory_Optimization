@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.0.0-dev · released 2026-05-12
+     Inventory Optimization App · v2.1.0 · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
-     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.0
+     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.0
      RoC  : ../record-of-change.html     (what changed + how to roll back)
 ═════════════════════════════════════════════════════════════════════════-->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Settings</title>
-<meta name="app-version" content="2.0.0-dev" />
+<meta name="app-version" content="2.1.0" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="../shared/brand-tokens.css" />
 <link rel="stylesheet" href="settings.css" />
@@ -20,7 +20,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.0.0-dev · Settings</a>
+    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.1.0 · Settings</a>
   </div>
   <div class="links">
     <a href="../index.html">Dashboard</a>
@@ -111,11 +111,47 @@
       </div>
     </section>
 
+    <!-- ─── OPERATIONAL CONTEXT (v2.1.0) ─── -->
+    <section class="set-section">
+      <div class="set-head">
+        <h3>03 · Operational context</h3>
+        <div class="desc">Short, generic site-character text injected as <code>{customerContext}</code> at the top of every LLM prompt. Pick from the library — entries are deliberately generic, no client identifiers. The Custom slot is capped at 300 chars and lint-checked for things like long numeric IDs, company suffixes, all-caps codes, emails, or IPs.</div>
+      </div>
+      <div class="set-body">
+        <div class="ctx-row">
+          <label for="ctxActive">Active context</label>
+          <select id="ctxActive"></select>
+        </div>
+
+        <div class="ctx-preview-wrap">
+          <span class="ctx-preview-lab">Will be injected as <code>{customerContext}</code>:</span>
+          <div class="ctx-preview" id="ctxPreview"></div>
+        </div>
+
+        <details class="ctx-custom" id="ctxCustomBlock">
+          <summary>
+            <span class="ctx-custom-title">Custom context (advanced)</span>
+            <span class="ctx-custom-counter" id="ctxCustomCounter">0/300</span>
+          </summary>
+          <p class="ctx-custom-warn">⚠ This text crosses the browser → LLM provider boundary. Avoid client names, site codes, equipment numbers, email addresses. Use a library entry above wherever possible.</p>
+          <textarea id="ctxCustomText" maxlength="300" rows="4"
+            placeholder="e.g. Heavy mining ops in a cold climate. Mixed fleet. Operator priorities are reliability over cost. Some materials seasonal-staged."
+            spellcheck="false"></textarea>
+          <div class="ctx-lint" id="ctxLint"></div>
+          <div class="actions-row" style="margin-top:8px;">
+            <button id="ctxCustomSave"  class="primary">Save Custom</button>
+            <button id="ctxCustomClear" class="ghost">Clear</button>
+            <button id="ctxCustomUse"   class="ghost">Set as active</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
     <!-- ─── LLM PROMPT TEMPLATE ─── -->
     <section class="set-section">
       <div class="set-head">
-        <h3>03 · LLM prompt template</h3>
-        <div class="desc">Shared between Single review (per-graph) and Mass LLM review. Placeholders like <code>{material}</code> are resolved at call-time with per-material data. Edit freely — your override is stored locally only.</div>
+        <h3>04 · LLM prompt template</h3>
+        <div class="desc">Shared between Single review (per-graph) and Mass LLM review. Placeholders like <code>{material}</code> and <code>{customerContext}</code> are resolved at call-time with per-material data. Edit freely — your override is stored locally only.</div>
       </div>
       <div class="set-body">
         <textarea id="promptTemplate" class="prompt-textarea" spellcheck="false" wrap="off"></textarea>
@@ -136,7 +172,7 @@
     <!-- ─── COLUMN ALIASES ─── -->
     <section class="set-section">
       <div class="set-head">
-        <h3>04 · Column alias overrides</h3>
+        <h3>05 · Column alias overrides</h3>
         <div class="desc">Teach the parser non-standard SAP export headers persistently. Multiple aliases per field — separate with semicolons.</div>
       </div>
       <div class="set-body">
@@ -158,7 +194,7 @@
     <!-- ─── ABOUT / DANGER ZONE ─── -->
     <section class="set-section">
       <div class="set-head">
-        <h3>05 · About</h3>
+        <h3>06 · About</h3>
         <div class="desc">Diagnostics &amp; clean-slate testing.</div>
       </div>
       <div class="set-body">
@@ -195,6 +231,7 @@
 <script src="../shared/locale.js"></script>
 <script src="../shared/parsers.js"></script>
 <script src="../shared/config.js"></script>
+<script src="../shared/client-context.js"></script>
 <script src="../shared/llm.js"></script>
 <script src="settings.js"></script>
 

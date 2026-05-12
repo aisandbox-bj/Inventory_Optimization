@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.0.1 · released 2026-05-12
+     Inventory Optimization App · v2.1.0 · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
-     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.1
+     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.0
      This file is the canonical changelog — the version above is the build
      that ships THIS file, not necessarily the version you ran an analysis
      under (that's recorded in metadata.appVersion of each saved JSON).
@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="2.0.1" />
+<meta name="app-version" content="2.1.0" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
@@ -257,6 +257,37 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- ───────── v2.1.0 ───────── -->
+    <article class="roc-entry release">
+      <div class="head">
+        <span class="ver">v2.1.0</span>
+        <span class="date">2026-05-12</span>
+        <span class="tag released">released</span>
+      </div>
+
+      <h4>FEAT · LLM prompt overhaul — Operational Context library + signal-aware structured response (Phase 1 of v2.1.x)</h4>
+      <ul>
+        <li><b>Operational Context library</b> (<code>shared/client-context.js</code>) — every LLM prompt now begins with a generic site-character block injected as <code>{customerContext}</code>. Four factory entries (Open-pit mining default, Underground mining, Heavy civil, Minimal) — deliberately generic, no client identifiers. Operator picks the closest match in <b>Settings → 03 · Operational context</b>.</li>
+        <li><b>Custom slot (advanced)</b> — capped at <b>300 characters</b>, lint-checked for likely client identifiers: 4+-digit numbers, company suffixes (<code>Inc</code>/<code>Ltd</code>/<code>Corp</code>/<code>LLC</code>/<code>Pty</code>/<code>GmbH</code>/etc.), 3+-character all-caps tokens (potential site codes — with allow-list for MRP/PD/HCE/etc.), email-like patterns, IP addresses. Lint <em>warns</em> and requires explicit confirm before save; does not block. Per the seven durable LLM data-security principles.</li>
+        <li><b>Structured factory prompt template</b> — restructured with an explicit <b>WATCH FOR</b> block telling the model to name specific signals (negative consumption, sharp drop, sharp rise, spike-without-HCE, long flat tail, few events, working-redundant). JSON response now includes a <code>signals[]</code> array alongside verdict / notes / suggestedEdits.</li>
+        <li><b>New pipeline signal fields</b> on every per-material result (additive, no schema bump): <code>netSign</code> (POSITIVE / NEGATIVE / MIXED / NO_DATA), <code>daysSinceLastIssue</code>, <code>rateDropFlag</code>, <code>rateRiseFlag</code>, <code>invAdjCount</code>. Fed into the prompt context so the model can call out the exact signal seen.</li>
+        <li><b>Auto-upgrade for operators on the v2.0.x factory prompt</b> — if the saved template exactly matches the legacy default, it's silently cleared so the new factory takes effect. Customised prompts are preserved untouched; click <b>↺ Reset to factory</b> in Settings to adopt the v2.1.0 prompt.</li>
+        <li><b>Backward-compatible response parsing</b> — older cached / saved mass-review JSONs without a <code>signals</code> array still parse correctly (empty array).</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/client-context.js</code> (NEW · library + active selector + Custom slot + lint), <code>shared/canonical-schema.js</code> (APP_VERSION → 2.1.0), <code>shared/config.js</code> (new FACTORY_PROMPT_TEMPLATE + LEGACY_FACTORY_PROMPT_TEMPLATE for upgrade detection + extended PROMPT_PLACEHOLDERS + <code>isPromptTemplateCustomised</code>), <code>shared/llm.js</code> (<code>buildPrompt</code> resolves active context; <code>buildContext</code> exposes new tokens; <code>parseJsonResponse</code> extracts signals[]), <code>shared/pipeline.js</code> (5 signal fields per material), <code>settings/settings.{html,js,css}</code> (new 03 Operational context panel), <code>analysis/analysis.html</code> (loads client-context.js), <code>user-manual.html</code> §11a/§11b, <code>record-of-change.html</code> (this entry).
+      </div>
+
+      <div class="commit">
+        <b>Boundary contract preserved:</b> active context selection and Custom text live in <code>settings.client.*</code> localStorage keys only — never written to the canonical intake JSON. The intake JSON contract stays clean (SCHEMA_VERSION still 1.0.0). LLM verdicts and signals continue to be session-only in-memory; no localStorage writes for review data.
+      </div>
+
+      <div class="commit">
+        <b>Rollback:</b> v2.0.1 is the prior tag. Operators with customised templates are unaffected; operators on legacy factory get the new prompt auto-applied. To revert to v2.0.1 prompt behaviour: <code>git checkout v2.0.1</code> in /tmp/peek and copy the affected files back. Or in-app: edit the prompt template in Settings to whatever you prefer — operator-saved overrides always win.
+      </div>
+    </article>
 
     <!-- ───────── v2.0.1 ───────── -->
     <article class="roc-entry release">

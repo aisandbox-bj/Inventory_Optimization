@@ -767,6 +767,36 @@
                               ? 'V1'
                               : (mrpType || 'PD');
 
+        // v2.1.0 signal fields (additive — fed into the LLM prompt's WATCH-FOR
+        // block so the model can name the specific signal that tripped).
+        // No client identifiers; purely derived from transaction data.
+        let _issuesQty = 0, _returnsQty = 0, _lastIssueDate = '';
+        for (const r of tx) {
+          const mt = String(r.movementType || '').trim();
+          if (!VALID_TYPES.has(mt)) continue;
+          const qv = Math.abs(parseFloat(r.quantity) || 0);
+          if (ISSUE_TYPES.has(mt)) {
+            _issuesQty += qv;
+            const d = String(r.postingDate || '');
+            if (d > _lastIssueDate) _lastIssueDate = d;
+          } else if (RETURN_TYPES.has(mt)) {
+            _returnsQty += qv;
+          }
+        }
+        let netSign;
+        if (_issuesQty === 0 && _returnsQty === 0)   netSign = 'NO_DATA';
+        else if (_issuesQty - _returnsQty < 0)       netSign = 'NEGATIVE (returns dominate)';
+        else if (_returnsQty >= 0.25 * _issuesQty)   netSign = 'MIXED';
+        else                                         netSign = 'POSITIVE';
+        let daysSinceLastIssue = null;
+        if (_lastIssueDate) {
+          const _ms = Date.parse(runDate) - Date.parse(_lastIssueDate);
+          if (Number.isFinite(_ms)) daysSinceLastIssue = Math.max(0, Math.floor(_ms / 86400000));
+        }
+        const rateDropFlag = (p1f === 'OK' && p1r > 0 && p2f === 'OK' && p2r <= 0.6 * p1r);
+        const rateRiseFlag = (p1f === 'OK' && p1r > 0 && p2f === 'OK' && p2r >= 1.6 * p1r);
+        const invAdjCount  = invAdj.length;
+
         materials.push({
           material:     q.material,
           description:  q.description,
@@ -793,6 +823,7 @@
           adjP2Flag:    adjP2 ? adjP2.flag : null,
           hceP1, hceP2,
           invAdj,                                  // events on confirmed Inv-Adj dates (excluded from rate)
+          invAdjCount,                             // count of Inv-Adj events for this material (v2.1.0)
           pattern,
           stock, mrpType, cmin, cmax, safetyStock,
           recMin:       tl.recMin,
@@ -801,6 +832,11 @@
           runway,                                  // months of cover at P2 rate
           woCount,                                 // unique issuing work orders in window
           fewEvents:    !!tl.fewEvents,            // true if few-events overlay tripped
+          // v2.1.0 signal fields — additive, used by LLM prompt context
+          netSign,                                 // 'POSITIVE' | 'NEGATIVE (returns dominate)' | 'MIXED' | 'NO_DATA'
+          daysSinceLastIssue,                      // integer or null
+          rateDropFlag,                            // boolean — p2Rate <= 0.6 * p1Rate
+          rateRiseFlag,                            // boolean — p2Rate >= 1.6 * p1Rate
           trafficLight: tl.code,
           action:       tl.action,
           // Multi-model is filled in post-bucketing (see below). Defaults to 'Single'.
