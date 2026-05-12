@@ -21,6 +21,7 @@ I'm continuing work on the **Inventory Optimization App** — a browser-only sin
 1. Read these in order — they are the source of truth:
    - `App\v2\record-of-change.html` — full changelog with rollback steps
    - `App\v2\user-manual.html` — operator manual with the analytical methodology
+   - `App\v2\PLAN_v2.1.0.md` ★ — the **pending** v2.1.0 plan (LLM prompt tightening + PDF Pack UX + Operational Context library). Contains the threat model + durable LLM-boundary principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
    - `App\v2\shared\canonical-schema.js` — JSON contract + parameter defaults
    - `App\v2\shared\pipeline.js` — the analytical engine (deterministic, no LLM)
 2. Check my project memory at `C:\Users\Test_Home\.claude\projects\C--Users-Test-Home-Documents-Claude-Projects-Inventory-Optimization\memory\MEMORY.md` — it points to:
@@ -96,6 +97,21 @@ App/v2/
 - Deleting tags or force-pushing main.
 - Touching `App/v1/` or `App/archive/*` — those are frozen records.
 - Adding LLM-persistence to localStorage — mass review is in-memory-only by deliberate security design.
+- **Widening the LLM prompt with free-form operator text without the guardrails described in `PLAN_v2.1.0.md` §A1 (fixed-pick library + capped optional Custom slot + privacy lint + preview button).** Free-form text crossing the browser → third-party-LLM boundary has historically been the easiest path to leak client identifiers.
+- **Putting LLM-coupling metadata on the canonical JSON.** No `clientProfileId`, no LLM verdicts, no provider info. The math deliverable doesn't carry LLM metadata.
+- **Defaulting LLM commentary ON in client-facing deliverables (PDF / Excel).** Default OFF, opt-in per export, mandatory caveat banner when enabled.
+
+## Durable data-security principles for LLM-adjacent work
+
+(From `PLAN_v2.1.0.md` §0 — internalise these before changing anything LLM-related.)
+
+1. Every byte added to the LLM prompt is a data-egress vector. Justify each addition.
+2. Free-form operator text in Settings is a leak channel. Prefer fixed-pick lists.
+3. The canonical-JSON / deliverable boundary does NOT carry LLM metadata.
+4. Defaults bias toward safety (LLM-in-deliverable: default OFF).
+5. Make outgoing data inspectable (a "Preview outgoing prompt" affordance beats trust-the-hash).
+6. Don't bump SCHEMA_VERSION unless you have to.
+7. The LLM annotates, the math decides.
 
 ## How to surface state quickly
 
