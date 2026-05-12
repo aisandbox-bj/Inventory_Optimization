@@ -152,6 +152,36 @@ Schema stays at `1.0.0`. No bump needed.
 
 ---
 
+### A7 · WR (PURPLE) thresholds — make configurable
+
+**Today (v2.0.0-dev):** PURPLE / Working Redundant trigger is hardcoded in `assess()` ([pipeline.js:~270]) — `mt === 'PD' && runway > 12 mo` → "Likely WR", `runway > 6 mo` → "Possible WR". V1 materials never trip purple by design (consumption-driven, self-corrects via draw-down).
+
+**Operator signal:** the 12-month threshold for "likely" is too lenient — 9 months of stock at current P2 rate on a PD item is already a strong candidate for write-down review.
+
+**Changes:**
+
+| Param | Default | Description |
+|---|---|---|
+| `wrSoftMonths` | **6** | Stock-runway ≥ this (in months, at P2 rate) AND MRP type ∈ `wrMrpTypes` → flagged *Possible* WR (PURPLE soft). |
+| `wrHardMonths` | **9** | Stock-runway ≥ this → *Likely* WR (PURPLE hard). **Lowered from 12 per operator input.** |
+| `wrMrpTypes`   | `['PD']` | MRP types that trigger the WR check at all. Defaults to PD-only (V1 is consumption-driven; mis-flagging V1 as WR is wrong). Future-proofs for sites with non-standard MRP codes like `ZE` if needed. |
+
+**Files touched:**
+- [`shared/canonical-schema.js`](shared/canonical-schema.js) — add three keys to `FACTORY_DEFAULTS`; add three entries to `PARAMETER_DESCRIPTIONS`.
+- [`shared/pipeline.js`](shared/pipeline.js) — `assess()` reads `params.wrSoftMonths` / `wrHardMonths` / `wrMrpTypes` instead of hardcoded literals. Fall back to factory defaults if the param is missing on an older intake JSON (back-compat).
+- [`settings/settings.js`](settings/settings.js) — add three rows to the parameter editor (numeric inputs for the months, comma-separated text for the MRP types).
+- [`intake/intake.js`](intake/intake.js) — same three rows under Step 5 per-run override.
+- [`user-manual.html`](user-manual.html) — §7f traffic-light tree table needs the threshold-source updated from "(hardcoded 6/12)" to "(parameters `wrSoftMonths` / `wrHardMonths`, default 6/9)".
+
+**Schema impact:** additive parameters on `parameters.*`. No `SCHEMA_VERSION` bump. Older intakes without the keys fall through to defaults at pipeline time.
+
+**Why this slots in cleanly:**
+- Same shape as existing parameters (`hcePctThreshold`, `lumpyCvThreshold`, etc.) — operator already understands the per-run override mechanic.
+- No data-egress implications (pure pipeline math, no LLM, no deliverable change beyond the action-text figure).
+- Visible diagnostic — the PURPLE action message already prints the actual runway (`"Likely Working Redundant — 11.3 months of stock at P2 rate (>9mo with PD)…"`) so the threshold-tune is operator-verifiable.
+
+---
+
 ### B · PDF Pack modal — Excel-style filtering
 
 (Unchanged from original plan — no security implications.)
@@ -240,10 +270,10 @@ Skip block entirely when either condition is false.
 | [`shared/context-library.js`](shared/context-library.js) | NEW FILE | Fixed-pick library + session-only active selector |
 | [`shared/config.js`](shared/config.js) | `FACTORY_PROMPT_TEMPLATE`, add `FACTORY_PROMPT_TEMPLATE_VERSION` | New structured-signals schema |
 | [`shared/llm.js`](shared/llm.js) | `buildContext()`, `parseJsonResponse()` | Inject context + new signal fields; tolerate v2.0 response shape |
-| [`shared/pipeline.js`](shared/pipeline.js) | per-material result block | Expose netSign, daysSinceLastIssue, rateDropFlag, rateRiseFlag, invAdjCount |
-| [`shared/canonical-schema.js`](shared/canonical-schema.js) | — | **No change.** No SCHEMA_VERSION bump. |
+| [`shared/pipeline.js`](shared/pipeline.js) | per-material result block + `assess()` WR block | Expose netSign / daysSinceLastIssue / rateDropFlag / rateRiseFlag / invAdjCount. WR thresholds read from `params.wrSoftMonths` / `wrHardMonths` / `wrMrpTypes`. |
+| [`shared/canonical-schema.js`](shared/canonical-schema.js) | `FACTORY_DEFAULTS` + `PARAMETER_DESCRIPTIONS` | Add `wrSoftMonths` (6), `wrHardMonths` (9), `wrMrpTypes` (['PD']) — additive only. **No SCHEMA_VERSION bump.** |
 | [`settings/settings.html / .js / .css`](settings/) | New "Operational context" panel | Dropdown + advanced-toggle + 300-char Custom slot + Preview-prompt button |
-| [`intake/intake.html / .js`](intake/) | — | **No change.** No per-intake override (dropped). |
+| [`intake/intake.html / .js`](intake/) | Step 5 parameter editor | Add `wrSoftMonths`, `wrHardMonths`, `wrMrpTypes` rows alongside existing per-run params. (No client-profile per-intake override — that's still dropped.) |
 | [`analysis/analysis.js`](analysis/analysis.js) | Multiple — see scope sections | Filter popover refactor, bulk-mark buttons, modal column filters, LLM badge, PDF builder LLM section |
 | [`analysis/analysis.html`](analysis/analysis.html) | PDF modal markup | Filter row, Include-LLM toggle (default OFF) |
 | [`analysis/analysis.css`](analysis/analysis.css) | Modal table styles, llm-verdict badges, caveat banner | Re-use existing patterns |
@@ -274,8 +304,9 @@ Skip block entirely when either condition is false.
 8. **LLM badge on rows** — run a single review, confirm cyan / amber / magenta dot renders.
 9. **PDF without LLM by default** — run Mass LLM, open PDF Pack, do NOT tick "Include LLM review", build PDF; confirm no LLM section appears anywhere.
 10. **PDF with LLM (opt-in)** — same as 9 but tick the toggle. Confirm: caveat banner present on every page that has LLM data; verdict pill rendered; `[LLM]` prefix on notes; signals badges only show flagged signals; suggested-edits table renders when present; provider / model / hash / timestamp footer line present.
-11. **No regression** — re-run the v2.0.0-dev verification surface (Mass LLM cancel/pause/resume, Inv-Adj modal, reuse-data modal, Assessment Name validation, Clear-session-data button).
-12. **Schema version unchanged** — `1.0.0` everywhere.
+11. **WR thresholds configurable** — Settings → Parameter defaults shows `wrSoftMonths` (6) and `wrHardMonths` (9) and `wrMrpTypes` (`PD`). Change `wrHardMonths` to 8 in Intake §5, save intake, run analysis — confirm a material with 8.5 mo runway now lands PURPLE-Likely instead of PURPLE-Possible. Re-open the same intake later → values persist on the canonical JSON. Older intakes (without the keys) fall back to defaults at pipeline time without error.
+12. **No regression** — re-run the v2.0.0-dev verification surface (Mass LLM cancel/pause/resume, Inv-Adj modal, reuse-data modal, Assessment Name validation, Clear-session-data button).
+13. **Schema version unchanged** — `1.0.0` everywhere.
 
 ---
 
