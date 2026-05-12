@@ -129,7 +129,7 @@
 
   function renderSummaryTiles(){
     const sum = state.result.summary;
-    const tiles = ['GREEN','BLUE','ORANGE','RED','GREY'].map(k => `
+    const tiles = ['GREEN','BLUE','ORANGE','RED','PURPLE','GREY'].map(k => `
       <div class="tl-tile ${k}" data-tl="${k}">
         <span class="name">${k}</span>
         <div class="v">${sum[k] || 0}</div>
@@ -183,7 +183,7 @@
   ═════════════════════════════════════════════════════════════════════════ */
   function renderFilterButtons(){
     const host = $('#tlFilter');
-    const labels = ['ALL','GREEN','BLUE','ORANGE','RED','GREY'];
+    const labels = ['ALL','GREEN','BLUE','ORANGE','RED','PURPLE','GREY'];
     host.innerHTML = labels.map(l => `<button data-tl="${l}" class="${state.filterTl === l ? 'active' : ''}">${l}</button>`).join('');
     $$('#tlFilter button').forEach(b => {
       b.addEventListener('click', () => { state.filterTl = b.dataset.tl; renderList(); renderFilterButtons(); });
@@ -547,7 +547,7 @@
   }
 
   function pillCls(tl){
-    return ({ GREEN:'ok', BLUE:'cyan', ORANGE:'warn', RED:'crit', GREY:'' })[tl] || '';
+    return ({ GREEN:'ok', BLUE:'cyan', ORANGE:'warn', RED:'crit', PURPLE:'wr', GREY:'' })[tl] || '';
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

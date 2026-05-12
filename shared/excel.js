@@ -33,9 +33,10 @@
     ORANGE: 'FF8C00',
     BLUE:   '3498DB',
     RED:    'C00000',
+    PURPLE: '9B59B6',
     GREY:   'BFBFBF'
   };
-  const TL_FONT_WHITE = ['GREEN','ORANGE','BLUE','RED'];
+  const TL_FONT_WHITE = ['GREEN','ORANGE','BLUE','RED','PURPLE'];
 
   /* ─── Theme colours (ARGB minus alpha — we add FF in usage) ─── */
   const C = {
@@ -515,7 +516,7 @@
     sum.mergeCells('A1:B1');
     sum.getRow(2).values = ['Light', 'Count'];
     sum.getRow(2).font   = { bold:true, name:'Calibri' };
-    const order = ['GREEN','BLUE','ORANGE','RED','GREY'];
+    const order = ['GREEN','BLUE','ORANGE','RED','PURPLE','GREY'];
     let sr = 3;
     for (const k of order) {
       sum.getCell(`A${sr}`).value = k;
@@ -649,7 +650,7 @@
     xsum.getCell('A1').value = 'Cross-bucket Traffic-light Summary';
     xsum.getCell('A1').font  = { bold:true, size:13, name:'Calibri' };
     xsum.mergeCells('A1:G1');
-    ['Bucket','GREEN','BLUE','ORANGE','RED','GREY','Total'].forEach((h, i) => {
+    ['Bucket','GREEN','BLUE','ORANGE','RED','PURPLE','GREY','Total'].forEach((h, i) => {
       const c = xsum.getRow(2).getCell(i + 1);
       c.value = h;
       c.font  = { bold:true, color:{ argb:'FFFFFFFF' }, name:'Calibri' };
@@ -659,7 +660,7 @@
     });
 
     let masterRow = 3, xsumRow = 3;
-    const tlTot = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, total:0 };
+    const tlTot = { GREEN:0, BLUE:0, ORANGE:0, RED:0, PURPLE:0, GREY:0, total:0 };
 
     for (const bucket of result.buckets) {
       for (const m of bucket.materials) {
@@ -683,23 +684,23 @@
       }
       const sr = xsum.getRow(xsumRow);
       sr.getCell(1).value = bucket.name;
-      ['GREEN','BLUE','ORANGE','RED','GREY','total'].forEach((k, i) => {
+      ['GREEN','BLUE','ORANGE','RED','PURPLE','GREY','total'].forEach((k, i) => {
         sr.getCell(i + 2).value = bucket.summary[k] || 0;
       });
-      sr.getCell(7).font = { bold:true, name:'Calibri' };
+      sr.getCell(8).font = { bold:true, name:'Calibri' };
       xsumRow++;
-      ['GREEN','BLUE','ORANGE','RED','GREY','total'].forEach(k => tlTot[k] += (bucket.summary[k] || 0));
+      ['GREEN','BLUE','ORANGE','RED','PURPLE','GREY','total'].forEach(k => tlTot[k] = (tlTot[k] || 0) + (bucket.summary[k] || 0));
     }
     // Totals row
     const tr = xsum.getRow(xsumRow);
     tr.getCell(1).value = 'TOTAL';
-    ['GREEN','BLUE','ORANGE','RED','GREY','total'].forEach((k, i) => {
-      tr.getCell(i + 2).value = tlTot[k];
+    ['GREEN','BLUE','ORANGE','RED','PURPLE','GREY','total'].forEach((k, i) => {
+      tr.getCell(i + 2).value = tlTot[k] || 0;
     });
     tr.eachCell(c => { c.font = { bold:true, name:'Calibri' }; c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFEEEEEE' } }; });
 
     xsum.getColumn(1).width = 28;
-    for (let c = 2; c <= 7; c++) xsum.getColumn(c).width = 12;
+    for (let c = 2; c <= 8; c++) xsum.getColumn(c).width = 12;
 
     const meta = wb.addWorksheet('Run');
     meta.getCell('A1').value = 'Inventory Optimization · Combined Analysis Run';

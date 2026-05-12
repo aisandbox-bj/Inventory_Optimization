@@ -326,6 +326,8 @@ a:hover{ color:var(--accent-glow); }
 .pill.crit  .dot{ background:var(--status-crit); }
 .pill.cyan  { color:var(--accent);      border-color:rgba(31,206,216,.30); }
 .pill.cyan  .dot{ background:var(--accent); }
+.pill.wr    { color:#B07CC6;            border-color:rgba(155,89,182,.40); }
+.pill.wr    .dot{ background:#9B59B6; }
 
 /* ─── Tab bar ───────────────────────────────────────────────────────────── */
 .tabs{

@@ -231,35 +231,66 @@
   /* ─── Traffic-light decision (port of assess() in 04_mrp_analysis.py) ───── */
   /**
    * Rules in priority order:
-   *  1. p2Flag != OK or p2Rate == 0      → GREY ("no recent consumption")
-   *  2. mrpType == "NOT IN MASTER"        → GREY ("excluded")
-   *  3. recMin is null                    → GREY ("not calculable")
-   *  4. mrp=PD AND total ≥ threshold      → RED   ("change to V1")
-   *  5. mrp=V1 AND rec=current            → GREEN ("no action")
-   *  6. mrp=V1 AND ALL rec < current      → BLUE  ("lower, safe")
-   *  7. mrp=V1 AND any rec > current      → ORANGE("raise, insufficient")
-   *  8. else                              → GREY  ("manual review")
+   *  1. p2Flag != OK or p2Rate == 0           → GREY   ("no recent consumption")
+   *  2. mrpType == "NOT IN MASTER"             → GREY   ("excluded")
+   *  3. recMin is null                         → GREY   ("not calculable")
+   *  4. PD AND stock-runway > 12 mo            → PURPLE ("likely Working Redundant")     ← v1.1.0-dev
+   *  5. PD AND stock-runway > 6 mo             → PURPLE ("possible Working Redundant")   ← v1.1.0-dev
+   *  6. mrp=PD AND total ≥ threshold           → RED    ("change to V1")
+   *  7. mrp=V1 AND rec=current                 → GREEN  ("no action")
+   *  8. mrp=V1 AND ALL rec < current           → BLUE   ("lower, safe")
+   *  9. mrp=V1 AND any rec > current           → ORANGE ("raise, insufficient")
+   * 10. else                                   → GREY   ("manual review")
+   *
+   * Then a FEW-EVENTS overlay: if the material had ≤ 2 issuing work orders
+   * over the full analysis window AND the primary code was GREEN/BLUE, the
+   * outcome is upgraded to ORANGE with a "few events" rationale. RED, GREY,
+   * and PURPLE keep their priority (they're already review-priority).
    */
-  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax){
+  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount){
+    // ── GREY gates ───────────────────────────────────────────────────────
     if (p2f !== 'OK' || p2r === 0) {
-      return { code: 'GREY', action: 'Refer for manual review — no recent (P2) consumption', recMin: null, recMax: null };
+      return finalise({ code:'GREY', action:'Refer for manual review — no recent (P2) consumption', recMin:null, recMax:null }, woCount);
     }
     if (String(mrpType || '').trim() === 'NOT IN MASTER') {
-      return { code: 'GREY', action: 'Not in Inventory Master — excluded', recMin: null, recMax: null };
+      return finalise({ code:'GREY', action:'Not in Inventory Master — excluded', recMin:null, recMax:null }, woCount);
     }
     if (rmin == null) {
-      return { code: 'GREY', action: 'Recommended Min/Max not calculable', recMin: null, recMax: null };
+      return finalise({ code:'GREY', action:'Recommended Min/Max not calculable', recMin:null, recMax:null }, woCount);
     }
     const mt = String(mrpType || '').trim().toUpperCase();
 
+    // ── PURPLE — Working Redundant check (PD with surplus stock runway) ──
+    // Runway = months of cover at the P2 rate. PD = fixed Min/Max, so a
+    // surplus of stock indicates the Min/Max are mis-sized or the item
+    // shouldn't be stocked at this level.
+    if (mt === 'PD' && typeof stock === 'number' && stock > 0 && p2r > 0) {
+      const runway = stock / p2r;
+      if (runway > 12) {
+        return finalise({
+          code:'PURPLE',
+          action:`Likely Working Redundant — ${runway.toFixed(1)} months of stock at P2 rate (>12mo with PD). Review for destocking / write-down.`,
+          recMin: rmin, recMax: rmax
+        }, woCount);
+      }
+      if (runway > 6) {
+        return finalise({
+          code:'PURPLE',
+          action:`Possible Working Redundant — ${runway.toFixed(1)} months of stock at P2 rate (>6mo with PD). Review stocking necessity.`,
+          recMin: rmin, recMax: rmax
+        }, woCount);
+      }
+    }
+
+    // ── Standard MRP-type rules ──────────────────────────────────────────
     if (mt === 'PD' && total >= threshold) {
-      return { code: 'RED', action: `Change MRP type to V1. Set Min=${rmin}, Max=${rmax}`, recMin: rmin, recMax: rmax };
+      return finalise({ code:'RED', action:`Change MRP type to V1. Set Min=${rmin}, Max=${rmax}`, recMin:rmin, recMax:rmax }, woCount);
     }
     if (mt === 'V1') {
       const minOk = cmin != null && Math.round(parseFloat(cmin)) === rmin;
       const maxOk = cmax != null && Math.round(parseFloat(cmax)) === rmax;
       if (minOk && maxOk) {
-        return { code: 'GREEN', action: 'No action required — MRP type and parameters correct', recMin: rmin, recMax: rmax };
+        return finalise({ code:'GREEN', action:'No action required — MRP type and parameters correct', recMin:rmin, recMax:rmax }, woCount);
       }
       const parts = [];
       const dirs  = [];
@@ -274,11 +305,43 @@
         if (cur != null) dirs.push(rmax < cur ? 'down' : 'up');
       }
       if (dirs.length && dirs.every(d => d === 'down')) {
-        return { code: 'BLUE', action: `Lower Min/Max (low risk). ${parts.join('; ')}`, recMin: rmin, recMax: rmax };
+        return finalise({ code:'BLUE', action:`Lower Min/Max (low risk). ${parts.join('; ')}`, recMin:rmin, recMax:rmax }, woCount);
       }
-      return { code: 'ORANGE', action: `Increase Min/Max (insufficient). ${parts.join('; ')}`, recMin: rmin, recMax: rmax };
+      return finalise({ code:'ORANGE', action:`Increase Min/Max (insufficient). ${parts.join('; ')}`, recMin:rmin, recMax:rmax }, woCount);
     }
-    return { code: 'GREY', action: `${mrpType} not assessed — manual review`, recMin: null, recMax: null };
+    return finalise({ code:'GREY', action:`${mrpType} not assessed — manual review`, recMin:null, recMax:null }, woCount);
+  }
+
+  /**
+   * Few-events overlay: a material with ≤ 2 issuing work orders in the
+   * analysis window has an unreliable rate (statistical noise dominates).
+   * Override GREEN / BLUE to ORANGE so the planner reviews the pattern
+   * manually before accepting the recommendation. RED / GREY / PURPLE
+   * stay — they're already review-priority states.
+   */
+  function finalise(tl, woCount){
+    if (woCount != null && woCount <= 2 && (tl.code === 'GREEN' || tl.code === 'BLUE')) {
+      return {
+        code:'ORANGE',
+        action:`Only ${woCount} consumption event${woCount === 1 ? '' : 's'} over the analysis window — pattern unreliable, manual review of rate + Min/Max recommended. (Original: ${tl.code} — ${tl.action})`,
+        recMin: tl.recMin,
+        recMax: tl.recMax,
+        fewEvents: true
+      };
+    }
+    return tl;
+  }
+
+  /* ─── Count distinct issue work orders for a material's transactions ─── */
+  function countIssueWorkOrders(transactions){
+    const orders = new Set();
+    for (const r of transactions) {
+      const mt = String(r.movementType || '').trim();
+      if (!ISSUE_TYPES.has(mt)) continue;
+      const o = String(r.order || '').trim();
+      if (o) orders.add(o);
+    }
+    return orders.size;
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -516,7 +579,7 @@
     const buckets = buildBuckets(json);
     const bucketResults = [];
 
-    const summary = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, total: 0 };
+    const summary = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, PURPLE:0, total: 0 };
 
     for (const bucket of buckets) {
       const desc = buildMaterialDescIndex(bucket.transactions);
@@ -532,7 +595,7 @@
       const txByMat = groupBy(bucket.transactions, t => String(t.material || '').trim());
 
       const materials = [];
-      const bucketSummary = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, total: 0 };
+      const bucketSummary = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, PURPLE:0, total: 0 };
 
       for (const q of qualifying) {
         const tx = txByMat.get(q.material) || [];
@@ -568,10 +631,11 @@
         const rmin = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * minMonths) : null;
         const rmax = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
 
-        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax);
-        bucketSummary[tl.code]++;
+        const woCount = countIssueWorkOrders(tx);
+        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount);
+        bucketSummary[tl.code] = (bucketSummary[tl.code] || 0) + 1;
         bucketSummary.total++;
-        summary[tl.code]++;
+        summary[tl.code]  = (summary[tl.code]  || 0) + 1;
         summary.total++;
 
         // Derived: runway @ P2 rate (in months of cover), null if no rate / no stock
@@ -616,6 +680,8 @@
           recMax:       tl.recMax,
           recMrpType,
           runway,                                  // months of cover at P2 rate
+          woCount,                                 // unique issuing work orders in window
+          fewEvents:    !!tl.fewEvents,            // true if few-events overlay tripped
           trafficLight: tl.code,
           action:       tl.action,
           // Multi-model is filled in post-bucketing (see below). Defaults to 'Single'.

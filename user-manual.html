@@ -182,6 +182,7 @@
 .tl-pill.BLUE { background:#3498DB;color:#fff; }
 .tl-pill.ORANGE{background:#FF8C00;color:#fff; }
 .tl-pill.RED  { background:#C00000;color:#fff; }
+.tl-pill.PURPLE{background:#9B59B6;color:#fff; }
 .tl-pill.GREY { background:#BFBFBF;color:#000; }
 </style>
 </head>
@@ -489,21 +490,40 @@
         <p>The <b>Recommended MRP Type</b> on the per-material Excel sheet is derived: <code>V1</code> when the pattern is LUMPY <em>or</em> any HCE was flagged in P2 (a fixed Min/Max would be a poor fit), otherwise mirrors the current MRP type. This is a heuristic — the human reviewer can override.</p>
 
         <!-- ── 7f Traffic light ── -->
-        <h3 id="m-tl">7f · Traffic-light decision tree (8 rules, priority order)</h3>
-        <p>The <code>assess()</code> function evaluates rules in order; the first matching rule wins.</p>
+        <h3 id="m-tl">7f · Traffic-light decision tree (10 rules + few-events overlay, priority order)</h3>
+        <p>The <code>assess()</code> function evaluates rules in order; the first matching rule wins. After the primary code is set, a <b>few-events overlay</b> may upgrade GREEN/BLUE to ORANGE if the material's consumption was statistically thin.</p>
         <table class="um-table">
           <thead><tr><th>#</th><th>Condition</th><th>Result</th><th>Action shown</th></tr></thead>
           <tbody>
             <tr><td>1</td><td>P2 flag ≠ OK OR P2 rate = 0</td><td><span class="tl-pill GREY">GREY</span></td><td>Refer for manual review — no recent (P2) consumption</td></tr>
             <tr><td>2</td><td>MRP type = NOT IN MASTER</td><td><span class="tl-pill GREY">GREY</span></td><td>Material missing from Inventory Master — exclude or fix master first</td></tr>
-            <tr><td>3</td><td>Total &lt; threshold</td><td><span class="tl-pill GREY">GREY</span></td><td>Below qualifying threshold (default 10 units / window)</td></tr>
-            <tr><td>4</td><td>MRP type ∈ {ZE, KP, …} (non-MRP-driven)</td><td><span class="tl-pill GREY">GREY</span></td><td>Manual MRP type — recommendation not applicable</td></tr>
-            <tr><td>5</td><td>Current Min &amp; Max both null/zero</td><td><span class="tl-pill ORANGE">ORANGE</span></td><td>Set Min/Max to {recMin} / {recMax}</td></tr>
-            <tr><td>6</td><td>Recommended differs &gt; ±20% from current</td><td><span class="tl-pill RED">RED</span></td><td>Material change required — review with planner</td></tr>
-            <tr><td>7</td><td>Recommended differs within ±20%</td><td><span class="tl-pill BLUE">BLUE</span></td><td>Minor tweak — adjust Min to {recMin} or Max to {recMax}</td></tr>
-            <tr><td>8</td><td>All criteria within tolerance</td><td><span class="tl-pill GREEN">GREEN</span></td><td>Current settings adequate — no action</td></tr>
+            <tr><td>3</td><td>Recommended Min not calculable</td><td><span class="tl-pill GREY">GREY</span></td><td>Recommended Min/Max not calculable</td></tr>
+            <tr><td>4</td><td><b>PD AND stock-runway &gt; 12 months</b> at P2 rate</td><td><span class="tl-pill PURPLE">PURPLE</span></td><td><b>Likely Working Redundant (WR)</b> — review for destocking / write-down</td></tr>
+            <tr><td>5</td><td><b>PD AND stock-runway &gt; 6 months</b> at P2 rate</td><td><span class="tl-pill PURPLE">PURPLE</span></td><td><b>Possible Working Redundant</b> — review stocking necessity</td></tr>
+            <tr><td>6</td><td>PD AND total ≥ threshold (and stock-runway ≤ 6 months)</td><td><span class="tl-pill RED">RED</span></td><td>Change MRP type to V1. Set Min/Max to {recMin}/{recMax}</td></tr>
+            <tr><td>7</td><td>V1 AND rec matches current Min &amp; Max</td><td><span class="tl-pill GREEN">GREEN</span></td><td>No action required</td></tr>
+            <tr><td>8</td><td>V1 AND recommended pulls Min/Max <em>down</em> from current</td><td><span class="tl-pill BLUE">BLUE</span></td><td>Lower Min/Max — low-risk reduction</td></tr>
+            <tr><td>9</td><td>V1 AND recommended pulls Min/Max <em>up</em> (insufficient)</td><td><span class="tl-pill ORANGE">ORANGE</span></td><td>Raise Min/Max — current setting insufficient</td></tr>
+            <tr><td>10</td><td>Anything else (other MRP type, missing data)</td><td><span class="tl-pill GREY">GREY</span></td><td>Not assessed — manual review</td></tr>
           </tbody>
         </table>
+
+        <h4>Few-events overlay (priority bump)</h4>
+        <p>After the primary code is determined, the pipeline counts the number of <b>unique issuing work orders</b> in the analysis window. If <code>woCount ≤ 2</code> AND the primary code was GREEN or BLUE, the outcome is <em>upgraded to ORANGE</em> with an explicit "few events" rationale. The rate computed from one or two events isn't statistically reliable — a single rebuild WO at the right moment can produce a rate that looks fine but reflects luck, not pattern. RED, PURPLE, and GREY are <b>not</b> overlaid (they're already review-priority).</p>
+        <div class="um-formula">
+          <span class="lab">Few-events rule</span>
+          IF woCount ≤ 2 AND primary code ∈ {GREEN, BLUE}<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;→ upgrade to <span class="tl-pill ORANGE">ORANGE</span> · action: "Only N event(s) — pattern unreliable, manual review"<br>
+          ELSE → primary code stands
+        </div>
+
+        <h4>About the PURPLE / Working Redundant rule</h4>
+        <p>A material that is set up as PD (fixed Min/Max, MRP-driven replenishment) but has accumulated &gt; 6 months of stock at the current consumption rate is a flag for "the Min/Max is probably too high, OR this item shouldn't be stocked at all". The threshold escalates:</p>
+        <ul>
+          <li><b>6–12 months runway with PD</b> → <span class="tl-pill PURPLE">PURPLE</span> · <em>Possible</em> WR. Review stocking necessity.</li>
+          <li><b>&gt; 12 months runway with PD</b> → <span class="tl-pill PURPLE">PURPLE</span> · <em>Likely</em> WR. Review for destocking / write-down.</li>
+        </ul>
+        <p>The check applies only to PD materials with non-zero stock and a positive P2 rate. V1 materials with high stock are NOT flagged purple — V1 is consumption-driven, so the system will naturally stop replenishing.</p>
         <p>The traffic-light value is what colours the cell in Excel + on the analysis page. The Action Required text is rendered verbatim from the rule.</p>
 
         <!-- ── 7g Buckets ── -->

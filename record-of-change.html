@@ -266,6 +266,21 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Pipeline — PURPLE / Working Redundant classification + few-events overlay</h4>
+      <ul>
+        <li><b>New PURPLE traffic light</b> for Working Redundant (WR) detection on PD materials:
+          <ul>
+            <li>PD + stock runway &gt; 6 months at P2 rate → <em>Possible</em> WR (review stocking necessity).</li>
+            <li>PD + stock runway &gt; 12 months at P2 rate → <em>Likely</em> WR (review for destocking / write-down).</li>
+            <li>V1 materials never trip purple — V1 is consumption-driven so over-stock self-corrects.</li>
+          </ul>
+        </li>
+        <li><b>Few-events overlay</b> — after the primary classification, if the material had ≤ 2 unique issuing work orders in the analysis window AND the result was GREEN or BLUE, it's upgraded to <span style="color:#FF8C00;font-weight:600">ORANGE</span> with action "Only N event(s) — pattern unreliable, manual review". RED / PURPLE / GREY are not overlaid (they're already review-priority). Rationale: 1–2 issues can produce a statistically "fine"-looking rate by luck, not by pattern.</li>
+        <li>Each material result now carries <code>woCount</code> (unique issuing work orders) and <code>fewEvents</code> (boolean).</li>
+        <li>Decision tree expanded from 8 → 10 rules; full table re-documented in the User Manual §7f.</li>
+        <li>PURPLE wired through: pipeline summary counters, analysis-page TL tile + filter button + dot + pill, Excel cell fill (#9B59B6, white text), Summary sheet ordering (Green, Blue, Orange, Red, <b>Purple</b>, Grey), cross-bucket Summary in combined workbook.</li>
+      </ul>
+
       <h4>User Manual + chart sparse-data fix</h4>
       <ul>
         <li>New <a href="user-manual.html">user-manual.html</a> — deep operator manual (TOC + 13 sections) covering quick-start, assessment types, data files / SAP movement-type semantics, scope strategies, Parameter Search, <b>full analysis methodology</b> (net consumption, P1/P2 windows, HCE rules, lumpy/smooth, recommended Min/Max, the 8-rule traffic-light tree, bucketing + MULTI detection), chart anatomy + why charts may not match expectations, Excel deliverable structure, LLM review, troubleshooting, and versioning / rollback.</li>
