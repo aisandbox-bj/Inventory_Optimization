@@ -498,8 +498,20 @@
           _matNetCacheKey = null;                  // invalidate net-consumption cache
           if (state.dq) runDqGate();
           renderSchema();
+          renderAllDropStats();                    // refresh per-drop counts + cross-file recon
           populateScopeOptions();
+          // If user re-mapped the userList file, re-derive scope.manual.materials
+          if (state.assessmentType === 'userList' && source === 'userList' && state.parsed.userList) {
+            const mats = uniq(state.parsed.userList.canonical
+              .map(r => String(r.material || '').trim())
+              .filter(Boolean));
+            state.scope.manual.materials = mats;
+            const ta = $('#manualPaste');
+            if (ta) ta.value = mats.join('\n');
+            renderScopePreview();
+          }
           renderJsonPreview();
+          renderScopeSummary();
         } catch (err) {
           toast('Re-parse failed: ' + (err.message || err), 'crit');
         }

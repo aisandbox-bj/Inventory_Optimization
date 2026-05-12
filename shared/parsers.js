@@ -15,8 +15,8 @@
   const ALIASES = {
     mb51: {
       postingDate:  ['Posting Date', 'Pstng Date', 'Pstng date', 'Date', 'Posting date'],
-      order:        ['Order', 'Order Number'],
-      material:     ['Material', 'Material Number', "Mat'l", 'Mat No', 'Mat. No.'],
+      order:        ['Order', 'Order Number', 'Order No', 'Order No.'],
+      material:     ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.', 'SKU', 'Part', 'Part No', 'Part No.', 'Part Number'],
       description:  ['Material Description', 'Material descr.', 'Description', 'Mat Desc'],
       quantity:     ['Quantity', 'Qty', 'Qty in unit of entry', 'Qty in unit', 'Qty in UnE'],
       movementType: ['Movement Type', 'Movement type', 'MvT', 'Mvt Type']
@@ -35,23 +35,24 @@
       functLocDescription: ['FunctLocDescrip.', 'Functional Location', 'FunctLoc.', 'Description']
     },
     inventoryMaster: {
-      material:       ['Material'],
+      material:       ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.'],
       totQtyOh:       ['Tot_Qty_OH', 'Tot Qty OH', 'Total Qty', 'Stock On Hand', 'SOH', 'Qty On Hand'],
       totValueOh:     ['Tot_Value_OH', 'Tot Value OH', 'Total Value', 'Stock Value', 'Value On Hand', 'On-Hand Value', 'Inventory Value'],
       mrpInd:         ['MRP_Ind', 'MRP Ind', 'MRP Type', 'MRP_Type', 'MRP Indicator'],
       mrpMin:         ['MRP_Min', 'MRP Min', 'Min', 'Minimum', 'Reorder Point'],
       mrpMax:         ['MRP_Max', 'MRP Max', 'Max', 'Maximum'],
+      safetyStock:    ['Safety Stock', 'SS', 'SS Qty', 'Safety_Stock', 'Buffer Stock'],
       inventoryType:  ['Inventory_Type', 'Inventory Type', 'Inv Type', 'Item Category'],
       materialGroup:  ['Material Group', 'Mat Group', 'MatGrp', 'Material_Group', 'MGroup'],
       manufacturer:   ['Manufacturer', 'Mfr', 'OEM', 'Make', 'Manufacturer Name'],
       primaryVendor:  ['Vendor', 'Primary Vendor', 'Source', 'Vendor No.']
     },
     userList: {
-      material:    ['Material', 'Material Number', "Mat'l", 'Mat No', 'Mat. No.', 'SKU', 'Part'],
+      material:    ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.', 'SKU', 'Part', 'Part No', 'Part No.', 'Part Number'],
       description: ['Description', 'Material Description', 'Mat Desc']
     },
     materialVendor: {
-      material:            ['Material'],
+      material:            ['Material', 'Material Number', 'Material No', 'Material No.'],
       vendor:              ['Vendor', 'Vendor Number', 'Vendor No.'],
       vendorName:          ['Vendor Name', 'Name', 'Vendor description'],
       sourceListIndicator: ['Source List', 'SL', 'SL Indicator']
@@ -201,6 +202,7 @@
       mrpInd:        'string',
       mrpMin:        'number',
       mrpMax:        'number',
+      safetyStock:   'number',
       inventoryType: 'string',
       materialGroup: 'string',
       manufacturer:  'string',

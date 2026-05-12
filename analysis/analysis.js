@@ -465,7 +465,7 @@
     }
     const mat = bucket.materials.find(m => m.material === state.selectedMaterial);
     if (!mat) {
-      host.innerHTML = `<div class="detail-empty"><div class="big">Select a material on the left</div>Pick any row to load the consumption chart, key stats, HCE events (if any), and run an LLM review.</div>`;
+      host.innerHTML = `<div class="detail-empty"><div class="big">Select a material above</div>Pick any row in the table above to load the consumption chart, key stats, HCE events (if any), and run an LLM review.</div>`;
       return;
     }
     const rcDisp = mat.rateChange != null ? `${mat.rateChange}%` : 'N/A';
@@ -500,12 +500,10 @@
         <div class="stat-cell"><span class="lab">Total (window)</span><div class="v">${mat.totalNet}</div></div>
         <div class="stat-cell"><span class="lab">Pattern</span><div class="v ${mat.pattern === 'LUMPY' ? 'warn' : ''}">${mat.pattern}</div></div>
         <div class="stat-cell"><span class="lab">Stock on hand</span><div class="v">${mat.stock ?? '—'}</div></div>
-        <div class="stat-cell"><span class="lab">MRP type</span><div class="v">${escapeHtml(mat.mrpType || '—')}</div></div>
-        <div class="stat-cell"><span class="lab">Current Min</span><div class="v">${mat.cmin ?? '—'}</div></div>
-        <div class="stat-cell"><span class="lab">Current Max</span><div class="v">${mat.cmax ?? '—'}</div></div>
-        <div class="stat-cell"><span class="lab">Rec Min</span><div class="v">${mat.recMin ?? '—'}</div></div>
-        <div class="stat-cell"><span class="lab">Rec Max</span><div class="v">${mat.recMax ?? '—'}</div></div>
+        <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
       </div>
+
+      ${renderMrpCompare(mat)}
 
       ${renderHceTable(mat)}
 
@@ -521,6 +519,56 @@
 
     // Bind LLM
     $('#btnLlm').addEventListener('click', () => runLlmReview(mat));
+  }
+
+  /* ─── MRP Settings Comparison: Current (shaded) vs Recommended (shaded) ─ */
+  function renderMrpCompare(mat){
+    // Has anything to show?
+    const hasCurrent = mat.mrpType || mat.cmin != null || mat.cmax != null || mat.safetyStock != null;
+    const hasRec     = mat.recMrpType || mat.recMin != null || mat.recMax != null;
+    if (!hasCurrent && !hasRec) return '';
+
+    const eq = (a, b) => {
+      if (a == null || b == null) return false;
+      const na = parseFloat(a), nb = parseFloat(b);
+      if (!isNaN(na) && !isNaN(nb)) return Math.round(na) === Math.round(nb);
+      return String(a) === String(b);
+    };
+
+    const rows = [
+      { label:'MRP type',     cur: mat.mrpType || '—',                                       rec: mat.recMrpType || '—' },
+      { label:'Min',          cur: mat.cmin != null ? mat.cmin : '—',                        rec: mat.recMin != null ? mat.recMin : '—' },
+      { label:'Max',          cur: mat.cmax != null ? mat.cmax : '—',                        rec: mat.recMax != null ? mat.recMax : '—' },
+      { label:'Safety Stock', cur: mat.safetyStock != null ? mat.safetyStock : '—',          rec: '—', recOmitted: true }
+    ];
+    const trs = rows.map(r => {
+      const changed = !r.recOmitted && r.cur !== '—' && r.rec !== '—' && !eq(r.cur, r.rec);
+      return `
+        <tr class="${changed ? 'changed' : ''}">
+          <td class="lab">${escapeHtml(r.label)}</td>
+          <td class="current">${escapeHtml(String(r.cur))}</td>
+          <td class="rec">${escapeHtml(String(r.rec))}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+      <div class="mrp-compare">
+        <div class="mrp-compare-head">
+          <h4>MRP Settings · Current vs Recommended</h4>
+          <span class="hint">Yellow rows = recommendation differs from current. Safety Stock is informational (not modelled in v2 algorithm).</span>
+        </div>
+        <table class="mrp-compare-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th class="current-head">Current</th>
+              <th class="rec-head">Recommended</th>
+            </tr>
+          </thead>
+          <tbody>${trs}</tbody>
+        </table>
+      </div>
+    `;
   }
 
   function renderHceTable(mat){
@@ -609,8 +657,8 @@
     const host = $('#exportActions');
     host.innerHTML = `
       <div class="label" style="margin-right:auto;">Bulk operations</div>
-      <button id="btnMassReview" class="primary" title="Pick up to 50 materials for LLM review">✦ Mass LLM Review</button>
-      <button id="btnLoadMassReview" class="ghost" title="Upload a saved mass-review JSON to view results">⤒ Load mass review</button>
+      <button id="btnMassReview" class="primary" title="Pick up to 50 materials from this bucket and run the LLM against each one in sequence. Produces an Excel + JSON deliverable. In-memory only — wiped on modal close.">✦ Mass LLM Review</button>
+      <button id="btnLoadMassReview" class="ghost" title="Reload a previously-downloaded mass-review JSON. Use this after a session was wiped (closed) to view the saved LLM annotations again. The matching canonical intake JSON must already be loaded on this page.">⤒ Reload saved review</button>
       <button id="btnExportBucket" class="primary">⤓ Export this bucket</button>
       <button id="btnExportCombined" class="primary">⤓ Export ALL (combined)</button>
       <button id="btnExportAll">⤓ Export all (separate files)</button>

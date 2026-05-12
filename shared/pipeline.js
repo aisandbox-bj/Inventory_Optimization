@@ -624,6 +624,7 @@
         const stock         = masterRow ? masterRow.totQtyOh : null;
         const cmin          = masterRow ? masterRow.mrpMin   : null;
         const cmax          = masterRow ? masterRow.mrpMax   : null;
+        const safetyStock   = masterRow ? masterRow.safetyStock : null;
         const materialGroup = masterRow ? (masterRow.materialGroup || '') : '';
         const manufacturer  = masterRow ? (masterRow.manufacturer  || '') : '';
         const totValueOh    = masterRow ? masterRow.totValueOh : null;
@@ -675,7 +676,7 @@
           adjP2Flag:    adjP2 ? adjP2.flag : null,
           hceP1, hceP2,
           pattern,
-          stock, mrpType, cmin, cmax,
+          stock, mrpType, cmin, cmax, safetyStock,
           recMin:       tl.recMin,
           recMax:       tl.recMax,
           recMrpType,

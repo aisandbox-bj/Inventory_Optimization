@@ -266,6 +266,17 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>v2.0.0-dev follow-ups (2026-05-12 pm)</h4>
+      <ul>
+        <li><b>Material-column aliases expanded</b> — header "Material No." (with period) now auto-maps. Previously normalized to <code>materialno</code> but only <code>matno</code> / <code>materialnumber</code> were in the alias list. Added "Material No.", "Material No", "Part No", "Part Number" variants across MB51 / Inventory Master / userList / materialVendor parsers. This was breaking the user-list parser silently (Materials count showed 0 even though analysis still worked downstream because <code>buildJson()</code> re-derives at save time).</li>
+        <li><b>Schema-mapping re-parse now refreshes drop-stats</b> + re-derives <code>scope.manual.materials</code> from the userList canonical when the user manually picks a column override. The "Materials / In MB51 / In Inv Master" tiles on the drop card update immediately instead of staying stuck at 0.</li>
+        <li><b>Safety Stock</b> field added to Inventory Master parser (aliases: "Safety Stock", "SS", "SS Qty", "Safety_Stock", "Buffer Stock") and plumbed through pipeline output as <code>material.safetyStock</code>.</li>
+        <li><b>Material detail panel</b> — new "MRP Settings · Current vs Recommended" table replaces the loose Min/Max stat tiles. Three columns: Field / Current (grey shading) / Recommended (cyan shading). Rows where the recommendation differs from current are highlighted amber. Safety Stock appears in the Current column (informational — not yet modelled in the v2 algorithm).</li>
+        <li><b>Stat-grid simplified</b> — removed Current Min/Max/Rec Min/Rec Max tiles (now in the MRP table) and added a <b>Runway @ P2</b> tile so months-of-cover is visible at a glance.</li>
+        <li><b>Empty-state text fixed</b> — material detail panel's placeholder now reads "Select a material above" (was "on the left", left over from the side-by-side v1 layout).</li>
+        <li><b>"Load mass review" → "Reload saved review"</b> — button renamed and the tooltip rewritten to explain when to use it (after wipe-on-close, to re-view a previously-downloaded mass-review JSON).</li>
+      </ul>
+
       <h4>Major release — Mass LLM Review</h4>
       <ul>
         <li><b>New "Mass LLM Review" button</b> on the analysis page (separate from the per-material LLM button). Opens a modal where you pick up to 50 materials from the current bucket using the same Excel-style sort / filter the analysis page already uses, then runs the LLM against each one sequentially.</li>
