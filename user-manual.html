@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v1.1.0-dev · released 2026-05-11
+     Inventory Optimization App · v1.1.0 · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      RoC  : record-of-change.html
      This document is a deep-dive user manual — written for the operator
@@ -10,7 +10,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · User Manual</title>
-<meta name="app-version" content="1.1.0-dev" />
+<meta name="app-version" content="1.1.0" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
 .um-shell{ max-width:1140px; margin:0 auto; padding:0 12px 60px; }
@@ -192,7 +192,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v1.1.0-dev · Manual</a>
+    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v1.1.0 · Manual</a>
   </div>
   <div class="links">
     <a href="index.html">Dashboard</a>
@@ -207,7 +207,7 @@
 <main class="um-shell">
 
   <section class="um-hero">
-    <div class="pre">Operator manual · internal · v1.1.0-dev</div>
+    <div class="pre">Operator manual · internal · v1.1.0</div>
     <h1>Inventory Optimization · User Manual</h1>
     <div class="sub">
       A complete walkthrough of how the tool works — from drag-and-drop intake to Excel deliverable —
@@ -559,8 +559,8 @@
 
         <h3>Why a chart might not render the expected shape</h3>
         <div class="um-note warn">
-          <span class="lab">Known issue addressed in v1.1.0-dev</span>
-          Prior to v1.1.0-dev, the chart bailed with the message <em>"no consumption data"</em> when the material's cumulative series collapsed to a single posting date — even though P1, P2 rates and recommendations all showed numbers. This was a real bug, not a data issue, and it's fixed.
+          <span class="lab">Known issue addressed in v1.1.0</span>
+          Prior to v1.1.0, the chart bailed with the message <em>"no consumption data"</em> when the material's cumulative series collapsed to a single posting date — even though P1, P2 rates and recommendations all showed numbers. This was a real bug, not a data issue, and it's fixed.
         </div>
         <h4>The single-date collapse — why the bug existed</h4>
         <p>The cumulative series is built by grouping transactions by <em>unique posting date</em>. If a material had:</p>
@@ -678,7 +678,7 @@
 
         <div class="um-note">
           <span class="lab">Numbers show in P1/P2 but chart looks sparse</span>
-          Fixed in v1.1.0-dev — was caused by single-date cumulative collapse. If still seeing this, hard-reload (<code>Ctrl+Shift+R</code>); GH Pages might be serving cached HTML.
+          Fixed in v1.1.0 — was caused by single-date cumulative collapse. If still seeing this, hard-reload (<code>Ctrl+Shift+R</code>); GH Pages might be serving cached HTML.
         </div>
 
         <div class="um-note warn">

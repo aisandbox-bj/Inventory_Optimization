@@ -1,5 +1,5 @@
 /* ═══ BUILD-STAMP ═══════════════════════════════════════════════════════════
-   Inventory Optimization App · v1.1.0-dev · released 2026-05-11
+   Inventory Optimization App · v1.1.0 · released 2026-05-12
    Excel deliverable — reference-matched workbook (775G_Analysis.xlsx shape).
 
    Per workbook:

@@ -1,5 +1,5 @@
 /* ═══ BUILD-STAMP ═══════════════════════════════════════════════════════════
-   Inventory Optimization App · v1.1.0-dev · released 2026-05-11
+   Inventory Optimization App · v1.1.0 · released 2026-05-12
    Single source of truth for SCHEMA_VERSION and APP_VERSION (line ~17).
    Repo : https://github.com/aisandbox-bj/Inventory_Optimization
    RoC  : record-of-change.html
@@ -13,7 +13,7 @@
   'use strict';
 
   const SCHEMA_VERSION = '1.0.0';
-  const APP_VERSION    = '1.1.0-dev';
+  const APP_VERSION    = '1.1.0';
 
   /* ─── Factory defaults — seeded from the existing Python skill ──────────── */
   const FACTORY_DEFAULTS = Object.freeze({

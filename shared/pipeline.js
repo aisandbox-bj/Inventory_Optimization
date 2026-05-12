@@ -234,8 +234,8 @@
    *  1. p2Flag != OK or p2Rate == 0           → GREY   ("no recent consumption")
    *  2. mrpType == "NOT IN MASTER"             → GREY   ("excluded")
    *  3. recMin is null                         → GREY   ("not calculable")
-   *  4. PD AND stock-runway > 12 mo            → PURPLE ("likely Working Redundant")     ← v1.1.0-dev
-   *  5. PD AND stock-runway > 6 mo             → PURPLE ("possible Working Redundant")   ← v1.1.0-dev
+   *  4. PD AND stock-runway > 12 mo            → PURPLE ("likely Working Redundant")     ← v1.1.0
+   *  5. PD AND stock-runway > 6 mo             → PURPLE ("possible Working Redundant")   ← v1.1.0
    *  6. mrp=PD AND total ≥ threshold           → RED    ("change to V1")
    *  7. mrp=V1 AND rec=current                 → GREEN  ("no action")
    *  8. mrp=V1 AND ALL rec < current           → BLUE   ("lower, safe")
