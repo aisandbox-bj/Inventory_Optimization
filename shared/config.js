@@ -131,6 +131,22 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     for (const p of ['anthropic', 'openai']) await deleteLlm(p);
   }
 
+  /* ─── Clear session data (inverse of factoryReset) ───────────────────────
+     Wipes every saved intake, the current-intake slot, and the intakes
+     index — but PRESERVES every settings.* key (parameters, LLM keys,
+     prompt template, column aliases).
+     Returns the count of keys removed so the caller can confirm. */
+  async function clearSessionData(){
+    const allKeys = await AppStorage.keys();
+    let removed = 0;
+    for (const k of allKeys) {
+      if (k.startsWith('settings.')) continue;
+      await AppStorage.del(k);
+      removed++;
+    }
+    return removed;
+  }
+
   /* ─── Public API ────────────────────────────────────────────────────────── */
   global.AppConfig = Object.freeze({
     FACTORY_PROMPT_TEMPLATE,
@@ -139,7 +155,8 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     getLlm, saveLlm, deleteLlm,
     getPromptTemplate, savePromptTemplate, resetPromptTemplate,
     getAliases, saveAliases,
-    factoryReset
+    factoryReset,
+    clearSessionData
   });
 
 })(window);

@@ -266,6 +266,15 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Dashboard — "Clear session data" button</h4>
+      <ul>
+        <li>New button at the bottom of the Dashboard (under Recent intakes) with its own framed card and amber-warn styling: <b>⌫ Clear session data</b>.</li>
+        <li>Wipes every <code>intake.*</code> and <code>intakes.*</code> key in storage — saved intakes, the current-intake slot, the intakes index — while <b>preserving every <code>settings.*</code> key</b> (parameter defaults, LLM provider keys, prompt template, column-alias overrides).</li>
+        <li>Distinct from the Settings page's "Restore factory" (which is the inverse — wipes settings, keeps intakes) and "Wipe all local data" (which destroys both).</li>
+        <li>Two-step confirm: spells out exactly which keys will be removed and which preserved before proceeding. Reloads the page on completion so the Recent intakes table refreshes.</li>
+        <li>New helper <code>AppConfig.clearSessionData()</code> returns the number of keys removed for the confirmation toast.</li>
+      </ul>
+
       <h4>Inventory Adjustment detection + exclusion</h4>
       <ul>
         <li><b>New detector</b> in <code>shared/pipeline.js</code>: groups MB51 issue rows by posting date, computes mean μ and stddev σ of daily counts, flags dates with <code>count ≥ μ + N·σ</code> as candidates. N is configurable via <code>parameters.invAdjSigmaThreshold</code> (default 5).</li>
