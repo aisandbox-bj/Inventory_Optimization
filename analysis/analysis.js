@@ -608,12 +608,18 @@
   function renderExportActions(){
     const host = $('#exportActions');
     host.innerHTML = `
-      <div class="label" style="margin-right:auto;">Export Excel pack</div>
+      <div class="label" style="margin-right:auto;">Bulk operations</div>
+      <button id="btnMassReview" class="primary" title="Pick up to 50 materials for LLM review">✦ Mass LLM Review</button>
+      <button id="btnLoadMassReview" class="ghost" title="Upload a saved mass-review JSON to view results">⤒ Load mass review</button>
       <button id="btnExportBucket" class="primary">⤓ Export this bucket</button>
       <button id="btnExportCombined" class="primary">⤓ Export ALL (combined)</button>
       <button id="btnExportAll">⤓ Export all (separate files)</button>
       <span id="exportProgress" class="export-progress" style="display:none;"></span>
+      <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
     `;
+    $('#btnMassReview').addEventListener('click', openMassReview);
+    $('#btnLoadMassReview').addEventListener('click', () => $('#loadMassReviewInput').click());
+    $('#loadMassReviewInput').addEventListener('change', handleMassReviewUpload);
     $('#btnExportBucket').addEventListener('click', exportThisBucket);
     $('#btnExportCombined').addEventListener('click', exportCombined);
     $('#btnExportAll').addEventListener('click', exportAllBuckets);
@@ -681,6 +687,495 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
+     MASS LLM REVIEW  (v2.0)
+     Modal lifecycle: Select → Run → Results → (download → wipe-on-close).
+     No persistence; in-memory only. Closing wipes all LLM data.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  // Initialise mass-state lazily (state is defined earlier in the file)
+  function ensureMassState(){
+    if (!state.mass) {
+      state.mass = {
+        view: 'closed',                  // 'select' | 'run' | 'results' | 'closed'
+        session: null,                   // AppMassLlm session object
+        selected: new Set(),             // material numbers
+        hydrated: false,                 // true if loaded from saved JSON
+        bucketKeyAtRun: null             // bucket the session belongs to
+      };
+    }
+    return state.mass;
+  }
+
+  function openMassReview(){
+    ensureMassState();
+    const b = currentBucket();
+    if (!b) { toast('No bucket selected', 'warn'); return; }
+
+    // If a session already exists for this bucket, jump to its current view
+    if (state.mass.session) {
+      if (state.mass.session.status === 'done' || state.mass.session.status === 'cancelled') {
+        state.mass.view = 'results';
+      } else {
+        state.mass.view = 'run';
+      }
+      showMassModal();
+      return;
+    }
+
+    // Fresh selection — scope to current bucket only (per design)
+    state.mass.view = 'select';
+    state.mass.bucketKeyAtRun = b.key;
+    state.mass.selected = new Set();
+    showMassModal();
+  }
+
+  function showMassModal(){
+    const modal = $('#massModal');
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    $('#massBucketName').textContent = currentBucket() ? currentBucket().name : '—';
+    hideMassChip();
+    renderMassView();
+    // Esc to dismiss (treats as soft close)
+    document.addEventListener('keydown', massEscHandler);
+  }
+  function hideMassModal(){
+    const modal = $('#massModal');
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    document.removeEventListener('keydown', massEscHandler);
+  }
+  function massEscHandler(e){ if (e.key === 'Escape') softCloseMassReview(); }
+
+  /* Soft close — close window, keep state in background if a run is live.
+     Hard close (wipe) is triggered from explicit buttons in the Results view. */
+  function softCloseMassReview(){
+    if (!state.mass) { hideMassModal(); return; }
+    const s = state.mass.session;
+    if (s && (s.status === 'running' || s.status === 'paused')) {
+      hideMassModal();
+      showMassChip();
+      return;
+    }
+    if (state.mass.view === 'results' && state.mass.session) {
+      const ok = confirm(
+        'Closing this view will WIPE all in-memory LLM data — both this mass-review session AND any single-review notes from this session. ' +
+        'If you haven\'t already downloaded the Excel + JSON, do that first.\n\n' +
+        'Continue closing?'
+      );
+      if (!ok) return;
+      wipeAllLlm();
+      hideMassModal();
+      return;
+    }
+    // No session running or completed (Select view, never started) — just close
+    hideMassModal();
+  }
+
+  function wipeAllLlm(){
+    state.llmByMaterial = {};
+    if (state.mass) {
+      if (state.mass.session && (state.mass.session.status === 'running' || state.mass.session.status === 'paused')) {
+        state.mass.session.cancel();
+      }
+      state.mass = null;
+    }
+    hideMassChip();
+    // If a material is selected on the main page, re-render detail to drop any LLM panel
+    if (state.selectedMaterial) renderDetail();
+  }
+
+  function showMassChip(){
+    const chip = $('#massChip'); if (!chip) return;
+    chip.classList.remove('hidden');
+    updateMassChip();
+    chip.querySelector('.mass-chip-open').onclick = () => { showMassModal(); };
+  }
+  function hideMassChip(){
+    const chip = $('#massChip'); if (!chip) return;
+    chip.classList.add('hidden');
+  }
+  function updateMassChip(){
+    const chip = $('#massChip'); if (!chip || !state.mass || !state.mass.session) return;
+    const s = state.mass.session;
+    const done = s.results.filter(r => r.status === 'done' || r.status === 'error').length;
+    chip.querySelector('.mass-chip-text').textContent = `Mass review: ${done} / ${s.total}`;
+  }
+
+  /* ─── View dispatcher ─── */
+  function renderMassView(){
+    if (!state.mass) return;
+    const pill = $('#massModePill');
+    if (state.mass.view === 'select') {
+      pill.textContent = 'Select'; pill.className = 'mass-mode-pill';
+      renderMassSelect();
+    } else if (state.mass.view === 'run') {
+      pill.textContent = 'Running'; pill.className = 'mass-mode-pill running';
+      renderMassRun();
+    } else if (state.mass.view === 'results') {
+      const s = state.mass.session;
+      const cancelled = s && s.status === 'cancelled';
+      pill.textContent = cancelled ? 'Cancelled' : 'Results';
+      pill.className = 'mass-mode-pill ' + (cancelled ? 'running' : 'done');
+      renderMassResults();
+    }
+  }
+
+  /* ─── Select view ─── */
+  function renderMassSelect(){
+    const bucket = currentBucket();
+    const body = $('#massBody');
+    const foot = $('#massFoot');
+    if (!bucket) { body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);">No bucket selected.</div>'; return; }
+
+    const sel = state.mass.selected;
+    const max = AppMassLlm.MAX_SELECTION;
+    const overCap = sel.size > max;
+
+    const cols = [
+      { k:'__chk',         l:'',            type:'chk'  },
+      { k:'trafficLight',  l:'TL',          type:'set'  },
+      { k:'material',      l:'Material',    type:'mat'  },
+      { k:'description',   l:'Description', type:'desc' },
+      { k:'totalNet',      l:'Total',       type:'num'  },
+      { k:'p2Rate',        l:'P2/mo',       type:'num'  },
+      { k:'pattern',       l:'Pattern',     type:'pat'  }
+    ];
+    const thead = cols.map(c => `<th>${c.l}</th>`).join('');
+    const tbody = bucket.materials.map(m => {
+      const checked = sel.has(m.material) ? 'checked' : '';
+      const disable = (!checked && sel.size >= max) ? 'disabled' : '';
+      return `
+        <tr data-material="${escapeAttr(m.material)}">
+          <td><input type="checkbox" data-mat="${escapeAttr(m.material)}" ${checked} ${disable} /></td>
+          <td><span class="tl-dot ${m.trafficLight}"></span><span class="tl-label">${m.trafficLight}</span></td>
+          <td class="mat">${escapeHtml(m.material)}</td>
+          <td class="desc" title="${escapeAttr(m.description)}">${escapeHtml((m.description || '').slice(0, 80))}</td>
+          <td class="num">${m.totalNet?.toLocaleString?.() ?? m.totalNet ?? '—'}</td>
+          <td class="num">${m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : '—'}</td>
+          <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${m.pattern}</td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="mass-select-info">
+        <span>Pick materials to review — max <b>${max}</b>:</span>
+        <span class="mass-select-counter ${overCap ? 'over' : ''}" id="massSelCounter">${sel.size} / ${max} selected</span>
+      </div>
+      <div class="list-table-wrap" style="max-height:480px;">
+        <table class="list-table">
+          <thead><tr>${thead}</tr></thead>
+          <tbody>${tbody}</tbody>
+        </table>
+      </div>
+    `;
+    body.querySelectorAll('input[type=checkbox][data-mat]').forEach(cb => {
+      cb.addEventListener('click', (e) => e.stopPropagation());
+      cb.addEventListener('change', () => {
+        const mat = cb.dataset.mat;
+        if (cb.checked) {
+          if (sel.size >= max) { cb.checked = false; return; }
+          sel.add(mat);
+        } else {
+          sel.delete(mat);
+        }
+        renderMassSelect();
+      });
+    });
+
+    foot.innerHTML = `
+      <button id="massSelAll" class="ghost">Select all visible</button>
+      <button id="massSelClear" class="ghost">Clear</button>
+      <span class="spacer"></span>
+      <span class="stat">Estimated: ~3-8 min · cost depends on provider/model</span>
+      <button id="massStart" class="primary" ${sel.size === 0 || overCap ? 'disabled' : ''}>✦ Review ${sel.size} material${sel.size === 1 ? '' : 's'}</button>
+    `;
+    $('#massSelAll').addEventListener('click', () => {
+      const mats = bucket.materials.map(m => m.material);
+      const room = max - sel.size;
+      mats.forEach(m => { if (!sel.has(m) && sel.size < max) sel.add(m); });
+      renderMassSelect();
+    });
+    $('#massSelClear').addEventListener('click', () => { sel.clear(); renderMassSelect(); });
+    $('#massStart').addEventListener('click', startMassReview);
+  }
+
+  /* ─── Start the run ─── */
+  async function startMassReview(){
+    const bucket = currentBucket();
+    if (!bucket) return;
+    const providers = await AppLlm.configuredProviders();
+    if (providers.length === 0) {
+      toast('No LLM provider configured — open Settings and add a key + pick a model.', 'crit');
+      return;
+    }
+    const mats = bucket.materials.filter(m => state.mass.selected.has(m.material));
+    state.mass.view = 'run';
+    renderMassView();   // initial render before session emits first progress
+    const session = AppMassLlm.createSession(
+      mats,
+      bucket.name,
+      state.json.parameters,
+      {
+        onProgress: () => { renderMassRun(); updateMassChip(); },
+        onComplete: () => { state.mass.view = 'results'; renderMassView(); hideMassChip(); }
+      }
+    );
+    state.mass.session = session;
+  }
+
+  /* ─── Run view ─── */
+  function renderMassRun(){
+    const s = state.mass && state.mass.session;
+    if (!s) return;
+    const done = s.results.filter(r => r.status === 'done' || r.status === 'error').length;
+    const pct  = s.total ? Math.round(done / s.total * 100) : 0;
+    const current = s.results[s.cursor] || null;
+    const nowText = current && current.status === 'inflight'
+                    ? `Now reviewing: ${current.material} · ${escapeHtml((current.description || '').slice(0, 50))}`
+                    : (s.status === 'paused' ? 'Paused' : 'Done');
+
+    const body = $('#massBody');
+    body.innerHTML = `
+      <div class="mass-progress">
+        <span class="label">Progress</span>
+        <span class="now" id="massNow">${escapeHtml(nowText)}</span>
+        <div class="mass-progress-bar"><div style="width:${pct}%"></div></div>
+        <span class="mass-progress-pct">${done} / ${s.total}</span>
+      </div>
+      <div class="list-table-wrap" style="max-height:440px;">
+        <table class="mass-results-table">
+          <thead><tr>
+            <th class="mass-status-cell"></th>
+            <th>Material</th>
+            <th>Description</th>
+            <th>Pre-LLM</th>
+            <th>LLM verdict</th>
+            <th>Notes</th>
+            <th>Latency</th>
+          </tr></thead>
+          <tbody>${renderMassRows(s)}</tbody>
+        </table>
+      </div>
+    `;
+    const foot = $('#massFoot');
+    foot.innerHTML = `
+      <button id="massCancel" class="danger" ${s.status === 'cancelled' ? 'disabled' : ''}>Cancel batch</button>
+      <button id="massPause"  class="ghost"  ${s.status !== 'running' ? 'disabled' : ''}>${s.status === 'paused' ? 'Resume' : 'Pause'}</button>
+      <span class="spacer"></span>
+      <span class="stat"><b>${s.results.filter(r => r.status==='done').length}</b> done · <b>${s.results.filter(r => r.status==='error').length}</b> errors · <b>${s.results.filter(r => r.status==='inflight').length}</b> in flight</span>
+    `;
+    $('#massCancel').addEventListener('click', () => {
+      if (confirm('Cancel batch? Remaining materials will be skipped. Completed results are preserved.')) s.cancel();
+    });
+    $('#massPause').addEventListener('click', () => {
+      if (s.status === 'paused') s.resume();
+      else s.pause();
+    });
+    bindMassRowClicks();
+  }
+
+  function renderMassRows(s){
+    return s.results.map(r => {
+      const verdictPill = r.verdict
+                            ? `<span class="llm-pill ${r.verdict}">${r.verdict}</span>`
+                            : (r.error ? '<span class="llm-pill empty">err</span>'
+                                       : '<span class="llm-pill empty">—</span>');
+      const statusGlyph = ({
+        pending:  '⋯',
+        inflight: '⏳',
+        done:     '✓',
+        error:    '✗',
+        skipped:  '↷'
+      })[r.status] || '·';
+      const notesOrErr = r.error ? `<span style="color:var(--status-crit);">ERROR: ${escapeHtml(r.error)}</span>` : escapeHtml(r.notes || '');
+      return `
+        <tr data-material="${escapeAttr(r.material)}">
+          <td class="mass-status-cell"><span class="mass-status ${r.status}">${statusGlyph}</span></td>
+          <td class="mat">${escapeHtml(r.material)}</td>
+          <td class="desc" title="${escapeAttr(r.description)}">${escapeHtml((r.description || '').slice(0, 60))}</td>
+          <td><span class="mass-result-tl-cell"><span class="tl-dot ${r.preTL}"></span>${r.preTL}</span></td>
+          <td>${verdictPill}</td>
+          <td class="notes" title="${escapeAttr(r.notes || r.error || '')}">${notesOrErr}</td>
+          <td class="num">${r.latencyMs != null ? (r.latencyMs/1000).toFixed(1) + 's' : '—'}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function bindMassRowClicks(){
+    document.querySelectorAll('.mass-results-table tbody tr').forEach(tr => {
+      tr.addEventListener('click', () => drillDownMaterial(tr.dataset.material));
+    });
+  }
+
+  /* ─── Results view ─── */
+  function renderMassResults(){
+    const s = state.mass && state.mass.session;
+    if (!s) return;
+    const body = $('#massBody');
+    body.innerHTML = `
+      <div class="mass-progress">
+        <span class="label">${s.status === 'cancelled' ? 'Cancelled' : 'Complete'}</span>
+        <span class="now">
+          ${s.results.filter(r => r.status === 'done').length} done ·
+          ${s.results.filter(r => r.status === 'error').length} errors ·
+          ${s.results.filter(r => r.status === 'skipped').length} skipped ·
+          provider ${escapeHtml(s.provider || '—')} · model ${escapeHtml(s.model || '—')}
+        </span>
+        <span class="mass-progress-pct">${s.results.filter(r => r.status !== 'pending').length} / ${s.total}</span>
+      </div>
+      <div class="list-table-wrap" style="max-height:540px;">
+        <table class="mass-results-table">
+          <thead><tr>
+            <th class="mass-status-cell"></th>
+            <th>Material</th>
+            <th>Description</th>
+            <th>Pre-LLM</th>
+            <th>LLM verdict</th>
+            <th>Notes</th>
+            <th>Latency</th>
+          </tr></thead>
+          <tbody>${renderMassRows(s)}</tbody>
+        </table>
+      </div>
+      <div class="panel-sub" style="margin-top:12px;font-size:11px;color:var(--text-muted);">
+        Click any row to drill into that material's chart + LLM commentary on the main analysis page.
+        Closing this modal <b>wipes all in-memory LLM data</b> — download the Excel + JSON first if you want to keep it.
+      </div>
+    `;
+    const foot = $('#massFoot');
+    foot.innerHTML = `
+      <button id="massDownloadXlsx" class="primary">⤓ Download Excel</button>
+      <button id="massDownloadJson" class="primary">⤓ Download JSON</button>
+      <span class="spacer"></span>
+      <span class="stat">Hash: <b>${escapeHtml(s.promptHash || '—')}</b></span>
+      <button id="massCloseWipe" class="danger">⌫ Close &amp; wipe</button>
+    `;
+    $('#massDownloadXlsx').addEventListener('click', downloadMassXlsx);
+    $('#massDownloadJson').addEventListener('click', downloadMassJson);
+    $('#massCloseWipe').addEventListener('click', () => {
+      if (confirm('Wipe all in-memory LLM data and close? This cannot be undone — make sure you have downloaded the Excel and / or JSON.')) {
+        wipeAllLlm();
+        hideMassModal();
+      }
+    });
+    bindMassRowClicks();
+  }
+
+  /* ─── Drill-down: close modal, select material on main page ─── */
+  function drillDownMaterial(material){
+    if (!state.mass || !state.mass.session) return;
+    // Cache the LLM result onto state.llmByMaterial so the detail panel renders it
+    const r = state.mass.session.results.find(x => x.material === material);
+    if (r && r.verdict) {
+      state.llmByMaterial[material] = {
+        verdict: r.verdict,
+        notes: r.notes,
+        suggestedEdits: r.suggestedEdits,
+        provider: state.mass.session.provider,
+        model: state.mass.session.model,
+        latencyMs: r.latencyMs,
+        source: 'mass'
+      };
+    }
+    state.selectedMaterial = material;
+    // If session is running, keep the chip showing; otherwise hide
+    const s = state.mass.session;
+    if (s.status === 'running' || s.status === 'paused') {
+      hideMassModal();
+      showMassChip();
+    } else {
+      hideMassModal();
+    }
+    renderList();
+    renderDetail();
+    document.querySelector('#materialDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* ─── Downloads ─── */
+  async function downloadMassXlsx(){
+    if (!state.mass || !state.mass.session) return;
+    const bucket = currentBucket();
+    const assess = (state.json.metadata.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
+    const safeBucket = bucket.name.replace(/[^A-Za-z0-9_-]+/g, '_');
+    const fname = `Mass_LLM_Review_${assess}_${safeBucket}_${state.result.runDate}.xlsx`;
+    try {
+      await AppExcel.downloadMassReview(bucket, state.mass.session, state.json.parameters, {
+        runDate:  state.result.runDate,
+        filename: fname
+      });
+      toast(`Excel downloaded: ${fname}`, 'ok');
+    } catch (e) {
+      console.error(e);
+      toast('Excel download failed: ' + (e.message || e), 'crit');
+    }
+  }
+  function downloadMassJson(){
+    if (!state.mass || !state.mass.session) return;
+    const json = AppMassLlm.toJson(state.mass.session, state.json.metadata.assessmentName || '');
+    const blob = new Blob([JSON.stringify(json, null, 2)], { type:'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const assess = (state.json.metadata.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
+    a.href = url;
+    a.download = `Mass_LLM_Review_${assess}_${(state.mass.session.bucketName).replace(/[^A-Za-z0-9_-]+/g,'_')}_${state.result.runDate}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('JSON downloaded — keep this file to reload the review later.', 'ok');
+  }
+
+  /* ─── Upload saved mass-review JSON, hydrate into Results view ─── */
+  async function handleMassReviewUpload(e){
+    const file = e.target.files[0];
+    e.target.value = '';   // reset so same file can be re-picked
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const saved = JSON.parse(text);
+      if (saved.kind !== 'mass-llm-review') {
+        toast('Not a mass-review JSON.', 'crit');
+        return;
+      }
+      const bucketKey = saved.metadata.bucketKey;
+      const bucket = state.result.buckets.find(b => b.key === bucketKey || b.name === bucketKey);
+      if (!bucket) {
+        toast(`Bucket "${bucketKey}" not in the current analysis — load the matching intake JSON first.`, 'crit');
+        return;
+      }
+      // Switch the active bucket if necessary
+      if (state.selectedBucket !== bucket.key) selectBucket(bucket.key);
+      ensureMassState();
+      state.mass.session  = AppMassLlm.hydrate(saved, state.result, bucket.key);
+      state.mass.hydrated = true;
+      state.mass.view     = 'results';
+      state.mass.bucketKeyAtRun = bucket.key;
+      // Cache LLM results onto state.llmByMaterial too so drill-downs render
+      for (const r of state.mass.session.results) {
+        if (r.verdict) {
+          state.llmByMaterial[r.material] = {
+            verdict: r.verdict, notes: r.notes, suggestedEdits: r.suggestedEdits,
+            provider: state.mass.session.provider, model: state.mass.session.model,
+            latencyMs: r.latencyMs, source: 'mass-hydrated'
+          };
+        }
+      }
+      showMassModal();
+      toast(`Loaded ${state.mass.session.results.filter(r => r.verdict).length} reviews from ${file.name}`, 'ok');
+    } catch (err) {
+      console.error(err);
+      toast('Failed to load mass-review JSON: ' + (err.message || err), 'crit');
+    }
+  }
+
+  /* ─── Wire close button + backdrop click ─── */
+  function bindMassModalCloseHandlers(){
+    const closeBtn = $('#massClose');
+    if (closeBtn) closeBtn.addEventListener('click', softCloseMassReview);
+    const backdrop = document.querySelector('.mass-backdrop');
+    if (backdrop) backdrop.addEventListener('click', softCloseMassReview);
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
      Helpers
   ═════════════════════════════════════════════════════════════════════════ */
   function bindGlobalKeys(){
@@ -690,10 +1185,18 @@
   }
   function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
   function escapeAttr(s){ return escapeHtml(s).replace(/'/g, '&#39;'); }
+  function toast(msg, kind){
+    const el = document.createElement('div');
+    el.className = 'toast ' + (kind || '');
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4500);
+  }
 
   document.addEventListener('DOMContentLoaded', () => {
     bindToolbar();
     boot();
+    bindMassModalCloseHandlers();
   });
 
 })();

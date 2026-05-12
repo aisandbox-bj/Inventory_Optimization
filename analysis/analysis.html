@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v1.1.0 · released 2026-05-12
+     Inventory Optimization App · v2.0.0-dev · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
-     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v1.1.0
+     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.0
      RoC  : ../record-of-change.html     (what changed + how to roll back)
 ═════════════════════════════════════════════════════════════════════════-->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Analysis</title>
-<meta name="app-version" content="1.1.0" />
+<meta name="app-version" content="2.0.0-dev" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="../shared/brand-tokens.css" />
 <link rel="stylesheet" href="analysis.css" />
@@ -20,7 +20,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v1.1.0 · Analysis</a>
+    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.0.0-dev · Analysis</a>
   </div>
   <div class="links">
     <a href="../index.html">Dashboard</a>
@@ -77,6 +77,36 @@
     <section id="exportActions" class="export-actions"></section>
 
   </div>
+
+  <!-- ─── Floating "mass review in progress" chip ─── -->
+  <div id="massChip" class="mass-chip hidden">
+    <span class="mass-chip-spinner"></span>
+    <span class="mass-chip-text">Mass review: 0 / 0</span>
+    <button class="mass-chip-open">Reopen</button>
+  </div>
+
+  <!-- ─── Mass LLM Review modal ─── -->
+  <div id="massModal" class="mass-modal hidden" aria-hidden="true">
+    <div class="mass-backdrop"></div>
+    <div class="mass-dialog">
+      <div class="mass-head">
+        <div class="mass-title">
+          <span class="lab">Mass LLM Review</span>
+          <h3 id="massBucketName">—</h3>
+        </div>
+        <div class="mass-mode-pill" id="massModePill">Select</div>
+        <button id="massClose" class="mass-close" title="Close — wipes all in-memory LLM data">✕</button>
+      </div>
+
+      <div class="mass-body" id="massBody">
+        <!-- Filled by analysis.js: Select view | Run view | Results view -->
+      </div>
+
+      <div class="mass-foot" id="massFoot">
+        <!-- Filled by analysis.js: action buttons + counters -->
+      </div>
+    </div>
+  </div>
 </main>
 
 <!-- ─── Libraries (CDN) ─── -->
@@ -90,6 +120,7 @@
 <script src="../shared/pipeline.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/llm.js"></script>
+<script src="../shared/mass-llm.js"></script>
 <script src="../shared/excel.js"></script>
 <script src="analysis.js"></script>
 

@@ -190,3 +190,69 @@
 .alias-table .src{ color:var(--accent); text-transform:uppercase; }
 .alias-table .field{ color:var(--text-pri); }
 .alias-table .empty{ color:var(--text-disabled); font-style:italic; }
+
+/* ─── Prompt template editor (v2.0) ─────────────────────────────────────── */
+.prompt-textarea{
+  width:100%;
+  min-height:340px;
+  background:var(--bg-deep);
+  color:var(--text-pri);
+  border:1px solid var(--border-soft);
+  padding:14px 16px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  line-height:1.55;
+  resize:vertical;
+  white-space:pre;
+  overflow:auto;
+  letter-spacing:.2px;
+}
+.prompt-textarea:focus{ outline:none; border-color:var(--accent); }
+.prompt-meta{
+  margin-top:12px;
+  display:flex;
+  align-items:center;
+  gap:24px;
+  flex-wrap:wrap;
+}
+.prompt-meta .placeholders{ flex:1; min-width:280px; }
+.prompt-meta .lab{
+  display:block;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.3px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+.prompt-meta .ph-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+.prompt-meta .ph-chip{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  background:var(--bg-elevated);
+  border:1px solid var(--border-soft);
+  padding:2px 7px;
+  color:var(--accent);
+  cursor:pointer;
+  transition:border-color .15s, background .15s;
+}
+.prompt-meta .ph-chip:hover{
+  border-color:var(--accent);
+  background:rgba(31,206,216,0.08);
+}
+.prompt-actions{ display:flex; align-items:center; gap:10px; }
+.prompt-actions .hash-line{
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--text-muted);
+  letter-spacing:.4px;
+  margin-right:auto;
+}
+.prompt-actions .hash-line code{
+  color:var(--accent);
+  background:transparent;
+}

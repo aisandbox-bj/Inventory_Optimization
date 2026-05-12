@@ -457,3 +457,215 @@
   font-family:var(--font-mono);font-size:11px;color:var(--accent);
   letter-spacing:.5px;animation:pulse 1.2s ease-in-out infinite;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mass LLM Review — modal, results table, floating chip (v2.0)
+═══════════════════════════════════════════════════════════════════════════ */
+
+.mass-modal{
+  position:fixed; inset:0; z-index:1000;
+  display:flex; align-items:center; justify-content:center;
+}
+.mass-modal.hidden{ display:none; }
+.mass-backdrop{
+  position:absolute; inset:0;
+  background:rgba(8, 12, 22, 0.72);
+  backdrop-filter:blur(3px);
+}
+.mass-dialog{
+  position:relative;
+  width:min(1240px, 96vw);
+  max-height:92vh;
+  background:var(--bg-panel);
+  border:1px solid var(--accent);
+  display:flex; flex-direction:column;
+  box-shadow:0 30px 80px rgba(0,0,0,0.6);
+  overflow:hidden;
+}
+.mass-head{
+  display:flex; align-items:center; gap:18px;
+  padding:18px 24px;
+  border-bottom:1px solid var(--border-soft);
+  background:rgba(31,206,216,0.04);
+}
+.mass-title .lab{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1.6px;
+  color:var(--accent); text-transform:uppercase;
+}
+.mass-title h3{
+  font-family:var(--font-display); font-weight:700;
+  font-size:20px; letter-spacing:1.5px; color:var(--text-pri);
+  text-transform:uppercase; margin-top:2px;
+}
+.mass-mode-pill{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1.5px;
+  padding:4px 12px; border:1px solid var(--accent);
+  color:var(--accent); text-transform:uppercase; margin-left:auto;
+}
+.mass-mode-pill.running{ color:var(--status-warn); border-color:var(--status-warn); }
+.mass-mode-pill.done{    color:var(--status-ok);   border-color:var(--status-ok); }
+.mass-close{
+  background:transparent; border:1px solid var(--border-soft);
+  color:var(--text-sec); font-family:var(--font-mono); font-size:14px;
+  width:32px; height:32px; cursor:pointer;
+}
+.mass-close:hover{ color:var(--status-crit); border-color:var(--status-crit); }
+.mass-body{
+  flex:1; overflow-y:auto; padding:20px 24px;
+}
+.mass-foot{
+  padding:14px 24px;
+  border-top:1px solid var(--border-soft);
+  background:var(--bg-elevated);
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+}
+.mass-foot .spacer{ flex:1; }
+.mass-foot .stat{
+  font-family:var(--font-mono); font-size:11.5px; color:var(--text-muted);
+  letter-spacing:.4px;
+}
+.mass-foot .stat b{ color:var(--accent); }
+
+/* Select view */
+.mass-select-info{
+  display:flex; align-items:center; gap:18px;
+  margin-bottom:14px;
+  font-family:var(--font-mono); font-size:11.5px; color:var(--text-muted);
+}
+.mass-select-counter{
+  font-family:var(--font-display); font-weight:700; font-size:16px;
+  letter-spacing:1.2px; color:var(--accent);
+}
+.mass-select-counter.over{ color:var(--status-crit); }
+
+/* Reuses .list-table styling — we render the same table inside the modal
+   with a leading checkbox column. */
+.mass-body .list-table th:first-child,
+.mass-body .list-table td:first-child{
+  width:40px; padding:6px 8px; text-align:center;
+}
+.mass-body .list-table input[type=checkbox]{ cursor:pointer; }
+
+/* Run view */
+.mass-progress{
+  display:flex; align-items:center; gap:14px;
+  padding:14px 18px;
+  background:var(--bg-elevated);
+  border:1px solid var(--border-soft);
+  margin-bottom:14px;
+}
+.mass-progress .label{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:1px;
+  color:var(--text-muted); text-transform:uppercase;
+}
+.mass-progress .now{
+  font-family:var(--font-mono); font-size:12.5px;
+  color:var(--text-pri);
+}
+.mass-progress-bar{
+  flex:1; height:6px; background:var(--bg-deep);
+  position:relative; overflow:hidden;
+}
+.mass-progress-bar > div{
+  position:absolute; left:0; top:0; height:100%;
+  background:linear-gradient(90deg, var(--accent), var(--accent-glow, var(--accent)));
+  transition:width .25s ease;
+}
+.mass-progress-pct{
+  font-family:var(--font-mono); font-size:13px; font-weight:700;
+  color:var(--accent); min-width:48px; text-align:right;
+}
+
+/* Results table */
+.mass-results-table{
+  width:100%; border-collapse:collapse; font-family:var(--font-body); font-size:12.5px;
+}
+.mass-results-table th{
+  background:var(--bg-elevated); color:var(--text-muted);
+  text-align:left; padding:9px 12px;
+  font-family:var(--font-mono); font-weight:500; letter-spacing:1.2px;
+  text-transform:uppercase; font-size:9.5px;
+  position:sticky; top:0; z-index:1; user-select:none;
+  border-bottom:1px solid var(--border-soft); white-space:nowrap;
+}
+.mass-results-table td{
+  padding:8px 12px;
+  border-bottom:1px solid rgba(155,171,168,.05);
+  color:var(--text-sec); vertical-align:middle;
+}
+.mass-results-table tr{ cursor:pointer; }
+.mass-results-table tr:hover td{ background:rgba(31,206,216,.04); }
+.mass-results-table td.mat{ font-family:var(--font-mono); color:var(--text-pri); font-size:11.5px; }
+.mass-results-table td.notes{
+  font-family:var(--font-body); color:var(--text-sec);
+  max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.mass-results-table td.num{
+  font-family:var(--font-mono); text-align:right; color:var(--accent);
+}
+
+.mass-status-cell{ width:30px; text-align:center; }
+.mass-status.pending{ color:var(--text-muted); }
+.mass-status.inflight{ color:var(--accent); }
+.mass-status.done{ color:var(--status-ok); }
+.mass-status.error{ color:var(--status-crit); }
+.mass-status.skipped{ color:var(--text-disabled); }
+
+/* LLM verdict pills (distinct palette from the math TL — cyan/amber/magenta) */
+.llm-pill{
+  display:inline-block; padding:2px 9px;
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:1.3px;
+  font-weight:700; text-transform:uppercase; border-radius:2px;
+}
+.llm-pill.ok    { background:#1FCED8; color:#072025; }   /* cyan */
+.llm-pill.tweak { background:#F5A623; color:#2A1900; }   /* amber */
+.llm-pill.review{ background:#B83CD0; color:#fff;    }   /* magenta */
+.llm-pill.empty { background:#3C4350; color:#9BABA8; }
+
+.mass-result-tl-cell{ display:inline-flex; align-items:center; gap:6px; }
+.mass-result-tl-cell .tl-dot{ width:9px; height:9px; }
+
+/* Foot buttons */
+.mass-foot button{ font-family:var(--font-mono); font-size:11px; letter-spacing:.6px; }
+.mass-foot button.primary{
+  background:var(--accent); color:#072025;
+  border:1px solid var(--accent); padding:7px 16px; cursor:pointer;
+}
+.mass-foot button.primary:disabled{ opacity:.4; cursor:not-allowed; }
+.mass-foot button.ghost{
+  background:transparent; color:var(--text-sec);
+  border:1px solid var(--border-soft); padding:7px 14px; cursor:pointer;
+}
+.mass-foot button.ghost:hover{ border-color:var(--accent); color:var(--accent); }
+.mass-foot button.danger{
+  background:transparent; color:var(--status-crit);
+  border:1px solid var(--status-crit); padding:7px 14px; cursor:pointer;
+}
+
+/* Floating chip when modal closed mid-run */
+.mass-chip{
+  position:fixed; bottom:18px; right:18px; z-index:900;
+  display:flex; align-items:center; gap:10px;
+  padding:10px 14px;
+  background:var(--bg-panel); border:1px solid var(--accent);
+  font-family:var(--font-mono); font-size:11.5px;
+  color:var(--text-pri); letter-spacing:.4px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.5);
+}
+.mass-chip.hidden{ display:none; }
+.mass-chip-spinner{
+  width:10px; height:10px; border-radius:50%;
+  background:var(--accent);
+  animation: massPulse 1.2s ease-in-out infinite;
+}
+@keyframes massPulse {
+  0%, 100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.35; transform:scale(.7); }
+}
+.mass-chip-open{
+  background:transparent; border:1px solid var(--accent);
+  color:var(--accent); padding:3px 10px; cursor:pointer;
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1px;
+  text-transform:uppercase;
+}
+.mass-chip-open:hover{ background:rgba(31,206,216,0.10); }

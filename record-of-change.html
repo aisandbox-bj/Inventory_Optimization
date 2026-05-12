@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v1.1.0 · released 2026-05-12
+     Inventory Optimization App · v2.0.0-dev · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
-     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v1.1.0
+     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.0
      This file is the canonical changelog — the version above is the build
      that ships THIS file, not necessarily the version you ran an analysis
      under (that's recorded in metadata.appVersion of each saved JSON).
@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="1.1.0" />
+<meta name="app-version" content="2.0.0-dev" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
@@ -203,7 +203,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub active" href="record-of-change.html" title="You are on the Record of Change page">v1.1.0 · RoC</a>
+    <a class="sub active" href="record-of-change.html" title="You are on the Record of Change page">v2.0.0-dev · RoC</a>
   </div>
   <div class="links">
     <a href="index.html">Dashboard</a>
@@ -257,6 +257,33 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- ───────── v2.0.0-dev ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.0.0</span>
+        <span class="date">2026-05-12</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>Major release — Mass LLM Review</h4>
+      <ul>
+        <li><b>New "Mass LLM Review" button</b> on the analysis page (separate from the per-material LLM button). Opens a modal where you pick up to 50 materials from the current bucket using the same Excel-style sort / filter the analysis page already uses, then runs the LLM against each one sequentially.</li>
+        <li><b>Editable prompt template</b> in Settings — one shared template, used by both single review and mass review. Placeholders like <code>{material}</code>, <code>{p2Rate}</code>, <code>{trafficLight}</code> resolved at call-time. Factory-reset button. Prompt hash recorded in every mass-review JSON for audit trail.</li>
+        <li><b>Results view</b> — live-updating table as the loop runs: status / material / Pre-LLM TL / LLM verdict pill (cyan / amber / magenta to avoid clashing with the math's TL) / LLM notes preview / suggested-edit icon / latency. Excel-style sort + filter on every column.</li>
+        <li><b>Drill-down</b> — click any row in the results table → modal closes, main analysis page selects that material and opens the detail panel with the cached LLM review.</li>
+        <li><b>Data security posture</b> — in-memory only. <em>Nothing</em> written to localStorage / IndexedDB. On batch completion: download Excel + JSON. On modal close: <b>all</b> LLM data wiped (mass run AND single-review entries from the session). To re-review later: open the canonical intake JSON, then upload the mass-review JSON to overlay the LLM annotations.</li>
+        <li><b>Excel deliverable</b> — new <code>Mass_LLM_Review_&lt;bucket&gt;_&lt;date&gt;.xlsx</code> with Index sheet (extra columns for Pre-LLM TL / LLM Verdict / LLM Notes, AutoFilter active) + per-material sheets with an LLM Review block appended.</li>
+        <li><b>Mass-review JSON</b> — separate file from canonical intake JSON (math stays separable from LLM annotations). Contains assessmentName, bucketKey, ranAt, provider / model, prompt-hash, per-material results.</li>
+        <li><b>Background continuation</b> — closing the modal mid-run keeps the loop going; a floating chip "Mass review: N / M — click to reopen" lets you re-enter without losing progress.</li>
+        <li><b>Cancellation + error handling</b> — Cancel button stops the next call without losing accumulated results; per-material errors are captured and the loop continues with the next material.</li>
+        <li>Decision-tree, recommendation math, and chart rendering are unchanged from v1.1.0. The LLM does not do math — it annotates.</li>
+      </ul>
+
+      <div class="commit">
+        Tag (when released): <a href="https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.0">v2.0.0</a> · branch <code>main</code>
+      </div>
+    </article>
 
     <!-- ───────── v1.1.0 — FINAL ───────── -->
     <article class="roc-entry release">
@@ -366,7 +393,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
 
       <div class="commit">
-        Tag: <a href="https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v1.1.0">v1.1.0</a> · branch <code>main</code> · this is the final v1 release — V2.0 development continues on the same branch with mass-LLM-review as the headline feature.
+        Tag: <a href="https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.0.0">v2.0.0</a> · branch <code>main</code> · this is the final v1 release — V2.0 development continues on the same branch with mass-LLM-review as the headline feature.
       </div>
     </article>
 

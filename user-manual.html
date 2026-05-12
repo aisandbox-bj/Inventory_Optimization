@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v1.1.0 · released 2026-05-12
+     Inventory Optimization App · v2.0.0-dev · released 2026-05-12
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      RoC  : record-of-change.html
      This document is a deep-dive user manual — written for the operator
@@ -10,7 +10,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · User Manual</title>
-<meta name="app-version" content="1.1.0" />
+<meta name="app-version" content="2.0.0-dev" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
 .um-shell{ max-width:1140px; margin:0 auto; padding:0 12px 60px; }
@@ -192,7 +192,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v1.1.0 · Manual</a>
+    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v2.0.0-dev · Manual</a>
   </div>
   <div class="links">
     <a href="index.html">Dashboard</a>
@@ -239,6 +239,7 @@
       <a href="#analysis-ui">9 · Analysis page UI</a>
       <a href="#excel">10 · Excel deliverable</a>
       <a href="#llm">11 · LLM review surface</a>
+      <a class="deep" href="#llm-mass">11b · Mass LLM Review ★ v2</a>
       <a href="#troubleshooting">12 · Troubleshooting</a>
       <a href="#versions">13 · Versions &amp; rollback</a>
     </aside>
@@ -661,7 +662,70 @@
 }</pre>
         <p>Suggested edits are <em>not</em> applied automatically — they appear as a list in the LLM panel; you decide what to action.</p>
         <p><b>Browser CORS:</b> Anthropic requires the <code>anthropic-dangerous-direct-browser-access: true</code> header (sent automatically). OpenAI accepts in-browser keys directly. Both expose the key to the page — fine for personal / internal use; route through a server proxy if ever shipped client-side.</p>
-        <p>If the call fails with "Failed to fetch", you likely opened the page via <code>file://</code> — serve over HTTP instead: <code>cd App/v1 &amp;&amp; python -m http.server 8000</code>.</p>
+        <p>If the call fails with "Failed to fetch", you likely opened the page via <code>file://</code> — serve over HTTP instead: <code>cd App/v2 &amp;&amp; python -m http.server 8000</code>.</p>
+
+        <h3 id="llm-mass">11b · Mass LLM Review ★ (v2.0)</h3>
+        <p>A second LLM entry point that lets you select up to <b>50</b> materials from the current bucket and run the LLM against each one in sequence, producing a single consolidated results table you can drill into and export.</p>
+
+        <h4>Workflow</h4>
+        <ol>
+          <li>On the analysis page, click <b>✦ Mass LLM Review</b> in the Bulk operations row.</li>
+          <li><b>Select view</b> — modal shows the bucket's materials (TL · Material · Description · Total · P2/mo · Pattern). Tick checkboxes (max 50). "Select all visible" / "Clear" + counter "N / 50 selected". Click <b>Review N materials</b>.</li>
+          <li><b>Run view</b> — progress bar + live results table fills row-by-row as the loop calls the LLM once per material. Each row shows ⋯ pending → ⏳ in-flight → ✓ done (or ✗ on error). <b>Cancel</b> stops the loop without losing accumulated results; <b>Pause</b> halts after the current call and exposes a Resume action.</li>
+          <li><b>Results view</b> — final table, with three actions: <b>⤓ Download Excel</b>, <b>⤓ Download JSON</b>, <b>⌫ Close &amp; Wipe</b>.</li>
+        </ol>
+
+        <h4>The LLM verdict palette (distinct from the math TL)</h4>
+        <p>Three values, intentionally a different palette so you don't confuse them with the algorithmic traffic light:</p>
+        <ul>
+          <li><b style="color:#1FCED8">ok (cyan)</b> — recommendation looks right given the chart</li>
+          <li><b style="color:#F5A623">tweak (amber)</b> — recommendation is close but a parameter change would improve it</li>
+          <li><b style="color:#B83CD0">review (magenta)</b> — a planner needs to look at this manually (seasonal, anomaly, etc.)</li>
+        </ul>
+
+        <h4>Drill-down</h4>
+        <p>Clicking any row in the results table closes the modal and selects that material on the main analysis page — chart + stats + LLM notes render in the detail panel using the cached LLM result from the batch. To return to the full table: click ✦ Mass LLM Review again.</p>
+
+        <h4>Data security posture</h4>
+        <div class="um-note crit">
+          <span class="lab">In-memory only — never persisted</span>
+          The mass-review session lives only in JavaScript memory. <b>Nothing is written to localStorage / IndexedDB at any point during the run</b>. Single-review LLM results from this session are also held only in memory.<br><br>
+          <b>Page reload mid-run = data loss.</b> The orchestrator picks "speed + clean security" over "resumability". You accepted this trade-off at design time.<br><br>
+          <b>Modal close = wipe.</b> Closing the Results view (or clicking ⌫ Close &amp; Wipe) erases <em>all</em> LLM data — both this mass-review session and any single-review entries from this session. Download the Excel + JSON <b>first</b> if you want to keep it.
+        </div>
+
+        <h4>Re-loading a saved review later</h4>
+        <p>To revisit a prior batch:</p>
+        <ol>
+          <li>Open the canonical intake JSON for the assessment (analysis page boots from it).</li>
+          <li>Click <b>⤒ Load mass review</b> in the Bulk operations row.</li>
+          <li>Select the saved <code>Mass_LLM_Review_*.json</code> file → modal opens in Results view with all your LLM annotations restored.</li>
+          <li>Drill-down works as if the batch just ran.</li>
+        </ol>
+        <p>The mass-review JSON is intentionally <em>separate</em> from the canonical intake JSON — math (intake JSON) stays clean and rollback-safe; LLM annotations (mass-review JSON) layer on top.</p>
+
+        <h4>Background continuation</h4>
+        <p>Closing the modal while the loop is running keeps the loop running. A floating chip "Mass review: N / M — Reopen" appears at the bottom-right of the page. Click <b>Reopen</b> to return to the Run view at any time.</p>
+
+        <h4>The prompt template</h4>
+        <p>Mass-review uses the <em>same</em> prompt template as single-review. Edit it in <b>Settings → §03 LLM prompt template</b>. Available placeholders: <code>{material}</code>, <code>{description}</code>, <code>{bucket}</code>, <code>{pattern}</code>, <code>{totalNet}</code>, <code>{p1Rate}</code>, <code>{p2Rate}</code>, <code>{p2Months}</code>, <code>{rateChange}</code>, <code>{adjP2}</code>, <code>{hceText}</code>, <code>{woCount}</code>, <code>{mrpType}</code>, <code>{stock}</code>, <code>{cmin}</code>, <code>{cmax}</code>, <code>{runway}</code>, <code>{recMin}</code>, <code>{recMax}</code>, <code>{recMrpType}</code>, <code>{trafficLight}</code>, <code>{action}</code>. Each mass-review JSON records the SHA-256 hash of the template that was active when the batch ran, for audit trail.</p>
+
+        <h4>Excel deliverable</h4>
+        <p>The <code>Mass_LLM_Review_*.xlsx</code> is the reference per-bucket workbook shape with three extra columns on the Index sheet:</p>
+        <ul>
+          <li><b>LLM Verdict</b> (column R) — coloured pill (cyan / amber / magenta), AutoFilter active.</li>
+          <li><b>LLM Notes</b> (column S) — free-text analyst notes from the LLM.</li>
+          <li><b>LLM Latency</b> (column T) — seconds per call, useful for cost diagnostics.</li>
+        </ul>
+        <p>Each per-material sheet gets an additional "LLM Review" block at the bottom showing the verdict, notes, suggested edits, provider/model, prompt hash, and timestamp.</p>
+
+        <h4>Error handling</h4>
+        <ul>
+          <li>Per-material API errors (HTTP 4xx/5xx, network drops, malformed JSON from the model) are captured in the row's status column. The loop <b>continues</b> with the next material.</li>
+          <li>Rate-limit (HTTP 429) → row marked error, loop continues. Re-run that material later by re-selecting it in a new batch.</li>
+          <li>If the LLM returns text that can't be parsed as JSON, the row's verdict defaults to <code>review</code> with notes "(could not parse model response — see raw)".</li>
+          <li><b>Cancel</b> stops the next call from being issued. Materials whose calls have already returned stay in the results; uncalled ones are marked <em>skipped</em>.</li>
+        </ul>
       </section>
 
       <!-- ───────────── 12 · Troubleshooting ───────────── -->
@@ -699,6 +763,21 @@
         <div class="um-note">
           <span class="lab">"Wipe all local data" to start clean</span>
           Settings page → About section → "Wipe all local data" clears every saved intake, every alias override, every LLM key. Can also be done via DevTools → Application → Clear site data.
+        </div>
+
+        <div class="um-note warn">
+          <span class="lab">Mass review modal won't open — "No LLM provider configured"</span>
+          Add a provider key in Settings → §02 LLM review providers, fetch + pick a model, then return. The Mass review button reads provider status at click-time.
+        </div>
+
+        <div class="um-note crit">
+          <span class="lab">Closed the mass-review modal before downloading</span>
+          By design, closing wipes all in-memory LLM data — there's no recovery in this session. Re-run the batch (LLM costs apply again). If you'd downloaded the mass-review JSON, you can re-load it via "⤒ Load mass review" once the canonical intake is open.
+        </div>
+
+        <div class="um-note">
+          <span class="lab">"Load mass review" rejects the JSON</span>
+          The bucket key in the saved JSON has to match a bucket in the current analysis. Make sure the matching canonical intake is loaded (the same assessment that produced the original batch). The error message names which bucket key was expected.
         </div>
       </section>
 

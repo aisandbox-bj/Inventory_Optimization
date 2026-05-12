@@ -1,5 +1,5 @@
 /* ═══ BUILD-STAMP ═══════════════════════════════════════════════════════════
-   Inventory Optimization App · v1.1.0 · released 2026-05-12
+   Inventory Optimization App · v2.0.0-dev · released 2026-05-12
    Excel deliverable — reference-matched workbook (775G_Analysis.xlsx shape).
 
    Per workbook:
@@ -751,12 +751,245 @@
     return String(name).replace(/[^A-Za-z0-9_.-]+/g, '_');
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════
+     MASS LLM REVIEW WORKBOOK (v2.0)
+     Per-bucket reference shape + extra LLM columns + per-material LLM block.
+     Only includes materials in the mass-review session (subset of bucket).
+  ═══════════════════════════════════════════════════════════════════════ */
+
+  const LLM_VERDICT_FILL = {
+    ok:     '1FCED8',   // cyan
+    tweak:  'F5A623',   // amber
+    review: 'B83CD0'    // magenta
+  };
+  const LLM_VERDICT_FONT_WHITE = ['review'];
+
+  async function buildMassReviewWorkbook(bucket, session, parameters, runDate, progressCb){
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Inventory Optimization App';
+    wb.created = new Date();
+
+    // Filter bucket.materials to only those in the session (preserve order)
+    const matByKey = new Map(bucket.materials.map(m => [m.material, m]));
+    const sessionMats = session.results
+      .filter(r => matByKey.has(r.material))
+      .map(r => matByKey.get(r.material));
+
+    /* ─── Index sheet — adds Pre-LLM TL, LLM Verdict, LLM Notes columns ─── */
+    const idx = wb.addWorksheet('Index', {
+      views: [{ state:'frozen', ySplit: 2, xSplit: 0 }]
+    });
+    const cols = INDEX_COLS.concat([
+      { key:'llmVerdict',  header:'LLM Verdict',  width:14, type:'llm' },
+      { key:'llmNotes',    header:'LLM Notes',    width:60, type:'string' },
+      { key:'llmLatency',  header:'LLM Latency',  width:12, type:'number' }
+    ]);
+    cols.forEach((c, i) => idx.getColumn(i + 1).width = c.width);
+
+    // Title row merged across all columns
+    const lastColLetter = numberToColumn(cols.length);
+    idx.mergeCells(`A1:${lastColLetter}1`);
+    const titleCell = idx.getCell('A1');
+    const provText = `${session.provider || 'unknown'} · ${session.model || 'unknown'}`;
+    titleCell.value = `${bucket.name} — Mass LLM Review (${provText})  |  Ran: ${session.startedAt || runDate}  |  ${session.results.filter(r => r.verdict).length} of ${session.total} reviewed`;
+    titleCell.font = { name:'Calibri', size:12, bold:true, color:{ argb:'FFFFFFFF' } };
+    titleCell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + C.titleNavy } };
+    titleCell.alignment = { vertical:'middle', horizontal:'center' };
+    idx.getRow(1).height = 26;
+
+    // Header row
+    cols.forEach((col, i) => {
+      const cell = idx.getRow(2).getCell(i + 1);
+      cell.value = col.header;
+      cell.font  = { bold:true, color:{ argb:'FFFFFFFF' }, name:'Calibri' };
+      cell.fill  = { type:'pattern', pattern:'solid',
+                     fgColor:{ argb:'FF' + (i >= INDEX_COLS.length ? '5E2A78' : (i >= 14 ? C.headerOrange : C.headerNavy)) } };
+      cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
+      cell.border = thinBorder();
+    });
+    idx.getRow(2).height = 32;
+
+    // AutoFilter
+    idx.autoFilter = { from:{ row:2, column:1 }, to:{ row:2, column:cols.length } };
+
+    // Data rows
+    const sheetNameByMat = new Map();
+    let r = 3;
+    for (const m of sessionMats) {
+      const llm = session.results.find(x => x.material === m.material) || {};
+      const row = idx.getRow(r);
+      // Standard 17 columns
+      INDEX_COLS.forEach((col, i) => {
+        const cell = row.getCell(i + 1);
+        cell.value = fmtIndexCell(col, m);
+        cell.font  = { name:'Calibri', size:10 };
+        cell.alignment = alignFor(col);
+        cell.border = thinBorder();
+      });
+      // TL fill
+      const tlCell = row.getCell(13);
+      if (TL_FILL[m.trafficLight]) {
+        tlCell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + TL_FILL[m.trafficLight] } };
+        tlCell.font = { bold:true, color:{ argb: TL_FONT_WHITE.includes(m.trafficLight) ? 'FFFFFFFF' : 'FF000000' }, name:'Calibri' };
+        tlCell.alignment = { horizontal:'center', vertical:'middle' };
+      }
+      // LLM columns (18-20)
+      const verdictCell = row.getCell(INDEX_COLS.length + 1);
+      verdictCell.value = llm.verdict || (llm.error ? 'ERROR' : '—');
+      verdictCell.alignment = { horizontal:'center', vertical:'middle' };
+      verdictCell.border = thinBorder();
+      verdictCell.font  = { name:'Calibri', size:10, bold:true };
+      if (llm.verdict && LLM_VERDICT_FILL[llm.verdict]) {
+        verdictCell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + LLM_VERDICT_FILL[llm.verdict] } };
+        verdictCell.font.color = { argb: LLM_VERDICT_FONT_WHITE.includes(llm.verdict) ? 'FFFFFFFF' : 'FF072025' };
+      } else if (llm.error) {
+        verdictCell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFC7CE' } };
+        verdictCell.font.color = { argb:'FF9C0006' };
+      }
+      const notesCell = row.getCell(INDEX_COLS.length + 2);
+      notesCell.value = llm.notes || (llm.error ? `ERROR: ${llm.error}` : '');
+      notesCell.font  = { name:'Calibri', size:10 };
+      notesCell.alignment = { horizontal:'left', vertical:'middle', wrapText:true };
+      notesCell.border = thinBorder();
+      const latencyCell = row.getCell(INDEX_COLS.length + 3);
+      latencyCell.value = llm.latencyMs != null ? `${(llm.latencyMs/1000).toFixed(1)} s` : '';
+      latencyCell.font  = { name:'Calibri', size:10 };
+      latencyCell.alignment = { horizontal:'right', vertical:'middle' };
+      latencyCell.border = thinBorder();
+      r++;
+    }
+
+    /* ─── Per-material sheets ─── */
+    const taken = new Set(['Index']);
+    let progress = 0;
+    for (const m of sessionMats) {
+      progress++;
+      if (progressCb) progressCb(progress, sessionMats.length, m.material);
+      const llm = session.results.find(x => x.material === m.material) || {};
+      const sname = safeSheetName(String(m.material), taken);
+      sheetNameByMat.set(m.material, sname);
+      const ws = wb.addWorksheet(sname);
+      await buildMaterialSheet(wb, ws, m, parameters, runDate);
+      // Append an LLM Review block at the bottom
+      appendLlmBlockToMaterialSheet(ws, llm, session);
+    }
+
+    // Hyperlinks on Index column A
+    let rr = 3;
+    for (const m of sessionMats) {
+      const sname = sheetNameByMat.get(m.material);
+      if (sname) {
+        const cell = idx.getCell(`A${rr}`);
+        cell.value = { text: String(m.material), hyperlink: `#'${sname}'!A1` };
+        cell.font  = { name:'Calibri', size:10, bold:true, underline:true, color:{ argb:'FF' + C.linkBlue } };
+        cell.alignment = { horizontal:'left', vertical:'middle' };
+        cell.border = thinBorder();
+      }
+      rr++;
+    }
+
+    /* ─── Run metadata sheet ─── */
+    const meta = wb.addWorksheet('Run');
+    meta.getCell('A1').value = 'Mass LLM Review · Run metadata';
+    meta.getCell('A1').font  = { bold:true, size:13, name:'Calibri' };
+    const rows = [
+      ['Bucket',           bucket.name],
+      ['Materials reviewed', session.results.filter(r => r.verdict).length],
+      ['Errored',          session.results.filter(r => r.error).length],
+      ['Skipped',          session.results.filter(r => r.status === 'skipped').length],
+      ['Total selected',   session.total],
+      ['Provider',         session.provider || '—'],
+      ['Model',            session.model    || '—'],
+      ['Prompt hash',      session.promptHash || '—'],
+      ['Started at',       session.startedAt || '—'],
+      ['Completed at',     session.completedAt || '—'],
+      ['Run date',         runDate],
+      ['P2 months',        parameters.p2Months],
+      ['Threshold',        parameters.threshold],
+      ['Exported at',      new Date().toISOString()]
+    ];
+    rows.forEach((rr, i) => {
+      meta.getCell(`A${i + 3}`).value = rr[0];
+      meta.getCell(`A${i + 3}`).font  = { bold:true, name:'Calibri' };
+      meta.getCell(`B${i + 3}`).value = rr[1];
+    });
+    meta.getColumn(1).width = 22;
+    meta.getColumn(2).width = 56;
+
+    return wb;
+  }
+
+  function appendLlmBlockToMaterialSheet(ws, llm, session){
+    // Find a row below the existing content
+    let r = ws.lastRow ? ws.lastRow.number + 3 : 40;
+    if (r < 40) r = 40;
+    ws.mergeCells(`B${r}:D${r}`);
+    const title = ws.getCell(`B${r}`);
+    title.value = 'LLM Review';
+    title.font  = { name:'Calibri', size:11, bold:true, color:{ argb:'FFFFFFFF' } };
+    title.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF5E2A78' } };   // purple-ish for distinction
+    title.alignment = { horizontal:'left', vertical:'middle' };
+    ws.getRow(r).height = 20;
+    r++;
+
+    const rows = [
+      ['Provider',     session.provider || '—'],
+      ['Model',        session.model    || '—'],
+      ['Prompt hash',  session.promptHash || '—'],
+      ['Verdict',      llm.verdict || (llm.error ? 'ERROR' : '—')],
+      ['Notes',        llm.notes || (llm.error ? `ERROR: ${llm.error}` : '')],
+      ['Suggested edits', llm.suggestedEdits && llm.suggestedEdits.length
+                            ? llm.suggestedEdits.map(e => `${e.field}=${JSON.stringify(e.newValue)} (${e.rationale || ''})`).join(' · ')
+                            : 'none'],
+      ['Latency',      llm.latencyMs != null ? `${(llm.latencyMs/1000).toFixed(1)} s` : '—'],
+      ['Timestamp',    llm.timestamp || '—']
+    ];
+    rows.forEach((pair, i) => {
+      const row = ws.getRow(r + i);
+      row.getCell(2).value = pair[0];
+      row.getCell(2).font  = { name:'Calibri', size:10, bold:true };
+      row.getCell(2).border = thinBorder();
+      const valueCell = row.getCell(3);
+      valueCell.value = pair[1];
+      valueCell.font  = { name:'Calibri', size:10 };
+      valueCell.alignment = { horizontal:'left', vertical:'middle', wrapText:true };
+      valueCell.border = thinBorder();
+      ws.mergeCells(`C${r + i}:D${r + i}`);
+      // Highlight Verdict row
+      if (pair[0] === 'Verdict' && llm.verdict && LLM_VERDICT_FILL[llm.verdict]) {
+        valueCell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + LLM_VERDICT_FILL[llm.verdict] } };
+        valueCell.font = { name:'Calibri', size:10, bold:true,
+                           color:{ argb: LLM_VERDICT_FONT_WHITE.includes(llm.verdict) ? 'FFFFFFFF' : 'FF072025' } };
+      }
+    });
+  }
+
+  /* Helper: column index (1-based) → Excel column letter(s) */
+  function numberToColumn(n){
+    let s = '';
+    while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  }
+
+  async function downloadMassReview(bucket, session, parameters, opts){
+    opts = opts || {};
+    if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS not loaded.');
+    const wb = await buildMassReviewWorkbook(bucket, session, parameters, opts.runDate || new Date().toISOString().slice(0, 10), opts.progress);
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fname = sanitizeFile(opts.filename || `Mass_LLM_Review_${bucket.name.replace(/[^A-Za-z0-9_-]+/g,'_')}.xlsx`);
+    triggerDownload(blob, fname);
+    return { filename: fname, sizeBytes: buf.byteLength };
+  }
+
   global.AppExcel = Object.freeze({
     buildWorkbookForBucket,
     downloadBucket,
     downloadAll,
     buildCombinedWorkbook,
-    downloadCombined
+    downloadCombined,
+    buildMassReviewWorkbook,
+    downloadMassReview
   });
 
 })(window);

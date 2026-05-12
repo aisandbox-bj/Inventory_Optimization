@@ -312,7 +312,64 @@
     renderLlm('anthropic');
     renderLlm('openai');
     renderAliases();
+    await renderPromptEditor();
     await renderAbout();
+  }
+
+  /* ─── LLM prompt template editor (v2.0) ───────────────────────────────── */
+  async function renderPromptEditor(){
+    const ta = document.querySelector('#promptTemplate');
+    if (!ta) return;
+    const tpl = await AppConfig.getPromptTemplate();
+    ta.value = tpl;
+
+    const phHost = document.querySelector('#promptPlaceholders');
+    if (phHost) {
+      phHost.innerHTML = '';
+      (AppConfig.PROMPT_PLACEHOLDERS || []).forEach(p => {
+        const chip = document.createElement('span');
+        chip.className = 'ph-chip';
+        chip.textContent = '{' + p + '}';
+        chip.title = 'Click to insert at cursor';
+        chip.addEventListener('click', () => insertAtCursor(ta, '{' + p + '}'));
+        phHost.appendChild(chip);
+      });
+    }
+    await refreshPromptHash(tpl);
+  }
+
+  function insertAtCursor(textarea, text){
+    const start = textarea.selectionStart;
+    const end   = textarea.selectionEnd;
+    const v     = textarea.value;
+    textarea.value = v.slice(0, start) + text + v.slice(end);
+    textarea.selectionStart = textarea.selectionEnd = start + text.length;
+    textarea.focus();
+    refreshPromptHash(textarea.value);
+  }
+
+  async function refreshPromptHash(text){
+    const out = document.querySelector('#promptHash');
+    if (!out || typeof AppLlm === 'undefined') return;
+    const h = await AppLlm.hashTemplate(text);
+    out.textContent = h || '(unavailable)';
+  }
+
+  function setupPromptButtons(){
+    const ta = document.querySelector('#promptTemplate');
+    if (!ta) return;
+    ta.addEventListener('input', () => refreshPromptHash(ta.value));
+    document.querySelector('#promptSave').addEventListener('click', async () => {
+      await AppConfig.savePromptTemplate(ta.value);
+      toast('Prompt template saved', 'ok');
+      refreshPromptHash(ta.value);
+    });
+    document.querySelector('#promptReset').addEventListener('click', async () => {
+      if (!confirm('Reset prompt to the factory default? Your edits will be lost.')) return;
+      await AppConfig.resetPromptTemplate();
+      await renderPromptEditor();
+      toast('Prompt template reset to factory', 'ok');
+    });
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
@@ -320,6 +377,7 @@
     setupParamButtons();
     setupLlmCards();
     setupAliasButtons();
+    setupPromptButtons();
     setupAboutButtons();
   });
 

@@ -1,66 +1,82 @@
-/* ═══════════════════════════════════════════════════════════════════════════
+/* ═══ BUILD-STAMP ═══════════════════════════════════════════════════════════
+   Inventory Optimization App · v2.0.0-dev · released 2026-05-12
    LLM review surface — provider-agnostic chart review.
-   Captures the rendered chart as PNG, builds a structured prompt with the
-   material's stats, sends to the configured provider, parses a JSON response.
 
-   Depends on: AppConfig (provider keys + model), AppChart (PNG capture).
+   v2.0 changes:
+     • Prompt template sourced from AppConfig.getPromptTemplate() — user can
+       edit it in Settings. Placeholders {material}, {p2Rate}, etc. resolved
+       at call-time.
+     • Prompt hash (SHA-256 of the template, first 16 hex chars) exposed so
+       mass-review JSONs can record which prompt was used.
+     • Single-review and Mass-review share this module. Mass uses the
+       lower-level reviewWithPng() to avoid re-capturing PNGs unnecessarily.
 ═══════════════════════════════════════════════════════════════════════════ */
 
 (function (global) {
   'use strict';
 
-  /* ─── Prompt builder ────────────────────────────────────────────────────── */
-  function buildPrompt(material, bucketName, parameters){
+  /* ─── Resolve {placeholders} in a template against material context ─── */
+  function interpolate(template, ctx){
+    return String(template || '').replace(/\{(\w+)\}/g, (match, key) => {
+      if (key in ctx) {
+        const v = ctx[key];
+        return (v == null || v === '') ? '—' : String(v);
+      }
+      return match;   // unknown placeholder — leave intact for debugging
+    });
+  }
+
+  /* ─── Build the per-material context object the template reads from ─── */
+  function buildContext(material, bucketName, parameters){
     const hceText = (material.hceP2 || []).length
       ? (material.hceP2.map(e => `WO ${e.order} (${e.date}) ${e.equipment} ${e.qty} EA · ${e.pct}% of P2 · ${e.reasons}`).join(' · '))
       : 'none';
     const rcText = material.rateChange != null ? `${material.rateChange}%` : 'N/A';
-    const adjP2  = material.adjP2Rate != null ? `${material.adjP2Rate.toFixed(2)} / mo` : '—';
+    const adjP2  = (material.adjP2Rate != null) ? `${material.adjP2Rate.toFixed(2)} / mo` : '—';
+    return {
+      material:     material.material,
+      description:  material.description || '',
+      bucket:       bucketName,
+      pattern:      material.pattern,
+      totalNet:     material.totalNet,
+      p1Rate:       material.p1Rate,
+      p1Flag:       material.p1Flag,
+      p2Rate:       material.p2Rate,
+      p2Flag:       material.p2Flag,
+      p2Months:     parameters.p2Months,
+      rateChange:   rcText,
+      adjP2,
+      hceText,
+      woCount:      (material.woCount != null) ? material.woCount : '—',
+      mrpType:      material.mrpType,
+      stock:        (material.stock != null) ? material.stock : '—',
+      cmin:         (material.cmin != null) ? material.cmin : '—',
+      cmax:         (material.cmax != null) ? material.cmax : '—',
+      runway:       (material.runway != null) ? material.runway : '—',
+      recMin:       (material.recMin != null) ? material.recMin : '—',
+      recMax:       (material.recMax != null) ? material.recMax : '—',
+      recMrpType:   material.recMrpType || '—',
+      trafficLight: material.trafficLight,
+      action:       material.action
+    };
+  }
 
-    return [
-      `You are reviewing a consumption chart for an MRO inventory recommendation.`,
-      ``,
-      `Material:       ${material.material} — ${material.description}`,
-      `Bucket:         ${bucketName}`,
-      `Pattern:        ${material.pattern}`,
-      ``,
-      `STATISTICS`,
-      `  Total consumed (analysis window):  ${material.totalNet}`,
-      `  P1 rate (baseline, 5 mo):          ${material.p1Rate} / mo  [${material.p1Flag}]`,
-      `  P2 rate (current, ${parameters.p2Months} mo): ${material.p2Rate} / mo  [${material.p2Flag}]`,
-      `  P1 → P2 rate change:               ${rcText}`,
-      `  Adjusted P2 (HCE excluded):        ${adjP2}`,
-      `  HCE events (P2):                   ${hceText}`,
-      ``,
-      `CURRENT MRP STATE`,
-      `  MRP type:        ${material.mrpType || '—'}`,
-      `  Stock on hand:   ${material.stock != null ? material.stock : '—'}`,
-      `  Current Min:     ${material.cmin != null ? material.cmin : '—'}`,
-      `  Current Max:     ${material.cmax != null ? material.cmax : '—'}`,
-      ``,
-      `RECOMMENDATION (algorithmic)`,
-      `  Recommended Min: ${material.recMin != null ? material.recMin : '—'}`,
-      `  Recommended Max: ${material.recMax != null ? material.recMax : '—'}`,
-      `  Traffic light:   ${material.trafficLight}`,
-      `  Action:          ${material.action}`,
-      ``,
-      `The attached chart shows: orange step line = cumulative actual consumption; ` +
-      `cyan dashed = P1 trend; green dashed = P2 trend; amber dots/annotations = HCE work orders.`,
-      ``,
-      `Your job is to look at the chart and the numbers together. Sanity check the recommendation. ` +
-      `Look for: a P2 rate skewed by one HCE, a pattern that looks seasonal not steady, ` +
-      `a lumpy classification the planner should be told about, anomalies the algorithm missed.`,
-      ``,
-      `Reply with ONLY a JSON object on a single line — no prose around it, no markdown fences:`,
-      `{"verdict":"ok"|"tweak"|"review","notes":"<one or two sentences>","suggestedEdits":[<optional edits>]}`,
-      ``,
-      `verdict semantics:`,
-      `  "ok"     — recommendation looks right given the chart`,
-      `  "tweak"  — recommendation is close but a parameter change would improve it`,
-      `  "review" — a planner needs to look at this manually (seasonal, anomaly, etc.)`,
-      ``,
-      `suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|action", "newValue":<value>, "rationale":"<why>" }.`
-    ].join('\n');
+  async function buildPrompt(material, bucketName, parameters, templateOverride){
+    const tpl = templateOverride || await AppConfig.getPromptTemplate();
+    return interpolate(tpl, buildContext(material, bucketName, parameters));
+  }
+
+  /* ─── Hash the *template itself* (not the resolved per-material version) ─
+     Used by mass-review JSONs for audit trail. SHA-256 → hex (first 16 chars). */
+  async function hashTemplate(template){
+    try {
+      const data = new TextEncoder().encode(String(template || ''));
+      const buf  = await crypto.subtle.digest('SHA-256', data);
+      const hex  = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      return 'sha256-' + hex.slice(0, 16);
+    } catch {
+      return '';
+    }
   }
 
   /* ─── Provider call dispatchers ─────────────────────────────────────────── */
@@ -89,8 +105,7 @@
     if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = await res.json();
     const blocks = j.content || [];
-    const out = blocks.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-    return out;
+    return blocks.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
   }
 
   async function callOpenAI(apiKey, model, prompt, pngDataUrl){
@@ -121,16 +136,13 @@
   /* ─── Response parsing — strip markdown fences if present ───────────────── */
   function parseJsonResponse(raw){
     let s = String(raw || '').trim();
-    // Strip code fences
     const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (fence) s = fence[1].trim();
-    // Find first { ... }
     const first = s.indexOf('{');
     const last  = s.lastIndexOf('}');
     if (first >= 0 && last > first) s = s.slice(first, last + 1);
     try {
       const obj = JSON.parse(s);
-      // Normalize
       const verdict = ['ok','tweak','review'].includes(obj.verdict) ? obj.verdict : 'review';
       const notes   = String(obj.notes || '');
       const edits   = Array.isArray(obj.suggestedEdits) ? obj.suggestedEdits : [];
@@ -140,11 +152,7 @@
     }
   }
 
-  /* ─── Public review entry point ─────────────────────────────────────────── */
-  /**
-   * Capture a rendered chart's SVG to PNG, build the prompt, call the
-   * configured provider, return the parsed verdict + notes + suggested edits.
-   */
+  /* ─── Public: single-material review (capture SVG → PNG, call, parse) ─── */
   async function review(material, bucketName, parameters, svgEl, opts){
     opts = opts || {};
     const provider = opts.provider || (await guessProvider());
@@ -153,21 +161,38 @@
     if (!cfg.apiKey) throw new Error(`No API key saved for ${provider} — open Settings.`);
     if (!cfg.model)  throw new Error(`No model selected for ${provider} — open Settings and Fetch + pick a model.`);
 
-    const png = await AppChart.toPng(svgEl, 2);
-    const prompt = buildPrompt(material, bucketName, parameters);
-
+    const png    = await AppChart.toPng(svgEl, 2);
+    const prompt = await buildPrompt(material, bucketName, parameters);
+    const startedAt = performance.now();
     let raw;
-    if (provider === 'anthropic') raw = await callAnthropic(cfg.apiKey, cfg.model, prompt, png);
-    else if (provider === 'openai') raw = await callOpenAI(cfg.apiKey, cfg.model, prompt, png);
+    if (provider === 'anthropic')   raw = await callAnthropic(cfg.apiKey, cfg.model, prompt, png);
+    else if (provider === 'openai') raw = await callOpenAI   (cfg.apiKey, cfg.model, prompt, png);
     else throw new Error(`Unknown provider: ${provider}`);
+    const latencyMs = Math.round(performance.now() - startedAt);
 
-    return Object.assign({ provider, model: cfg.model }, parseJsonResponse(raw));
+    return Object.assign({ provider, model: cfg.model, latencyMs, source:'single' }, parseJsonResponse(raw));
   }
 
-  /**
-   * Pick whichever provider has both apiKey and model set.
-   * Preference order: anthropic, openai.
-   */
+  /* ─── Public: review one material from an arbitrary PNG (mass-loop entry) ─ */
+  async function reviewWithPng(material, bucketName, parameters, pngDataUrl, opts){
+    opts = opts || {};
+    const provider = opts.provider || (await guessProvider());
+    if (!provider) throw new Error('No LLM provider configured — set one in Settings.');
+    const cfg = await AppConfig.getLlm(provider);
+    if (!cfg.apiKey) throw new Error(`No API key saved for ${provider} — open Settings.`);
+    if (!cfg.model)  throw new Error(`No model selected for ${provider} — open Settings and Fetch + pick a model.`);
+
+    const prompt = await buildPrompt(material, bucketName, parameters, opts.template);
+    const startedAt = performance.now();
+    let raw;
+    if (provider === 'anthropic')   raw = await callAnthropic(cfg.apiKey, cfg.model, prompt, pngDataUrl);
+    else if (provider === 'openai') raw = await callOpenAI   (cfg.apiKey, cfg.model, prompt, pngDataUrl);
+    else throw new Error(`Unknown provider: ${provider}`);
+    const latencyMs = Math.round(performance.now() - startedAt);
+
+    return Object.assign({ provider, model: cfg.model, latencyMs }, parseJsonResponse(raw));
+  }
+
   async function guessProvider(){
     for (const p of ['anthropic', 'openai']) {
       const c = await AppConfig.getLlm(p);
@@ -176,9 +201,6 @@
     return null;
   }
 
-  /**
-   * Probe which providers are configured — used by the UI to enable buttons.
-   */
   async function configuredProviders(){
     const out = [];
     for (const p of ['anthropic', 'openai']) {
@@ -189,8 +211,8 @@
   }
 
   global.AppLlm = Object.freeze({
-    review, configuredProviders, guessProvider,
-    buildPrompt, parseJsonResponse
+    review, reviewWithPng, configuredProviders, guessProvider,
+    buildPrompt, interpolate, buildContext, parseJsonResponse, hashTemplate
   });
 
 })(window);
