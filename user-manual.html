@@ -267,15 +267,29 @@
         <h2><span class="num">02</span>Quick start</h2>
         <ol>
           <li>From the Dashboard, click <b>Intake</b>.</li>
+          <li><b>Assessment name</b> (mandatory ★) — type a name in the header. Saves and "Open in Analysis" both refuse to proceed without one.</li>
+          <li><b>Batch mode (optional, v2.1)</b> — if you have a previously-saved intake with the heavy data already loaded, click <em>Reuse common data</em> → modal lets you pick which datasets (MB51 / IW39 / Fleet / Inv Master) to hydrate. Skip this section if you're starting fresh.</li>
           <li><b>Step 0 — Assessment type.</b> Pick one of UNIT/FLOC, User list, or Parameter Search. Non-applicable upload zones grey out.</li>
           <li><b>Step 1 — Upload.</b> Drag SAP exports onto the highlighted drop zones. Each card shows row counts and cross-file match percentages.</li>
           <li><b>Step 2 — Schema mapping.</b> Confirm auto-mapped headers; manually override any unmatched columns.</li>
           <li><b>Step 3 — Data Quality gate.</b> Green = continue, amber = warnings shown but continue, red = halt and fix.</li>
-          <li><b>Step 4 — Scope.</b> For UNIT/FLOC, pick fleet model(s) / classification / vendor. For Parameter Search, configure filters in Step 4b.</li>
+          <li><b>Step 4 — Scope.</b> For UNIT/FLOC, pick fleet model(s) / classification / vendor. For User list, paste materials directly OR upload an optional file. For Parameter Search, configure filters in Step 4b.</li>
           <li><b>Step 5 — Parameters.</b> Per-run override of saved defaults. Reset button reverts overrides without touching Settings.</li>
           <li><b>Step 6 — Final scope summary.</b> Confirms exactly how many materials will be analyzed, bucket-by-bucket. Mismatch advisories shown.</li>
           <li><b>Step 7 — Review &amp; Export.</b> Save to localStorage, download <code>.json</code>, or "Open in Analysis Engine →" to run the pipeline.</li>
-          <li>On the Analysis page: pick a bucket, filter / sort the material list, click a row for the detail panel. Use <b>Export this bucket</b> for the per-bucket workbook, <b>Export ALL (combined)</b> for the master index.</li>
+          <li>On the Analysis page: pick a bucket, filter / sort the material list, click a row for the detail panel. <b>Right-click a row</b> to mark for LLM review or PDF print. Use <b>Export this bucket</b> for the per-bucket workbook, <b>Export ALL (combined)</b> for the master index, <b>Export PDF Pack</b> for client deliverable, <b>Mass LLM Review</b> for batched chart annotations.</li>
+        </ol>
+
+        <h3>Batch-mode workflow (v2.1)</h3>
+        <p>Running multiple analyses against the same SAP extracts (e.g. different fleet models or material lists)? Don't re-upload — use batch mode:</p>
+        <ol>
+          <li>Run + save your first intake normally.</li>
+          <li>Return to the Intake page. A new "Batch mode" tile appears below the Intake Engine header.</li>
+          <li>Click <b>↻ Pick source + datasets…</b> → modal opens.</li>
+          <li>Pick the source intake and tick the datasets to hydrate. Defaults: <b>heavy common files checked</b> (MB51, IW39, Fleet, Inv Master), <b>specifier files unchecked</b> (userList, materialVendor, leadTimes). Adjust as needed.</li>
+          <li>Click <b>↻ Load selected datasets</b>. The drop cards show <em>↻ reused from "…"</em> instead of "drag here".</li>
+          <li><b>Assessment type, scope and parameters are NOT inherited</b> — pick fresh in Step 0 onwards.</li>
+          <li>Save under a new name (auto-suggested: <code>{source} — batch HHMM</code>).</li>
         </ol>
       </section>
 

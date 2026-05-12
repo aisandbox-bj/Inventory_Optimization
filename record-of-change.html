@@ -266,6 +266,22 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="tag dev">dev</span>
       </div>
 
+      <h4>Reuse-modal redesign + mandatory Assessment Name (2026-05-12 pm)</h4>
+      <ul>
+        <li><b>Reuse-data tile relocated</b> from above the metadata header to <em>below</em> the Intake Engine header. Reads better — name your assessment first, then decide whether to reuse data.</li>
+        <li><b>Inline picker → modal</b>. Tile now shows a compact "↻ Pick source + datasets…" button that opens a proper bubble.</li>
+        <li><b>Two-step modal</b>:
+          <ul>
+            <li><em>Step 1 — Pick source intake</em>: dropdown of all saved intakes</li>
+            <li><em>Step 2 — Pick datasets</em>: checkbox per dataset (MB51 / IW39 / Fleet Master / Inventory Master / userList / materialVendor / leadTimes). Each row shows the row count from the source intake. Datasets not present in the source are greyed out and disabled.</li>
+          </ul>
+        </li>
+        <li><b>Smart defaults</b>: heavy common files (MB51, IW39, Fleet, Inv Master) are pre-checked. Specifier files (userList, materialVendor, leadTimes) are <em>un-checked</em> by default — the operator picks what they actually want for the new batch.</li>
+        <li><b>Assessment type is NO LONGER auto-inherited</b> from the source intake. The operator picks a fresh assessment type in Step 0 after loading. Fixes the previous behaviour where reusing a userList-based intake force-applied the userList type.</li>
+        <li><b>Mandatory Assessment Name</b>: the name field is now required (red asterisk + <code>required</code>/<code>aria-required</code>). Validates on Save, Download, and Open-in-Analysis. Empty submission triggers an inline error message, focuses + scrolls to the field, and toasts a red warning. Typing into the field clears the error live.</li>
+        <li>Auto-suggested batch name (<code>{source} — batch HHMM</code>) only fills when the field is empty — never overwrites a name the user typed.</li>
+      </ul>
+
       <h4>Locale fix — host-clock time + CAD currency</h4>
       <ul>
         <li><b>Time was off by your UTC offset.</b> Every <code>new Date().toISOString()</code> through the app converted local clock → UTC, which is hours later than your wall clock west of UTC. After ~5pm local time, the "Run date" was already showing tomorrow's UTC date. Same for "Created at", "Exported at", PDF footer, mass-review timestamps.</li>

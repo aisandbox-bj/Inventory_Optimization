@@ -1530,15 +1530,46 @@
     renderScopeSummary();
   }
 
+  /* ─── Mandatory Assessment-Name validation (v2.1) ─────────────────────── */
+  function requireAssessmentName(){
+    const input = $('#assessmentName');
+    const errEl = $('#assessmentNameError');
+    const name = (state.name || '').trim();
+    if (!name) {
+      if (input) {
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      if (errEl) errEl.style.display = '';
+      toast('Assessment name is required — name it before saving / running analysis.', 'crit');
+      return false;
+    }
+    if (input) input.removeAttribute('aria-invalid');
+    if (errEl) errEl.style.display = 'none';
+    return true;
+  }
+
   function setupReviewActions(){
-    $('#assessmentName').addEventListener('input', () => { state.name = $('#assessmentName').value; renderJsonPreview(); });
+    $('#assessmentName').addEventListener('input', () => {
+      state.name = $('#assessmentName').value;
+      // Clear the error styling as soon as the user starts typing
+      if (state.name.trim()) {
+        const input = $('#assessmentName');
+        const errEl = $('#assessmentNameError');
+        if (input) input.removeAttribute('aria-invalid');
+        if (errEl) errEl.style.display = 'none';
+      }
+      renderJsonPreview();
+    });
     $('#createdBy').addEventListener('input', renderJsonPreview);
     $('#runDate').addEventListener('change', () => { state.runDate = $('#runDate').value; if (state.parsed.mb51) runDqGate(); });
     $('#runDate').value = state.runDate;
 
     $('#btnSaveLocal').addEventListener('click', async () => {
+      if (!requireAssessmentName()) return;
       const json = buildJson();
-      const name = state.name || `intake-${AppLocale.localDateISO()}`;
+      const name = state.name.trim();
       const result = await AppStorage.set('intake.' + name, json);
       // also update an "intakes" index list
       const idx = (await AppStorage.get('intakes.index')) || [];
@@ -1547,15 +1578,16 @@
       await AppStorage.set('intakes.index', idxClean.slice(0, 50));
       // also save as "current" for analysis engine handoff
       await AppStorage.set('intake.current', json);
-      toast(`Saved to ${result.store === 'idb' ? 'IndexedDB' : 'localStorage'} (${humanBytes(result.size)})`, 'ok');
+      toast(`Saved as "${name}" to ${result.store === 'idb' ? 'IndexedDB' : 'localStorage'} (${humanBytes(result.size)})`, 'ok');
     });
 
     $('#btnDownload').addEventListener('click', () => {
+      if (!requireAssessmentName()) return;
       const json = buildJson();
       const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      const name = (state.name || `intake-${AppLocale.localDateISO()}`).replace(/[^A-Za-z0-9_-]+/g, '_');
+      const name = state.name.trim().replace(/[^A-Za-z0-9_-]+/g, '_');
       a.href = url; a.download = `${name}.json`;
       a.click();
       URL.revokeObjectURL(url);
@@ -1609,7 +1641,7 @@
     });
 
     $('#btnOpenAnalysis').addEventListener('click', async () => {
-      // Save current and navigate to analysis page (built next)
+      if (!requireAssessmentName()) return;
       const json = buildJson();
       await AppStorage.set('intake.current', json);
       window.location.href = '../analysis/analysis.html';
@@ -1651,39 +1683,231 @@
      when running multiple batches against the same SAP extracts.
   ═════════════════════════════════════════════════════════════════════════ */
 
+  /* Tile-level panel — visible when saved intakes exist. Click opens modal. */
   async function setupReusePanel(){
-    const panel  = $('#reusePanel');
-    const select = $('#reuseSelect');
-    const btnLoad = $('#reuseLoad');
-    const btnFresh = $('#reuseStartFresh');
-    if (!panel || !select) return;
+    const panel    = $('#reusePanel');
+    const btnOpen  = $('#reuseOpen');
+    const summary  = $('#reuseSummary');
+    if (!panel || !btnOpen) return;
 
-    // Populate dropdown from intakes.index
     const idx = (await AppStorage.get('intakes.index')) || [];
     if (idx.length === 0) {
-      // No saved intakes → hide the panel entirely (nothing to reuse from)
       panel.hidden = true;
       return;
     }
-    panel.hidden = false;
-    select.innerHTML = `
-      <option value="">— pick a saved intake to reuse data from —</option>
-      ${idx.map(e => `<option value="${escapeAttr(e.name)}">${escapeHtml(e.name)} · ${escapeHtml(e.mode || '—')} · ${escapeHtml((e.createdAt || '').replace('T', ' ').slice(0, 16))}</option>`).join('')}
+    panel.hidden  = false;
+    btnOpen.disabled = false;
+    if (summary) summary.textContent = `${idx.length} saved intake${idx.length === 1 ? '' : 's'} available`;
+
+    btnOpen.addEventListener('click', () => openReuseModal(idx));
+
+    // Modal close handlers (idempotent)
+    const closeBtn = $('#reuseModalClose');
+    if (closeBtn && !closeBtn._bound) {
+      closeBtn.addEventListener('click', closeReuseModal);
+      closeBtn._bound = true;
+    }
+    const backdrop = $('#reuseModal').querySelector('.mass-backdrop');
+    if (backdrop && !backdrop._bound) {
+      backdrop.addEventListener('click', closeReuseModal);
+      backdrop._bound = true;
+    }
+  }
+
+  function closeReuseModal(){
+    const m = $('#reuseModal');
+    if (!m) return;
+    m.classList.add('hidden'); m.setAttribute('aria-hidden', 'true');
+  }
+
+  /* ─── Reuse modal — pick source + which datasets to hydrate ─────────────── */
+  // Friendly labels per source key
+  const REUSE_LABELS = {
+    mb51:            { label:'MB51',               desc:'Material movements — the consumption transactional file' },
+    iw39:            { label:'IW39',               desc:'Work orders — bridges MB51 to fleet equipment' },
+    fleetMaster:     { label:'Fleet Master',       desc:'Equipment / unit master — fleet model definitions' },
+    inventoryMaster: { label:'Inventory Master',   desc:'Stock + MRP settings + classification + value' },
+    materialVendor:  { label:'Material → Vendor',  desc:'Vendor mapping — only used for by-vendor scope' },
+    leadTimes:       { label:'Lead Times',         desc:'Per-material lead-time + safety stock (rare)' },
+    userList:        { label:'User list',          desc:'Pre-loaded material list — usually you want to set a fresh one' }
+  };
+  // Datasets in the order we present them, separated into "heavy common" + "specifier"
+  const REUSE_GROUPS = [
+    { groupLabel: 'Common heavy files (typically reused across batches)',
+      sources: ['mb51', 'iw39', 'fleetMaster', 'inventoryMaster'],
+      defaultChecked: true },
+    { groupLabel: 'Specifier / optional files (usually new per batch — leave unchecked)',
+      sources: ['userList', 'materialVendor', 'leadTimes'],
+      defaultChecked: false }
+  ];
+
+  async function openReuseModal(idx){
+    const modal = $('#reuseModal');
+    const body  = $('#reuseModalBody');
+    const foot  = $('#reuseModalFoot');
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+
+    let selectedName = idx[0] ? idx[0].name : '';
+
+    function render(){
+      // Pull the current source intake to see what datasets it actually has
+      let sourceJson = null;
+      if (selectedName) sourceJson = window._reuseCache && window._reuseCache.name === selectedName ? window._reuseCache.json : null;
+      // We'll fetch lazily on render and cache on the modal scope
+      body.innerHTML = `
+        <div class="reuse-step">
+          <span class="step-lab">Step 1</span>
+          <h4>Pick the source intake to copy data from</h4>
+          <select id="reuseModalSelect" class="reuse-select">
+            ${idx.map(e => `
+              <option value="${escapeAttr(e.name)}" ${e.name === selectedName ? 'selected' : ''}>
+                ${escapeHtml(e.name)} · ${escapeHtml(e.mode || '—')} · ${escapeHtml((e.createdAt || '').replace('T', ' ').slice(0, 16))}
+              </option>`).join('')}
+          </select>
+        </div>
+
+        <div class="reuse-step">
+          <span class="step-lab">Step 2</span>
+          <h4>Pick which datasets to hydrate</h4>
+          <div id="reuseSourcesHost"></div>
+        </div>
+
+        <div class="reuse-notes">
+          <b>What happens on load:</b>
+          <ul>
+            <li>Selected datasets are copied into the current intake state (no re-upload).</li>
+            <li>Parameter defaults carry over as a starting point (you can override per-run).</li>
+            <li><b>Assessment type is NOT inherited</b> — pick fresh in Step 0 below.</li>
+            <li><b>Scope is reset</b> — that's the whole point of a new batch.</li>
+            <li>Assessment name auto-suggests <code>{source} — batch HHMM</code>; rename freely.</li>
+          </ul>
+        </div>
+      `;
+      // Lazy-fetch the source JSON to count rows + filter available sources
+      AppStorage.get('intake.' + selectedName).then(json => {
+        window._reuseCache = { name: selectedName, json };
+        renderSourcesList(json);
+      });
+      // Bind dropdown
+      $('#reuseModalSelect').addEventListener('change', e => {
+        selectedName = e.target.value;
+        render();
+      });
+    }
+
+    function renderSourcesList(json){
+      const host = $('#reuseSourcesHost');
+      if (!host || !json) return;
+      const data = json.data || {};
+      let html = '';
+      for (const group of REUSE_GROUPS) {
+        html += `<div style="margin-top:10px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.6px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">${group.groupLabel}</div>`;
+        html += '<div class="reuse-sources">';
+        for (const src of group.sources) {
+          const rows = (Array.isArray(data[src]) ? data[src].length : 0);
+          const avail = rows > 0;
+          const checked = avail && group.defaultChecked;
+          html += `
+            <label class="reuse-source-row ${avail ? '' : 'unavailable'}">
+              <input type="checkbox" data-src="${src}" ${avail ? '' : 'disabled'} ${checked ? 'checked' : ''} />
+              <span class="name">${REUSE_LABELS[src].label}</span>
+              <span class="desc">${REUSE_LABELS[src].desc}</span>
+              <span class="rows">${avail ? rows.toLocaleString('en-CA') + ' rows' : '— not in source —'}</span>
+            </label>
+          `;
+        }
+        html += '</div>';
+      }
+      host.innerHTML = html;
+    }
+
+    foot.innerHTML = `
+      <button id="reuseCancel" class="ghost">Cancel</button>
+      <span class="spacer"></span>
+      <button id="reuseLoadDo" class="primary">↻ Load selected datasets</button>
     `;
-    select.addEventListener('change', () => {
-      btnLoad.disabled = !select.value;
+    $('#reuseCancel').addEventListener('click', closeReuseModal);
+    $('#reuseLoadDo').addEventListener('click', async () => {
+      const cbs = body.querySelectorAll('input[type=checkbox][data-src]:checked');
+      const sources = [...cbs].map(c => c.dataset.src);
+      if (sources.length === 0) { toast('Pick at least one dataset to load.', 'warn'); return; }
+      const json = (window._reuseCache && window._reuseCache.json) || await AppStorage.get('intake.' + selectedName);
+      if (!json) { toast('Saved intake not found: ' + selectedName, 'crit'); return; }
+      closeReuseModal();
+      await hydrateFromSavedIntake(json, selectedName, sources);
     });
-    btnLoad.addEventListener('click', async () => {
-      const name = select.value;
-      if (!name) return;
-      const json = await AppStorage.get('intake.' + name);
-      if (!json) { toast('Saved intake not found: ' + name, 'crit'); return; }
-      await hydrateFromSavedIntake(json, name);
-    });
-    btnFresh.addEventListener('click', () => {
-      panel.hidden = true;
-      toast('Starting fresh — upload your files in Step 1.', 'ok');
-    });
+
+    render();
+  }
+
+  /**
+   * Hydrate state.parsed.* + state.paramsRun from a saved canonical JSON,
+   * limited to the explicitly-selected sources. Does NOT inherit the source's
+   * assessment type or scope (operator picks fresh).
+   */
+  async function hydrateFromSavedIntake(json, sourceName, selectedSources){
+    const sources = Array.isArray(selectedSources) ? selectedSources : REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES);
+    const reusedSources = [];
+    for (const s of sources) {
+      const arr = json.data && json.data[s];
+      if (Array.isArray(arr) && arr.length > 0) {
+        state.parsed[s] = {
+          canonical: arr,
+          headers:   Object.keys(arr[0] || {}),
+          fieldMap:  Object.fromEntries(Object.keys(arr[0] || {}).map(k => [k, k])),
+          rowCount:  arr.length,
+          unmatched: [],
+          missingFields: []
+        };
+        reusedSources.push(s);
+        const drop = document.querySelector(`.drop[data-source="${s}"]`);
+        if (drop) {
+          drop.classList.add('loaded');
+          const fileEl = drop.querySelector('.file');
+          if (fileEl) fileEl.textContent = `↻ reused from "${sourceName}" · ${arr.length.toLocaleString('en-CA')} rows`;
+        }
+      }
+    }
+    // Carry parameters as starting point
+    if (json.parameters) {
+      state.paramsRun = Object.assign({}, state.paramsSaved, json.parameters);
+    }
+
+    // Do NOT inherit assessmentType — operator picks fresh per the batch-mode design.
+    // (Removed automatic applyAssessmentType call from prior behaviour.)
+
+    // Auto-suggest name only if blank (don't overwrite a name the user typed)
+    const nameInput = $('#assessmentName');
+    if (nameInput && !nameInput.value) {
+      const base = (json.metadata && json.metadata.assessmentName) || sourceName;
+      const now = new Date();
+      const hhmm = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+      nameInput.value = `${base} — batch ${hhmm}`;
+      state.name = nameInput.value;
+      nameInput.removeAttribute('aria-invalid');
+      const errEl = $('#assessmentNameError'); if (errEl) errEl.style.display = 'none';
+    }
+
+    renderAllDropStats();
+    renderSchema();
+    if (state.assessmentType) runDqGate();   // only if a type is selected
+    renderParams();
+    populateScopeOptions();
+    renderScopePreview();
+    renderJsonPreview();
+    renderScopeSummary();
+
+    const statusEl = $('#reuseStatus');
+    if (statusEl) {
+      statusEl.style.display = '';
+      statusEl.innerHTML = `✓ Reused <b>${reusedSources.length}</b> dataset${reusedSources.length === 1 ? '' : 's'} from <span class="src">${escapeHtml(sourceName)}</span>: <b>${reusedSources.join(' · ')}</b><br>Next: pick an <b>assessment type</b> in Step 0 below, then set scope + parameters and save under a new name.`;
+    }
+    toast(`Loaded ${reusedSources.length} dataset${reusedSources.length===1?'':'s'} from "${sourceName}" — pick assessment type next.`, 'ok');
+
+    // Scroll to the assessment-type step so the operator sees the next action
+    const step0 = document.getElementById('step0');
+    if (step0) step0.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   /**

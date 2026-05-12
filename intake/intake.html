@@ -35,31 +35,6 @@
 <main class="shell">
   <div class="intake-grid">
 
-    <!-- ─── REUSE COMMON DATA FROM SAVED INTAKE ─── -->
-    <section class="panel reuse-panel" id="reusePanel" hidden>
-      <div class="panel-eyebrow" style="color:var(--accent-glow, var(--accent));">Batch mode · v2.1</div>
-      <div class="panel-title">Reuse common data from a saved intake.</div>
-      <div class="panel-sub" style="margin-bottom:14px;">
-        Running multiple batches against the same SAP extracts? Pick a previously-saved intake to
-        skip re-uploading MB51 / IW39 / Fleet Master / Inventory Master. You'll then only need to
-        set the new <b>assessment type + scope + parameters</b> for the new batch. Heavy data stays
-        in memory across batches.
-      </div>
-      <div class="row" style="gap:14px;align-items:flex-end;flex-wrap:wrap;">
-        <div style="flex:1.5;min-width:300px;">
-          <label class="label" style="display:block;margin-bottom:4px;">Source intake</label>
-          <select id="reuseSelect" style="width:100%;"></select>
-        </div>
-        <div>
-          <button id="reuseLoad" class="primary" disabled>↻ Load common data</button>
-        </div>
-        <div>
-          <button id="reuseStartFresh" class="ghost">Start fresh instead →</button>
-        </div>
-      </div>
-      <div id="reuseStatus" class="reuse-status" style="display:none;"></div>
-    </section>
-
     <!-- ─── METADATA HEADER ─── -->
     <section class="panel">
       <div class="panel-eyebrow">Intake engine</div>
@@ -67,8 +42,9 @@
       <div class="panel-sub">Upload your SAP exports, confirm the data-quality gate, pick a scope, set parameters, export. The JSON is the contract the analysis engine consumes — same inputs always produce the same canonical output.</div>
       <div class="row" style="gap:14px;">
         <div style="flex:1.2;">
-          <label class="label" style="display:block;margin-bottom:4px;">Assessment name</label>
-          <input id="assessmentName" type="text" placeholder="e.g. Yellow-Orange Fleet 2026 Q2" />
+          <label class="label" style="display:block;margin-bottom:4px;">Assessment name <span style="color:var(--status-warn);">*</span></label>
+          <input id="assessmentName" type="text" placeholder="e.g. Yellow-Orange Fleet 2026 Q2" required aria-required="true" />
+          <div id="assessmentNameError" class="field-error" style="display:none;">Required — please name this assessment before saving or running analysis.</div>
         </div>
         <div style="flex:1;">
           <label class="label" style="display:block;margin-bottom:4px;">Created by</label>
@@ -80,6 +56,39 @@
         </div>
       </div>
     </section>
+
+    <!-- ─── REUSE COMMON DATA FROM SAVED INTAKE (v2.1 — moved here, modal-driven) ─── -->
+    <section class="panel reuse-panel" id="reusePanel" hidden>
+      <div class="panel-eyebrow" style="color:var(--accent-glow, var(--accent));">Batch mode</div>
+      <div class="panel-title">Reuse common data from a previously-saved intake.</div>
+      <div class="panel-sub" style="margin-bottom:14px;">
+        Running multiple batches against the same SAP extracts? Skip re-uploading the heavy files —
+        pick a source intake and choose which of MB51 / IW39 / Fleet Master / Inventory Master to
+        hydrate from it. Assessment type, scope and parameters stay yours to pick fresh for each batch.
+      </div>
+      <div class="row" style="gap:12px;align-items:center;">
+        <button id="reuseOpen" class="primary" disabled>↻ Pick source + datasets…</button>
+        <span id="reuseSummary" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);"></span>
+      </div>
+      <div id="reuseStatus" class="reuse-status" style="display:none;"></div>
+    </section>
+
+    <!-- ─── REUSE COMMON DATA MODAL ─── -->
+    <div id="reuseModal" class="mass-modal hidden" aria-hidden="true">
+      <div class="mass-backdrop"></div>
+      <div class="mass-dialog" style="width:min(820px, 96vw);">
+        <div class="mass-head">
+          <div class="mass-title">
+            <span class="lab">Batch mode</span>
+            <h3>Reuse common data</h3>
+          </div>
+          <div class="mass-mode-pill">Pick source + datasets</div>
+          <button id="reuseModalClose" class="mass-close" title="Close">✕</button>
+        </div>
+        <div class="mass-body" id="reuseModalBody"></div>
+        <div class="mass-foot" id="reuseModalFoot"></div>
+      </div>
+    </div>
 
     <!-- ─── STEP 0 — ASSESSMENT TYPE ─── -->
     <section class="step" id="step0">
