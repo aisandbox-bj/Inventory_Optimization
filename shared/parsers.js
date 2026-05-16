@@ -34,18 +34,54 @@
       manufacturer:        ['Manufacturer', 'Make', 'OEM', 'Mfr'],
       functLocDescription: ['FunctLocDescrip.', 'Functional Location', 'FunctLoc.', 'Description']
     },
+    /* APP-T-01 (2026-05-16) — widened to ingest the standard SAP Material
+       Master Fiori export per Willem's field-mapping audit (Fiori_Field_
+       Audit_APP-T-01.md). Existing legacy aliases (Tot_Qty_OH, MRP_Ind etc.)
+       kept for back-compat with the old Inventory Master - Output.xlsx.
+       Plant is now canonical (was implicit single-plant before — multi-plant
+       handling, scope-picker UI, and cross-file consistency check are queued
+       for APP-T-01b). openPO is plant-conditional in source data: GM PO Qty
+       is plant 1130 (the operator's primary), MLA PO Qty is plant 1120 (3PL
+       hub) — first-match-wins resolves to plant 1130 by default; proper
+       plant-conditional selection lands in T-01b. */
     inventoryMaster: {
-      material:       ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.'],
-      totQtyOh:       ['Tot_Qty_OH', 'Tot Qty OH', 'Total Qty', 'Stock On Hand', 'SOH', 'Qty On Hand'],
-      totValueOh:     ['Tot_Value_OH', 'Tot Value OH', 'Total Value', 'Stock Value', 'Value On Hand', 'On-Hand Value', 'Inventory Value'],
-      mrpInd:         ['MRP_Ind', 'MRP Ind', 'MRP Type', 'MRP_Type', 'MRP Indicator'],
-      mrpMin:         ['MRP_Min', 'MRP Min', 'Min', 'Minimum', 'Reorder Point'],
-      mrpMax:         ['MRP_Max', 'MRP Max', 'Max', 'Maximum'],
-      safetyStock:    ['Safety Stock', 'SS', 'SS Qty', 'Safety_Stock', 'Buffer Stock'],
-      inventoryType:  ['Inventory_Type', 'Inventory Type', 'Inv Type', 'Item Category'],
-      materialGroup:  ['Material Group', 'Mat Group', 'MatGrp', 'Material_Group', 'MGroup'],
-      manufacturer:   ['Manufacturer', 'Mfr', 'OEM', 'Make', 'Manufacturer Name'],
-      primaryVendor:  ['Vendor', 'Primary Vendor', 'Source', 'Vendor No.']
+      material:           ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.'],
+      description:        ['Material Description', 'Mat Desc', 'Description'],
+      plant:              ['Plant'],
+      uom:                ['Base Unit of Measure', 'Base UoM', 'BUn', 'UoM', 'Unit of Measure', 'Unit'],
+      totQtyOh:           ['Unrestricted', 'Unrestricted Stock', 'Unrestricted-Use Stock', 'Tot_Qty_OH', 'Tot Qty OH', 'Total Qty', 'Stock On Hand', 'SOH', 'Qty On Hand'],
+      totValueOh:         ['Total Value', 'Tot_Value_OH', 'Tot Value OH', 'Stock Value', 'Value On Hand', 'On-Hand Value', 'Inventory Value'],
+      mrpInd:             ['MRP Type', 'MRP_Ind', 'MRP Ind', 'MRP_Type', 'MRP Indicator'],
+      mrpMin:             ['Reorder Point', 'MRP_Min', 'MRP Min', 'Min', 'Minimum'],
+      mrpMax:             ['Maximum Stock Level', 'MRP_Max', 'MRP Max', 'Max', 'Maximum'],
+      safetyStock:        ['Safety Stock', 'SS', 'SS Qty', 'Safety_Stock', 'Buffer Stock'],
+      inventoryType:      ['Inventory_Type', 'Inventory Type', 'Inv Type', 'Item Category'],
+      materialGroup:      ['Material Group', 'Mat Group', 'MatGrp', 'Material_Group', 'MGroup'],
+      manufacturer:       ['Mfg Name', 'Manufacturer', 'Mfr', 'OEM', 'Make', 'Manufacturer Name'],
+      primaryVendor:      ['Vendor', 'Primary Vendor', 'Source', 'Vendor No.'],
+      /* APP-T-01 — new canonical fields (D20 — five for Compose PR drafting) */
+      inTransit:          ['Stock in Transit', 'In Transit', 'In-Transit Qty', 'Stock In Transit'],
+      openPO:             ['GM PO Qty', 'MLA PO Qty', 'Open PO Qty', 'Open PO', 'PO Qty', 'PO_QTY'],
+      totalReservation:   ['Total Res Qty', 'Total Reservations', 'Total Reservation Qty', 'Res Qty', 'Reservation Qty'],
+      unitPrice:          ['Net Price', 'Unit Price', 'Standard Price', 'Std Price'],
+      movingAvgPrice:     ['Moving price', 'Moving Avg Price', 'Moving Average Price', 'mov_ave_cost', 'Moving Avg', 'MAP'],
+      /* APP-T-01 — high-value carry-through aliases (per audit §8) */
+      materialGroupDesc:  ['Material Group Desc.', 'Material Group Description', 'Mat Group Desc'],
+      mfgPartNo:          ['Manufacturer Part No.', 'Mfg Part No', 'MPN', 'Manufacturer Part Number'],
+      storageLocation:    ['Storage Location', 'Sloc', 'Stor. Loc.', 'StorLoc'],
+      mrpController:      ['MRP Controller'],
+      mrpControllerName:  ['MRP controller name', 'MRP Controller Name'],
+      currency:           ['Local Currency', 'Currency'],
+      purchasingGroup:    ['Purchasing Group', 'Purch. Group', 'PGr'],
+      purchasingGroupDesc:['Description p. group', 'Purchasing Group Description'],
+      blockedStock:       ['Valuated Goods Receipt Blocked Stock', 'Blocked Stock', 'GR Blocked Stock'],
+      totalStock:         ['Total Stock'],
+      res1Doc:            ['Reservation 1'],
+      res1Qty:            ['Res 1 Qty'],
+      res2Doc:            ['Reservation 2'],
+      res2Qty:            ['Res 2 Qty'],
+      res3Doc:            ['Reservation 3'],
+      res3Qty:            ['Res 3 Qty']
     },
     userList: {
       material:    ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.', 'SKU', 'Part', 'Part No', 'Part No.', 'Part Number'],
@@ -196,17 +232,43 @@
       functLocDescription: 'string'
     },
     inventoryMaster: {
-      material:      'string',
-      totQtyOh:      'number',
-      totValueOh:    'number',
-      mrpInd:        'string',
-      mrpMin:        'number',
-      mrpMax:        'number',
-      safetyStock:   'number',
-      inventoryType: 'string',
-      materialGroup: 'string',
-      manufacturer:  'string',
-      primaryVendor: 'string'
+      material:           'string',
+      description:        'string',
+      plant:              'string',
+      uom:                'string',
+      totQtyOh:           'number',
+      totValueOh:         'number',
+      mrpInd:             'string',
+      mrpMin:             'number',
+      mrpMax:             'number',
+      safetyStock:        'number',
+      inventoryType:      'string',
+      materialGroup:      'string',
+      manufacturer:       'string',
+      primaryVendor:      'string',
+      /* APP-T-01 — new canonical fields */
+      inTransit:          'number',
+      openPO:             'number',
+      totalReservation:   'number',
+      unitPrice:          'number',
+      movingAvgPrice:     'number',
+      /* APP-T-01 — carry-through aliases */
+      materialGroupDesc:  'string',
+      mfgPartNo:          'string',
+      storageLocation:    'string',
+      mrpController:      'string',
+      mrpControllerName:  'string',
+      currency:           'string',
+      purchasingGroup:    'string',
+      purchasingGroupDesc:'string',
+      blockedStock:       'number',
+      totalStock:         'number',
+      res1Doc:            'string',
+      res1Qty:            'number',
+      res2Doc:            'string',
+      res2Qty:            'number',
+      res3Doc:            'string',
+      res3Qty:            'number'
     },
     userList: {
       material:    'string',

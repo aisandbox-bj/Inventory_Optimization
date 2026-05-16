@@ -600,6 +600,51 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>analysis/analysis.css</code> AND <code>analysis/analysis.js</code> from <code>_rollback/APP-E18-pre/</code> (note: the APP-E18-pre snapshot captures the <i>post-E17</i> state; restoring it brings APP-E17 back with it). To rollback APP-E18 <i>without</i> reintroducing APP-E17, restore <code>analysis.js</code> from <code>_rollback/APP-E18-pre/</code> and <code>analysis.css</code> from <code>_rollback/APP-E17-pre/</code>. Stage C — <code>git revert</code> the APP-E18 commit. <b>Rollback boundary is clean</b>: pure DOM template + CSS, no logic, no schema, no canonical-JSON effect.
       </div>
+
+      <h4>APP-T-01 · Inventory Master parser widened to standard SAP Material Master (Fiori) — phase 1, single-file scope</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Compose (the third tool in the suite) needs five additional canonical fields the parser couldn't read today: <code>inTransit</code>, <code>openPO</code>, <code>totalReservation</code>, <code>unitPrice</code>, <code>movingAvgPrice</code> (locked decision D20). The operator's standard SAP Material Master Fiori export carries most of these columns directly — today's parser only aliased 10 of the ~40 columns available. This chunk widens the alias map to read every Material-Master-resident canonical field plus a set of high-value carry-through aliases (audit-recommended) so the downstream tools can use them without re-parsing.</li>
+        <li><b>Pre-work.</b> CoWork field-mapping audit (<code>_Hand-over docs/Fiori_Field_Audit_APP-T-01.md</code>, 2026-05-16) profiled all seven Fiori exports under <code>2 - Reference Docs/Upload templates/</code> — verbatim column headers, types, sample values, null rates, primary-source recommendations per canonical field, and an unmapped-column triage. The alias additions below land verbatim against that audit.</li>
+        <li><b>New canonical fields on <code>inventoryMaster[]</code> rows</b> (all optional — no SCHEMA_VERSION bump per D20):
+          <ul>
+            <li><code>description</code> — Material Master <code>Material Description</code>.</li>
+            <li><code>plant</code> — Material Master <code>Plant</code>. <b>First time as a real canonical field.</b> Multi-plant scope picker + Settings opt-in + cross-file consistency check are <strong>deferred to APP-T-01b</strong>; this chunk just captures the value on every row.</li>
+            <li><code>uom</code> — Material Master <code>Base Unit of Measure</code>.</li>
+            <li><code>inTransit</code> — Material Master <code>Stock in Transit</code>. Authoritative; previously fabricated in V1 mockups.</li>
+            <li><code>openPO</code> — Material Master <code>GM PO Qty</code> (plant 1130 primary, alphabetically first) or <code>MLA PO Qty</code> (plant 1120 3PL hub, fallback). First-match-wins resolves to plant 1130 by default — <strong>proper plant-conditional selection lands in APP-T-01b</strong>. For plant 1120 assessments today, the operator can use the schema-mapping override to point <code>openPO</code> at <code>MLA PO Qty</code> explicitly.</li>
+            <li><code>totalReservation</code> — Material Master <code>Total Res Qty</code>. Per D23: this carries reservations beyond the 3-row display cap; use it directly. (Individual reservation breakdowns are also captured as <code>res1Doc/Qty</code> through <code>res3Doc/Qty</code> for Compose's eventual reservation-overflow review.)</li>
+            <li><code>unitPrice</code> — Material Master <code>Net Price</code> if present. <b>Note:</b> per audit §4, the authoritative source is Supplier PO Reference; the cross-file join lands in a follow-up chunk. For now this picks up whatever a Material-Master file may carry.</li>
+            <li><code>movingAvgPrice</code> — Material Master <code>Moving price</code> (literal SAP label — not "Moving Average Price"). Authoritative.</li>
+          </ul>
+        </li>
+        <li><b>Updated alias lists for existing canonical fields</b> — Material Master uses different header strings to the old <code>Inventory Master - Output.xlsx</code> template:
+          <ul>
+            <li><code>totQtyOh</code> += <code>Unrestricted</code>, <code>Unrestricted Stock</code>, <code>Unrestricted-Use Stock</code>.</li>
+            <li><code>mrpMax</code> += <code>Maximum Stock Level</code>.</li>
+            <li><code>manufacturer</code> += <code>Mfg Name</code>.</li>
+            <li>All legacy aliases (<code>Tot_Qty_OH</code>, <code>MRP_Ind</code>, <code>MRP_Min</code>, <code>Manufacturer</code>, etc.) are <strong>retained for back-compat</strong> per the "accept both" decision the operator confirmed during planning. Existing intakes saved from the old template format keep parsing identically.</li>
+          </ul>
+        </li>
+        <li><b>Carry-through aliases added</b> (not canonical — captured for downstream use, no analytical effect): <code>materialGroupDesc</code>, <code>mfgPartNo</code>, <code>storageLocation</code>, <code>mrpController</code>, <code>mrpControllerName</code>, <code>currency</code>, <code>purchasingGroup</code>, <code>purchasingGroupDesc</code>, <code>blockedStock</code>, <code>totalStock</code> (for the basis-team Unrestricted-vs-Total-Stock question per audit §7-Q1), <code>res1Doc/Qty</code>, <code>res2Doc/Qty</code>, <code>res3Doc/Qty</code>.</li>
+        <li><b>Intake schema-mapping UI</b> updates automatically — it derives its column list from <code>AppParsers.ALIASES.inventoryMaster</code>. Tooltips added in <code>intake.js</code> <code>FIELD_HINTS</code> for the new high-decision-value canonical fields (description, plant, uom, the 5 D20 fields). Carry-through aliases surface in the UI without tooltips — same pattern as <code>totValueOh</code> / <code>safetyStock</code> / <code>materialGroup</code> today.</li>
+        <li><b>What did NOT ship.</b>
+          <ul>
+            <li><strong>Cross-file joins.</strong> The audit names Supplier PO Reference as the authoritative source for <code>unitPrice</code> and PR History as the source for material-level <code>inventoryType</code> (MODE across recent PR lines). Both require a multi-file join + aggregation step that's larger than this chunk. Queued as follow-up.</li>
+            <li><strong>Multi-plant scope picker, Settings toggle, cross-file plant consistency check.</strong> APP-T-01b — separate chunk per the locked sequencing decision.</li>
+            <li><strong>Plant-conditional <code>openPO</code> column selection.</strong> Lands with T-01b; for now the first-match-wins behaviour + the schema-mapping override is the workaround.</li>
+            <li><strong>SCHEMA_VERSION bump.</strong> Deliberately not bumped. All new fields are optional — saved intakes pre-dating T-01 keep parsing identically.</li>
+          </ul>
+        </li>
+        <li>No analytical change. <code>pipeline.js</code> untouched — it reads only the same 10 fields it always has. New fields sit on rows for downstream consumption (Compose) without affecting verdicts or Min/Max recommendations on existing assessments. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/parsers.js</code> (extended <code>ALIASES.inventoryMaster</code> + matching <code>FIELD_TYPES.inventoryMaster</code> coercions — 8 new canonical fields + 16 new carry-through aliases), <code>intake/intake.js</code> (<code>FIELD_HINTS.inventoryMaster</code> tooltips for new canonical fields), <code>record-of-change.html</code> (this APP-T-01 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>shared/parsers.js</code> and <code>intake/intake.js</code> from <code>_rollback/APP-T-01-pre/</code>. Stage C — <code>git revert</code> the APP-T-01 commit. <b>Rollback boundary is clean</b>: alias-map widening + tooltip additions. No JS logic change, no analytical change, no schema change, no canonical-JSON shape change. Saved intakes from before this chunk load identically; only intakes parsed under the new alias map carry the new fields.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->

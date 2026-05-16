@@ -45,13 +45,21 @@
       functLocDescription: 'SAP functional location label. Display only — operational context per unit.'
     },
     inventoryMaster: {
-      material:      'Material number — <b>the join key</b> against MB51 materials.',
-      totQtyOh:      'Stock on hand. <b>Used for runway calculation</b> (months of cover at current rate).',
-      mrpInd:        'MRP type (PD, V1, …). <b>Drives the traffic-light rules</b> in the analysis engine.',
-      mrpMin:        'Current MRP minimum. <b>Compared to recommended Min</b> to set the action (raise / lower / leave).',
-      mrpMax:        'Current MRP maximum. <b>Compared to recommended Max</b> the same way.',
-      inventoryType: 'Inventory category (NORM, INSP, …). <b>Filter dimension</b> in byClassification scope mode.',
-      primaryVendor: 'Vendor for this material. Optional fallback if no separate Material-Vendor file is uploaded.'
+      material:         'Material number — <b>the join key</b> against MB51 materials.',
+      description:      'Material description. Display only; cross-checked against MB51 when present.',
+      plant:            'Plant code (e.g. 1130 site stock, 1120 3PL hub). Captured for every row; <b>multi-plant scope picker queued for APP-T-01b</b>.',
+      uom:              'Base unit of measure (EA, KG, …). Used downstream by Compose for PR drafting.',
+      totQtyOh:         'Stock on hand. <b>Used for runway calculation</b> (months of cover at current rate).',
+      mrpInd:           'MRP type (PD, V1, …). <b>Drives the traffic-light rules</b> in the analysis engine.',
+      mrpMin:           'Current MRP minimum. <b>Compared to recommended Min</b> to set the action (raise / lower / leave).',
+      mrpMax:           'Current MRP maximum. <b>Compared to recommended Max</b> the same way.',
+      inventoryType:    'Inventory category (NORM, INSP, …). <b>Filter dimension</b> in byClassification scope mode.',
+      primaryVendor:    'Vendor for this material. Optional fallback if no separate Material-Vendor file is uploaded.',
+      inTransit:        'Quantity in transit (between sites or from 3PL). Compose uses this so PRs aren\'t drafted while stock is already inbound.',
+      openPO:           'Open purchase-order qty. Picks <code>GM PO Qty</code> (plant 1130) first, <code>MLA PO Qty</code> (plant 1120) as fallback. Plant-conditional logic queued for APP-T-01b.',
+      totalReservation: 'Total reservation qty across all reservations for this material. Authoritative (carries reservations beyond the 3 display rows).',
+      unitPrice:        'PO-confirmed unit price. Currently sourced from Material Master if present; primary source (Supplier PO Reference) joins land in a follow-up chunk.',
+      movingAvgPrice:   'Moving average price from SAP (the <code>Moving price</code> field). Used downstream by Compose for value-weighted analysis.'
     },
     materialVendor: {
       material:            'Join key to MB51 / Inventory Master.',
