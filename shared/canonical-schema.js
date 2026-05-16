@@ -95,11 +95,18 @@
 
   /* ─── Empty canonical JSON shell ────────────────────────────────────────── */
   function emptyJson() {
+    const now = (typeof AppLocale !== 'undefined' ? AppLocale.localStampCompact() : new Date().toISOString());
     return {
       schemaVersion: SCHEMA_VERSION,
       metadata: {
         assessmentName: '',
-        createdAt:      (typeof AppLocale !== 'undefined' ? AppLocale.localStampCompact() : new Date().toISOString()),
+        // APP-E15 — uploadedAt is the FIRST-SAVE timestamp and is preserved
+        // across re-saves of the same dataset. createdAt is REWRITTEN on every
+        // save (acts as "last analysis"). Pre-APP-E15 intakes have no
+        // uploadedAt; loaders fall back to createdAt for those. Additive,
+        // no SCHEMA_VERSION bump.
+        uploadedAt:     now,
+        createdAt:      now,
         createdBy:      '',
         appVersion:     APP_VERSION,
         assessmentType: null

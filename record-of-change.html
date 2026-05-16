@@ -503,6 +503,24 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>index.html</code> from <code>_rollback/APP-E14-pre/</code>. Stage C — <code>git revert</code> the APP-E14 commit. <b>The rollback boundary is clean</b>: dashboard render-only change. Stored intakes that were deleted by an operator using the new button stay deleted (storage.js write already happened) — this rollback does NOT restore them; only the UI control disappears.
       </div>
+
+      <h4>APP-E15 · Original upload date preserved across re-saves (was "Created" — actually the last-save date)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding 2026-05-16 PM: the "Created" date shown on the Dashboard Recent intakes list and the Reuse-modal dropdown was misleading — it was actually being <em>rewritten on every save</em> (<code>intake.js</code>: <code>json.metadata.createdAt = AppLocale.localStampCompact()</code> runs inside <code>buildJson</code> every time). So a dataset uploaded weeks ago, then re-used and re-saved today, looked like it was created today. Operator can't tell whether the underlying data is fresh or stale → risk of running analyses on weeks-old SAP exports without realising.</li>
+        <li><b>What changed.</b> Two distinct fields now: <code>metadata.uploadedAt</code> = the FIRST-save timestamp, <em>preserved</em> across re-saves of the same dataset. <code>metadata.createdAt</code> stays as the rewrite-on-every-save field (acts as "last analysis"). The pair tells the operator both "when this dataset entered the system" AND "when it was last analysed."</li>
+        <li><b>Where the operator sees both dates.</b> The Dashboard Recent intakes table column header is now <em>"Uploaded · Last analysis"</em>; the cell stacks the upload date (top, primary colour) with the last-analysis date (below, dimmer). If both fall on the same day, only one line shows. The Reuse modal's source-picker dropdown now reads <code>name · scope · uploaded YYYY-MM-DD HH:MM · last analysis YYYY-MM-DD HH:MM</code> (also collapses to one date when both match).</li>
+        <li><b>How <code>uploadedAt</code> flows through the system.</b> Set once by <code>buildJson</code> on first save (<code>state.uploadedAt || now</code>). Captured into <code>state.uploadedAt</code> in <code>hydrateFromSavedIntake</code> (Reuse flow) and the <code>uploadJsonInput</code> handler (Upload-JSON flow), so subsequent re-saves carry it forward. The <code>intakes.index</code> entry now stores both <code>uploadedAt</code> and <code>createdAt</code> so the Dashboard / Reuse modal can read them without loading the full intake JSON.</li>
+        <li><b>Legacy intakes (pre-APP-E15) have no <code>uploadedAt</code> field.</b> Display falls back to <code>createdAt</code> with an "(approx)" hint — we can't honestly distinguish for them. Once a legacy intake is re-saved under v2.1.3-dev or later, its <code>uploadedAt</code> gets populated from its prior <code>createdAt</code> and the field is correct going forward.</li>
+        <li>No SCHEMA_VERSION bump (additive optional field — older readers ignore it). No analytical change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/canonical-schema.js</code> (new <code>metadata.uploadedAt</code> in <code>emptyJson()</code>), <code>intake/intake.js</code> (<code>buildJson</code> preserves <code>state.uploadedAt</code>; <code>btnSaveLocal</code> writes both dates to <code>intakes.index</code>; <code>hydrateFromSavedIntake</code> + <code>uploadJsonInput</code> handler capture upload date into state; Reuse-modal dropdown shows both dates), <code>index.html</code> (column header rename; stacked-date cell template; new <code>.ts-cell</code> / <code>.ts-pri</code> / <code>.ts-sec</code> / <code>.ts-note</code> CSS rules), <code>record-of-change.html</code> (this APP-E15 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore from <code>_rollback/APP-E15-pre/</code> (4 files: canonical-schema.js, intake.js, index.html, record-of-change.html). Stage C — <code>git revert</code> the APP-E15 commit. <b>The rollback boundary is clean</b>: the new <code>uploadedAt</code> field is additive; pre-rollback JSONs still parse identically; post-rollback the field is just ignored. Already-saved intakes that gained an <code>uploadedAt</code> via APP-E15 keep it in their stored JSON — harmless extra field.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->

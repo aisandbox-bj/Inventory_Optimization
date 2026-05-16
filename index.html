@@ -224,6 +224,14 @@
   transition:color .15s;
 }
 .recent td .delete:hover{ color:var(--status-crit); }
+
+/* APP-E15 — stacked-timestamp cell: upload date primary (top), last-analysis
+   date secondary (smaller, dimmer, below). Legacy entries show one date
+   with an "(approx)" note since pre-APP-E15 saves couldn't distinguish. */
+.recent td.ts-cell{ line-height:1.35; color:var(--text-muted); }
+.recent td .ts-pri{ color:var(--text-sec); font-size:11.5px; }
+.recent td .ts-sec{ color:var(--text-muted); font-size:10.5px; }
+.recent td .ts-note{ color:var(--text-disabled); font-size:10px; font-style:italic; margin-left:4px; }
 .recent td .open{
   font-family:var(--font-mono);
   font-size:10.5px;
@@ -370,7 +378,7 @@
     <h3>Recent intakes</h3>
     <table id="recentTable">
       <thead>
-        <tr><th>Name</th><th>Scope</th><th>Created</th><th></th></tr>
+        <tr><th>Name</th><th>Scope</th><th>Uploaded · Last analysis</th><th></th></tr>
       </thead>
       <tbody id="recentBody"></tbody>
     </table>
@@ -416,17 +424,32 @@
     document.getElementById('recentTable').classList.add('hidden');
     empty.classList.remove('hidden');
   } else {
-    body.innerHTML = idx.slice(0, 12).map(e => `
+    body.innerHTML = idx.slice(0, 12).map(e => {
+      // APP-E15 — show BOTH dates so the operator can tell whether a re-used
+      // dataset is stale. Pre-APP-E15 index entries only have createdAt; in
+      // that case we show it once with an "(approx)" hint since we can't
+      // distinguish upload-date from last-analysis-date for legacy intakes.
+      const upRaw = e.uploadedAt || e.createdAt || '';
+      const laRaw = e.createdAt || '';
+      const up = escapeHtml(upRaw.replace('T',' ').slice(0,16));
+      const la = escapeHtml(laRaw.replace('T',' ').slice(0,16));
+      const sameDay = upRaw.slice(0,10) === laRaw.slice(0,10);
+      const dateCell = !e.uploadedAt
+        ? `<span class="ts-pri">${la}</span> <span class="ts-note">(approx)</span>`
+        : (sameDay
+            ? `<span class="ts-pri">${up}</span>`
+            : `<span class="ts-pri" title="Original upload">${up}</span><br><span class="ts-sec" title="Last analysis run">${la}</span>`);
+      return `
       <tr>
         <td>${escapeHtml(e.name)}</td>
         <td class="mode">${escapeHtml(e.mode || '—')}</td>
-        <td class="mono" style="color:var(--text-muted);">${escapeHtml(e.createdAt.replace('T',' ').slice(0,16))}</td>
+        <td class="mono ts-cell">${dateCell}</td>
         <td>
           <a class="open" href="#" data-name="${escapeAttr(e.name)}">Load →</a>
           <a class="delete" href="#" data-name="${escapeAttr(e.name)}" title="Delete this saved intake (cannot be undone)">Delete</a>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
 
     body.querySelectorAll('a.open').forEach(a => {
       a.addEventListener('click', async (ev) => {

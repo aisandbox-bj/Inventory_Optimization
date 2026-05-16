@@ -1500,9 +1500,17 @@
 
   function buildJson(){
     const json = CanonicalSchema.emptyJson();
+    const now = AppLocale.localStampCompact();
     json.metadata.assessmentName = state.name || $('#assessmentName').value || '';
     json.metadata.createdBy      = $('#createdBy').value || '';
-    json.metadata.createdAt      = AppLocale.localStampCompact();
+    // APP-E15 — createdAt is REWRITTEN every save (acts as "last analysis").
+    // uploadedAt is the FIRST-SAVE timestamp; preserved when an intake is
+    // re-used from storage or a JSON upload (state.uploadedAt is set in
+    // hydrateFromSavedIntake / the upload-JSON handler). For genuinely
+    // fresh intakes, state.uploadedAt is null and we stamp `now` so the
+    // field is always present going forward.
+    json.metadata.createdAt      = now;
+    json.metadata.uploadedAt     = state.uploadedAt || now;
     json.metadata.assessmentType = state.assessmentType;
     json.scope                   = JSON.parse(JSON.stringify(state.scope));
     // For userList type: scope.manual.materials is already maintained by
@@ -1594,7 +1602,15 @@
       // also update an "intakes" index list
       const idx = (await AppStorage.get('intakes.index')) || [];
       const idxClean = idx.filter(e => e.name !== name);
-      idxClean.unshift({ name, createdAt: json.metadata.createdAt, mode: json.scope.mode });
+      // APP-E15 — index entry now carries both uploadedAt and createdAt so the
+      // Dashboard and Reuse modal can show "Uploaded · Last analysis" without
+      // having to load the full intake JSON to read its metadata.
+      idxClean.unshift({
+        name,
+        uploadedAt: json.metadata.uploadedAt,
+        createdAt:  json.metadata.createdAt,
+        mode:       json.scope.mode
+      });
       await AppStorage.set('intakes.index', idxClean.slice(0, 50));
       // also save as "current" for analysis engine handoff
       await AppStorage.set('intake.current', json);
@@ -1626,6 +1642,10 @@
         state.scope = json.scope;
         state.paramsRun = { ...json.parameters };
         state.name = json.metadata.assessmentName || '';
+        // APP-E15 — preserve the original upload date through this load so
+        // the next save keeps it. Pre-APP-E15 JSONs have no uploadedAt; fall
+        // back to createdAt as the closest honest proxy.
+        state.uploadedAt = json.metadata.uploadedAt || json.metadata.createdAt || null;
         // Stuff data into parsed slots so downstream UI works
         for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
           if (json.data[s] && json.data[s].length) {
@@ -1780,10 +1800,24 @@
           <span class="step-lab">Step 1</span>
           <h4>Pick the source intake to copy data from</h4>
           <select id="reuseModalSelect" class="reuse-select">
-            ${idx.map(e => `
+            ${idx.map(e => {
+              // APP-E15 — show BOTH dates so the operator can tell at a glance
+              // whether the underlying dataset is fresh or stale. Pre-APP-E15
+              // index entries have only createdAt; show it as the upload date
+              // with a "(approx)" note since we can't distinguish for them.
+              const upRaw = e.uploadedAt || e.createdAt || '';
+              const laRaw = e.createdAt || '';
+              const up = escapeHtml(upRaw.replace('T', ' ').slice(0, 16));
+              const la = escapeHtml(laRaw.replace('T', ' ').slice(0, 16));
+              const sameDay = upRaw.slice(0, 10) === laRaw.slice(0, 10);
+              const dates = e.uploadedAt
+                ? (sameDay ? `uploaded ${up}` : `uploaded ${up} · last analysis ${la}`)
+                : `${la} (approx — pre-APP-E15)`;
+              return `
               <option value="${escapeAttr(e.name)}" ${e.name === selectedName ? 'selected' : ''}>
-                ${escapeHtml(e.name)} · ${escapeHtml(e.mode || '—')} · ${escapeHtml((e.createdAt || '').replace('T', ' ').slice(0, 16))}
-              </option>`).join('')}
+                ${escapeHtml(e.name)} · ${escapeHtml(e.mode || '—')} · ${dates}
+              </option>`;
+            }).join('')}
           </select>
         </div>
 
@@ -1869,6 +1903,11 @@
   async function hydrateFromSavedIntake(json, sourceName, selectedSources){
     const sources = Array.isArray(selectedSources) ? selectedSources : REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES);
     const reusedSources = [];
+    // APP-E15 — preserve the ORIGINAL upload date through this reuse so the
+    // next save keeps it. For pre-APP-E15 intakes that have no uploadedAt
+    // field, fall back to createdAt (their last-save date is the closest
+    // honest proxy we have for "when this dataset entered the system").
+    state.uploadedAt = (json.metadata && (json.metadata.uploadedAt || json.metadata.createdAt)) || null;
     for (const s of sources) {
       const arr = json.data && json.data[s];
       if (Array.isArray(arr) && arr.length > 0) {
