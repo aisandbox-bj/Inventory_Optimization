@@ -312,7 +312,7 @@
         svg.appendChild(line(MARGIN.left + innerW, y, MARGIN.left + innerW + 4, y, { stroke: PAL.sohLine, width: 1, opacity: 0.7 }));
         svg.appendChild(text(MARGIN.left + innerW + 8, y + 3, fmtNum(v), { anchor: 'start', fill: PAL.sohLine, size: 9, opacity: 0.85 }));
       }
-      svg.appendChild(text(W - 14, MARGIN.top + innerH/2, 'SOH (UNITS)', { anchor: 'middle', fill: PAL.sohLine, size: 9, rotate: 90, tracking: 1.3 }));
+      svg.appendChild(text(W - 14, MARGIN.top + innerH/2, 'STOCK ON HAND', { anchor: 'middle', fill: PAL.sohLine, size: 9, rotate: 90, tracking: 1.3 }));
     }
 
     // (d) Last consumption marker — vertical orange dashed line
@@ -394,7 +394,7 @@
     if (legHasSoh) {
       legX += 50;
       svg.appendChild(line(legX, legY, legX + 18, legY, { stroke: PAL.sohLine, width: 1.8 }));
-      svg.appendChild(text(legX + 24, legY + 3, 'SOH', { fill: PAL.text, size: 9, tracking: 1 }));
+      svg.appendChild(text(legX + 24, legY + 3, 'STOCK', { fill: PAL.text, size: 9, tracking: 1 }));
     }
     if (legHasStockout) {
       legX += 60;

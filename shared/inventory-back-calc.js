@@ -7,15 +7,32 @@
      - Calibre Trace D14 (Progression-tab inventory overlay — planned)
    The math lives here once; both tools call it.
 
-   Movement-type semantics (effect on SOH walking FORWARD in time):
-     +109   GR to unrestricted stock           → SOH += qty   (walking back: SOH -= qty)
-     -261   Goods issue (consumption to order) → SOH -= qty   (walking back: SOH += qty)
-     -201   Goods issue (consumption to cost center) → same as 261
-     +101   GR to misc stock                   → SOH += qty   (walking back: SOH -= qty)
-     -102   Reversal of 101                    → SOH -= qty   (walking back: SOH += qty)
-     +262   Reversal of 261 (return to stock)  → SOH += qty   (walking back: SOH -= qty)
-     +202   Reversal of 201                    → SOH += qty   (walking back: SOH -= qty)
-     other  No SOH effect (e.g. inventory adjustments)
+   Movement-type semantics — SITE STOCK only (matches Inventory Master.totQtyOh):
+
+     +109   Goods receipt onto SITE (this is what arrives at the site warehouse
+            and becomes available for consumption)              → SOH += qty
+     -261   Goods issue · consumption to a work order           → SOH -= qty
+     -201   Goods issue · consumption to a cost center          → SOH -= qty
+     +262   Reversal of 261 (return into site stock)            → SOH += qty
+     +202   Reversal of 201 (return into site stock)            → SOH += qty
+
+     Movement types DELIBERATELY EXCLUDED — they don't touch the site's
+     stock-on-hand value tracked on Inventory Master:
+
+     101 / 102  Goods receipt / reversal at the 3PL holding location. The
+                3PL is offsite — material that arrives here has NOT yet
+                transferred onto site, so site SOH is unchanged. (Transfer
+                from 3PL onto site is the 109 above.)
+     other      Inventory adjustments, cycle counts, transfer postings
+                between non-site storage locations, etc. — none change the
+                site's unrestricted-use stock balance.
+
+   When walking the back-calc BACKWARD in time, the sign flips: subtract a
+   forward-positive delta to recover the prior day's SOH.
+
+   Operator-specific transfer types (e.g. plant→plant 411/412, storage-
+   location moves 311/312 that land in or out of site) can be added to
+   MVT_SIGN below if a particular site uses them as supply paths onto site.
 
    Pure module — no DOM, no localStorage, no side effects. Deterministic.
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -30,13 +47,13 @@
      locations, etc. — we deliberately exclude these because they don't
      represent real demand or supply). */
   const MVT_SIGN = Object.freeze({
-    '109':  +1,
-    '101':  +1,
-    '102':  -1,    // reversal of 101
-    '261':  -1,
-    '262':  +1,    // reversal / return of 261
-    '201':  -1,
-    '202':  +1,    // reversal / return of 201
+    '109':  +1,    // receipt onto SITE (replenishment that lands at site warehouse)
+    '261':  -1,    // issue to work order (consumes site stock)
+    '201':  -1,    // issue to cost center (consumes site stock)
+    '262':  +1,    // reversal of 261 — material returns into site stock
+    '202':  +1     // reversal of 201 — material returns into site stock
+    // 101 / 102 are 3PL events (not site) and are intentionally excluded.
+    // Other site-stock transfer types can be appended per operator setup.
   });
 
   /* ─── Date helpers ──────────────────────────────────────────────────────── */

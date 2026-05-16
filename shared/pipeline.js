@@ -677,6 +677,15 @@
       masterIdx.set(String(r.material || '').trim(), r);
     }
 
+    // APP-E1 (v2.1.3-dev FIX-1) — Pre-group the FULL MB51 by material for the
+    // stock-on-hand back-calc. Bucket-filtered transactions (`bucket.transactions`)
+    // are restricted to consumption-related movement types {261,201,262,202} —
+    // they DO NOT include goods receipts (109/101) or their reversals (102).
+    // The back-calc needs supply events too; without receipts, walking backward
+    // through only-issues makes stock appear to monotonically rise — the
+    // "infinite supply" bug. Pre-grouping here keeps it O(n) instead of per-loop.
+    const mb51FullByMat = groupBy(json.data.mb51 || [], r => String(r.material || '').trim());
+
     // Inv-Adj candidates (always detected) + user-confirmed exclusion set
     const invAdjAnalysis = detectInvAdjCandidates(json.data.mb51 || [], params);
     const confirmedInvAdjDates = Array.isArray(params.invAdjConfirmedDates) ? params.invAdjConfirmedDates : [];
@@ -819,10 +828,16 @@
           });
           if (win) {
             socBackCalcAnchor = win.anchor;
+            // FIX-1 — pass the FULL per-material MB51 slice (includes 109
+            // site receipts), not `tx` which is bucket-filtered to consumption
+            // movement types only. Without 109s the back-calc only saw issues
+            // and SOH appeared to monotonically rise as we walked back —
+            // "infinite supply" artefact.
+            const fullMb51 = mb51FullByMat.get(q.material) || [];
             const out = InventoryBackCalc.backCalcSOH({
               material:     q.material,
               currentSOH:   stock,
-              mb51Rows:     tx,
+              mb51Rows:     fullMb51,
               windowStart:  win.windowStart,
               windowEnd:    win.windowEnd
             });

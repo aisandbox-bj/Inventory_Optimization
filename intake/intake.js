@@ -1217,7 +1217,7 @@
       { key:'wrSoftMonths',        label:'WR soft months',  type:'number', step:1 },
       { key:'wrHardMonths',        label:'WR hard months',  type:'number', step:1 },
       { key:'wrMrpTypes',          label:'WR MRP types',    type:'list',   placeholder:'PD, ZE' },
-      { key:'socBackCalcMonths',   label:'SOH back-calc months', type:'number', step:1 }
+      { key:'socBackCalcMonths',   label:'Stock history window (months)', type:'number', step:1 }
     ];
 
     const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};

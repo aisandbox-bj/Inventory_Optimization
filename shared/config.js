@@ -67,8 +67,8 @@ RECOMMENDATION (algorithmic)
 The attached chart shows: orange step line = cumulative actual consumption;
 cyan dashed = P1 trend; green dashed = P2 trend; amber dots = HCE work orders;
 purple dashed verticals = operator-confirmed Inv-Adj exclusion dates;
-violet line = SOH back-calc (on the RIGHT y-axis, units in stock);
-red wash bands = stockout windows (SOH ≤ 0);
+violet line = stock on hand reconstructed from MB51 movements (RIGHT y-axis, units in stock — note this is SITE stock only, 3PL receipts are excluded);
+red wash bands = stockout windows (stock at or below zero);
 orange dashed vertical = "last consumption" marker (last date with a 261/201 issue).
 
 WATCH FOR — name the specific signal if you see one:

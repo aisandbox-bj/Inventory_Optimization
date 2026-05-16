@@ -637,7 +637,7 @@
           const causeCell = cause ? `<div class="stat-cell"><span class="lab">Drop cause</span><div class="v" style="color:${cause==='STOCKOUT_DRIVEN' ? 'var(--accent-crit,#ff5a5a)' : 'var(--accent-warn,#ff9e4c)'}">${cause === 'STOCKOUT_DRIVEN' ? '⚠ Stockout-driven' : 'Genuine demand drop'}</div></div>` : '';
           return `
             <div class="stat-cell"><span class="lab">Last consumption</span><div class="v">${lastCons}</div></div>
-            <div class="stat-cell"><span class="lab">Stockouts (back-calc)</span><div class="v">${swDisp}</div></div>
+            <div class="stat-cell"><span class="lab">Stockouts in window</span><div class="v">${swDisp}</div></div>
             ${causeCell}
           `;
         })()}
