@@ -258,6 +258,40 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.2-dev ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.2</span>
+        <span class="date">2026-05-15</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-E6 · Intake data-alignment acknowledgement gate</h4>
+      <ul>
+        <li><b>Why this exists.</b> A prior assessment was mapped to total Inventory Master (combined across plants) while only plant-1130 consumption was analysed. The downstream SOH-vs-consumption math was silently wrong. Root cause was a human alignment failure between datasets, not a parser limitation — so the fix is a behavioural gate, not a data-flow change.</li>
+        <li><b>What the operator sees.</b> Navigating to <code>/intake/intake.html</code> for a new assessment, a modal fires immediately on page load. Step 0 (Assessment type), Step 1 (Upload), the metadata header, and the Reuse panel are dimmed and inert behind the modal until the operator clicks <em>I confirm the uploads are aligned</em>. Backdrop click and <code>✕</code> do <b>not</b> acknowledge — the gate is binary by design (no reflexive dismissal).</li>
+        <li><b>What's confirmed.</b> Four dimensions in a static checklist, no per-row gating — the operator confirms once at the bottom:
+          <ul>
+            <li><b>Plant / Location / Warehouse</b> — every file (MB51, IW39, Inventory Master, Material→Vendor) filtered to the same plant codes</li>
+            <li><b>Date range / period coverage</b> — MB51 movement window aligns with IW39 work-order window</li>
+            <li><b>Material universe</b> — Inventory Master is a superset of MB51 materials</li>
+            <li><b>Fleet / Equipment scope</b> — Fleet Master covers every IW39 unit</li>
+          </ul>
+        </li>
+        <li><b>Persistence — per assessment.</b> Acknowledgement is stored in the intake's in-memory <code>state.alignmentAck</code> as <code>{ acknowledgedAt, dimensions }</code>. Resets on Dashboard → <em>Clear session data</em>. New page-load with no carry-over state → modal re-fires. <b>No <code>sessionStorage</code></b>, <b>no <code>localStorage</code></b>, <b>no canonical-JSON field</b> — the ack does not cross the deliverable boundary (consistent with the durable LLM-boundary principle that behavioural-gate metadata stays out of the math contract).</li>
+        <li><b>Schema unchanged.</b> <code>SCHEMA_VERSION</code> stays at <code>1.0.0</code>. No parser, pipeline, storage, or analysis-page change. The change is purely an intake-page UX gate.</li>
+        <li><b>Scope of this fix.</b> Implements only the <em>acknowledgement reminder</em> aspect of D16 (plant-scope discipline). Plant-aware parsers, plant filtering in the pipeline, per-file plant breakdown, cross-file discrepancy warnings, and the persistent scope chip — all deferred until the broader Phase-4 suite integration. Reasoned scope-reduction per operator direction this session.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>intake/intake.html</code> (+1 modal block above the existing Reuse modal) · <code>intake/intake.js</code> (+1 state field <code>alignmentAck</code>, +1 setup function <code>setupAlignmentGate</code>, wired into <code>DOMContentLoaded</code>) · <code>intake/intake.css</code> (+1 self-contained <code>.align-*</code> block, +1 <code>body.intake-gated</code> dim layer) · <code>.gitignore</code> (+<code>_rollback/</code> entry) · <code>record-of-change.html</code> (this entry).
+      </div>
+
+      <div class="commit">
+        <b>Rollback:</b> Stage A (working copy only) — restore from <code>App/v2/_rollback/APP-E6-pre/</code> created before any edit. Stage C (committed + pushed) — <code>git revert</code> the APP-E6 commit on a clone-to-tmp checkout, then push the revert. Stage D (tagged) — <code>git checkout v2.1.1</code> per the standard rollback panel above. <b>The rollback boundary is clean</b> because <code>state.alignmentAck</code> is transient and never written to canonical JSON — saved intakes from before, during, and after the gate are all behaviourally identical at the analysis-pipeline boundary.
+      </div>
+    </article>
+
     <!-- ───────── v2.1.1 ───────── -->
     <article class="roc-entry release">
       <div class="head">

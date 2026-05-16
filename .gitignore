@@ -17,3 +17,6 @@ desktop.ini
 node_modules/
 dist/
 build/
+
+# Local rollback snapshots (per-change pre-edit backups; never pushed)
+_rollback/

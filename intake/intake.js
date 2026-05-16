@@ -91,7 +91,8 @@
     runDate:  (typeof AppLocale !== 'undefined' ? AppLocale.localDateISO() : new Date().toISOString().slice(0, 10)),
     name:     '',
     assessmentType: null,                            // 'unitFloc' | 'userList' | 'paramSearch'
-    psFilters: []                                    // Parameter-Search filter cards
+    psFilters: [],                                   // Parameter-Search filter cards
+    alignmentAck: null                               // APP-E6 · { acknowledgedAt, dimensions } once operator confirms scope alignment
   };
 
   /* ─── Parameter-Search dimension catalogue ──────────────────────────────── */
@@ -1995,8 +1996,42 @@
     $('#assessmentName').select();
   }
 
+  /* ─── APP-E6 · Alignment acknowledgement gate ───────────────────────────
+     Per-assessment gate. On page load, if state.alignmentAck is null, dim
+     Step 0 / Step 1 / Reuse panel + metadata header via body.intake-gated
+     and show the modal. Only the "I confirm…" button clears it. Backdrop +
+     ✕ are intentionally non-acknowledging — the gate is binary.            */
+  function setupAlignmentGate(){
+    const modal = $('#alignModal');
+    const btn   = $('#alignConfirm');
+    if (!modal || !btn) return;
+
+    if (state.alignmentAck) return;  // already acknowledged for this assessment
+
+    document.body.classList.add('intake-gated');
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+
+    btn.addEventListener('click', () => {
+      const nowIso = (typeof AppLocale !== 'undefined' && AppLocale.localDateTimeISO)
+        ? AppLocale.localDateTimeISO()
+        : new Date().toISOString();
+      state.alignmentAck = {
+        acknowledgedAt: nowIso,
+        dimensions: ['plant', 'dateRange', 'materials', 'fleet']
+      };
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('intake-gated');
+      // Focus first interactive control after gate clears
+      const nameInput = $('#assessmentName');
+      if (nameInput) nameInput.focus();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     await loadDefaults();
+    setupAlignmentGate();   // APP-E6 · fires before anything else interactive
     setupAssessmentType();
     setupDropZones();
     setupScopeTabs();

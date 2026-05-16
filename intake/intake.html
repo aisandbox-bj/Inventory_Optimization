@@ -73,6 +73,46 @@
       <div id="reuseStatus" class="reuse-status" style="display:none;"></div>
     </section>
 
+    <!-- ─── ALIGNMENT ACKNOWLEDGEMENT MODAL (APP-E6 · 2026-05-15) ───
+         Fires once per new assessment, BEFORE any file upload, to force the
+         operator to confirm their SAP exports describe the same operational
+         scope. Backdrop / ✕ do NOT acknowledge — only the primary button does. -->
+    <div id="alignModal" class="align-modal hidden" aria-hidden="true" role="dialog" aria-labelledby="alignModalTitle">
+      <div class="align-backdrop"></div>
+      <div class="align-dialog">
+        <div class="align-head">
+          <div class="align-eyebrow">Data alignment check</div>
+          <h3 id="alignModalTitle">Confirm your uploads describe the same scope.</h3>
+        </div>
+        <div class="align-body">
+          <p class="align-lead">
+            Before uploading SAP exports for this assessment, confirm that every file you're about to drop in describes the <b>same operational scope</b>. Mismatches between files cause downstream math (consumption rates, stock-on-hand, traffic-light recommendations) to be silently wrong.
+          </p>
+          <ul class="align-checklist">
+            <li>
+              <div class="align-dim">Plant / Location / Warehouse</div>
+              <div class="align-desc">Every file (MB51, IW39, Inventory Master, Material→Vendor) is filtered to the <i>same</i> set of plant codes. Total-inventory + plant-only-consumption is the classic mismatch.</div>
+            </li>
+            <li>
+              <div class="align-dim">Date range / period coverage</div>
+              <div class="align-desc">MB51 movement window and IW39 work-order window cover the same period. Mismatched windows distort rates and WO counts.</div>
+            </li>
+            <li>
+              <div class="align-dim">Material universe</div>
+              <div class="align-desc">Inventory Master is a <i>superset</i> of every material that appears in MB51. Missing master records cause silent drops at parse time.</div>
+            </li>
+            <li>
+              <div class="align-dim">Fleet / Equipment scope</div>
+              <div class="align-desc">Fleet Master lists every unit that appears in IW39 for this assessment. Orphan units break the fleet-scope filter downstream.</div>
+            </li>
+          </ul>
+        </div>
+        <div class="align-foot">
+          <button id="alignConfirm" class="primary" type="button">I confirm the uploads are aligned</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── REUSE COMMON DATA MODAL ─── -->
     <div id="reuseModal" class="mass-modal hidden" aria-hidden="true">
       <div class="mass-backdrop"></div>

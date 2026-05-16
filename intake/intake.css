@@ -957,3 +957,131 @@ input[aria-invalid="true"]{
 .reuse-notes b{ color:var(--text-pri); }
 .reuse-notes ul{ margin:6px 0 0 20px; padding:0; }
 .reuse-notes li{ padding:2px 0; }
+
+/* ─── Alignment acknowledgement modal (APP-E6 · 2026-05-15) ─────────────── */
+/* Self-contained styles (does NOT depend on .mass-modal from analysis.css,
+   which isn't loaded on the intake page). Lives on top of the body-level
+   .intake-gated dim layer. */
+.align-modal{
+  position:fixed;
+  inset:0;
+  z-index:9000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+}
+.align-modal.hidden{ display:none; }
+.align-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.72);
+  backdrop-filter:blur(2px);
+}
+.align-dialog{
+  position:relative;
+  width:min(680px, 96vw);
+  max-height:92vh;
+  overflow-y:auto;
+  background:var(--bg-elevated);
+  border:1px solid var(--status-warn);
+  box-shadow:0 24px 60px rgba(0,0,0,0.6);
+}
+.align-head{
+  padding:22px 28px 14px;
+  border-bottom:1px solid var(--border-soft);
+  background:rgba(231,154,42,0.05);
+}
+.align-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1.8px;
+  color:var(--status-warn);
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+.align-head h3{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:17px;
+  letter-spacing:1px;
+  color:var(--text-pri);
+  margin:0;
+  text-transform:uppercase;
+  line-height:1.35;
+}
+.align-body{
+  padding:18px 28px;
+}
+.align-lead{
+  font-family:var(--font-body);
+  font-size:13px;
+  line-height:1.6;
+  color:var(--text-sec);
+  margin:0 0 16px;
+}
+.align-lead b{ color:var(--text-pri); }
+.align-checklist{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.align-checklist li{
+  padding:12px 14px;
+  background:rgba(31,206,216,0.04);
+  border-left:3px solid var(--accent);
+}
+.align-dim{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:12px;
+  letter-spacing:1px;
+  color:var(--text-pri);
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+.align-desc{
+  font-family:var(--font-body);
+  font-size:12.5px;
+  line-height:1.55;
+  color:var(--text-sec);
+}
+.align-desc i{ color:var(--text-pri); font-style:normal; font-weight:600; }
+.align-foot{
+  padding:14px 28px 22px;
+  border-top:1px solid var(--border-soft);
+  display:flex;
+  justify-content:flex-end;
+}
+.align-foot button.primary{
+  font-family:var(--font-mono);
+  font-size:12px;
+  letter-spacing:.8px;
+  padding:11px 22px;
+  background:var(--accent);
+  color:#0a0e14;
+  border:1px solid var(--accent);
+  cursor:pointer;
+  text-transform:uppercase;
+  font-weight:700;
+  transition:background .15s, color .15s;
+}
+.align-foot button.primary:hover{
+  background:transparent;
+  color:var(--accent);
+}
+
+/* Body-level gate: dims intake page surfaces while alignment modal is open.
+   Removed the moment the operator clicks "I confirm the uploads are aligned". */
+body.intake-gated #step0,
+body.intake-gated #step1,
+body.intake-gated #reusePanel,
+body.intake-gated .intake-grid > section.panel:first-of-type{
+  opacity:.45;
+  pointer-events:none;
+  filter:saturate(.55);
+}
+body.intake-gated #reuseOpen{ pointer-events:none; opacity:.45; }
