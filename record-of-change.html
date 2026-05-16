@@ -666,6 +666,38 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>analysis/analysis.js</code> from <code>_rollback/APP-E19-pre/</code>. Stage C — <code>git revert</code> the APP-E19 commit. <b>Rollback boundary is clean</b>: cell order only.
       </div>
+
+      <h4>APP-T-01b · Multi-plant infrastructure — phase 1, plant detection + per-file breakdown chip in Intake</h4>
+      <ul>
+        <li><b>Why it shipped.</b> APP-T-01 made <code>plant</code> a canonical field on inventoryMaster rows. APP-T-01b is the bigger multi-plant story: per-file plant detection, cross-file plant consistency, Settings opt-in for multi-plant analysis, scope-picker modal, plant-conditional <code>openPO</code> column selection. <strong>This is phase 1 of that work — read-only display only.</strong> Operator can now see which plants are present in each file before running analysis; nothing else changes yet.</li>
+        <li><b>Changes:</b>
+          <ul>
+            <li><code>shared/parsers.js</code> — added <code>plant</code> alias (header <code>Plant</code>) and <code>'string'</code> coercion type to MB51. inventoryMaster already carries plant from APP-T-01. Other sources (IW39, fleetMaster, materialVendor, leadTimes) don't carry plant as a direct column per the field-mapping audit; their plant context is derived from joins (e.g. IW39's <code>Functional Location</code> prefix), which is out of scope here.</li>
+            <li><code>intake/intake.js</code> — new <code>computePlantBreakdown(rows)</code> helper produces a per-file chip showing the plant distribution (e.g. <code>Plant: 1130 ✕ 47,956</code>, or <code>Plants: 1130 ✕ 47,124 · 1120 ✕ 832</code> with the existing <code>.drop-stat.warn</code> amber tint when more than one plant is present). The chip is appended to <code>computeSourceStats</code> output for <code>mb51</code> and <code>inventoryMaster</code>; sources without plant data don't show the chip at all.</li>
+            <li>Re-uses the existing <code>renderDropStats</code> → <code>computeSourceStats</code> → <code>.drop-stat</code> rendering chain. No new CSS, no new DOM structure, no new render entry-point.</li>
+          </ul>
+        </li>
+        <li><b>No analytical change.</b> Plant is captured on MB51 rows but pipeline.js still ignores it — consumption, rates, runway, Min/Max recommendations all unchanged. The chip is purely informational in this chunk.</li>
+        <li><b>What did NOT ship (queued for follow-up chunks):</b>
+          <ul>
+            <li>Plant on IW39 / fleetMaster / other sources (would need derivation from Functional Location prefix or similar).</li>
+            <li>Cross-file plant consistency check (will wire into existing <code>computeMismatch()</code> in a follow-up).</li>
+            <li>Settings toggle for multi-plant analysis (default OFF per D25).</li>
+            <li>Scope-picker modal after parse when files contain multiple plants.</li>
+            <li>Plant-conditional <code>openPO</code> column selection (today's APP-T-01 first-match-wins fallback stays in place).</li>
+            <li>Persistent scope chip and <code>assessment.plants</code> canonical-JSON field — both still deferred until the D7 schema bump.</li>
+          </ul>
+        </li>
+        <li>No JS-logic change, no schema change, no canonical-JSON shape change beyond the new optional <code>plant</code> field on MB51 rows. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. No SCHEMA_VERSION bump.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/parsers.js</code> (MB51 alias + type — single field), <code>intake/intake.js</code> (<code>computePlantBreakdown()</code> helper + chip appended for mb51 and inventoryMaster), <code>record-of-change.html</code> (this APP-T-01b entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>shared/parsers.js</code> and <code>intake/intake.js</code> from <code>_rollback/APP-T-01b-pre/</code>. Stage C — <code>git revert</code> the APP-T-01b commit. <b>Rollback boundary is clean</b>: one new alias entry + one new display helper. No analytical effect; rolling back simply hides the chip and stops capturing plant on MB51 rows.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->
