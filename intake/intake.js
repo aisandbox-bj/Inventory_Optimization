@@ -247,16 +247,39 @@
   }
 
   /* ─── Per-drop key-parameter stats ──────────────────────────────────────── */
+  /* APP-T-01b — per-file plant breakdown chip. Returns null if no rows
+     carry a non-blank plant value (parser-side alias didn't match, or the
+     file simply doesn't carry plant). Single plant → neutral chip; >1 plant
+     → 'warn' tinted chip so it surfaces before the operator runs analysis.
+     This is read-only display in this chunk — no scope filtering yet. */
+  function computePlantBreakdown(rows){
+    if (!rows || !rows.length) return null;
+    const counts = new Map();
+    for (const r of rows) {
+      const p = String(r.plant || '').trim();
+      if (!p) continue;
+      counts.set(p, (counts.get(p) || 0) + 1);
+    }
+    if (counts.size === 0) return null;
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const label  = sorted.length === 1 ? 'Plant' : 'Plants';
+    const v      = sorted.map(([p, n]) => `${p} ✕ ${n.toLocaleString()}`).join(' · ');
+    const cls    = sorted.length > 1 ? 'warn' : '';
+    return { lab: label, v, cls };
+  }
+
   function computeSourceStats(source, rows){
     if (!rows || !rows.length) return [];
     const uniqOf = (key) => new Set(rows.map(r => String(r[key] || '').trim()).filter(Boolean)).size;
+    const plantChip = computePlantBreakdown(rows);
+    const append = (arr) => plantChip ? arr.concat([plantChip]) : arr;
     switch (source) {
       case 'mb51':
-        return [
+        return append([
           { lab:'Transactions', v:rows.length.toLocaleString() },
           { lab:'Materials',    v:uniqOf('material').toLocaleString() },
           { lab:'Orders',       v:uniqOf('order').toLocaleString() }
-        ];
+        ]);
       case 'iw39':
         return [
           { lab:'Work orders', v:rows.length.toLocaleString() },
@@ -268,11 +291,11 @@
           { lab:'Models', v:uniqOf('model').toLocaleString() }
         ];
       case 'inventoryMaster':
-        return [
+        return append([
           { lab:'Materials',     v:uniqOf('material').toLocaleString() },
           { lab:'MRP types',     v:uniqOf('mrpInd').toLocaleString() },
           { lab:'Inv. types',    v:uniqOf('inventoryType').toLocaleString() }
-        ];
+        ]);
       case 'userList':
         return [{ lab:'Materials', v:uniqOf('material').toLocaleString() }];
       case 'materialVendor':
