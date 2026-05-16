@@ -46,6 +46,9 @@ STATISTICS
   Inv-Adj dates excluded (operator-confirmed): {invAdjCount}
   Days since last issue:                  {daysSinceLastIssue}
   Issuing WO count (analysis window):     {woCount}
+  Last consumption date:                  {lastConsumptionDate}
+  Stockouts in back-calc window:          {stockoutSummary}
+  Drop cause (algorithmic):               {rateDropCause}
 
 CURRENT MRP STATE
   MRP type:        {mrpType}
@@ -63,19 +66,30 @@ RECOMMENDATION (algorithmic)
 
 The attached chart shows: orange step line = cumulative actual consumption;
 cyan dashed = P1 trend; green dashed = P2 trend; amber dots = HCE work orders;
-purple dashed verticals = operator-confirmed Inv-Adj exclusion dates.
+purple dashed verticals = operator-confirmed Inv-Adj exclusion dates;
+violet line = SOH back-calc (on the RIGHT y-axis, units in stock);
+red wash bands = stockout windows (SOH ≤ 0);
+orange dashed vertical = "last consumption" marker (last date with a 261/201 issue).
 
 WATCH FOR — name the specific signal if you see one:
+  • STOCKOUT-DRIVEN DROP — Drop cause is STOCKOUT_DRIVEN: P2 rate fell because
+    stock RAN OUT, not because demand softened. Look at the violet SOH line in
+    the run-up to the orange "last consumption" marker — if SOH crashed to zero
+    before consumption stopped, this is a REPLENISHMENT FAILURE, not a demand
+    drop. Do NOT recommend lowering Min/Max — the material still has demand;
+    the supply chain failed. Use signal "stockoutDriven".
   • NEGATIVE / FLOWING-BACK consumption — net ≤ 0 means returns exceed issues.
     Material is flowing back to stores. Min/Max recommendation may be moot —
     flag for planner review.
-  • STEEP DROP in P2 vs P1 (≥40% decrease) — possible obsolescence, fleet
-    retirement, or process change. Flag and ask the planner to verify the
-    material is still in use.
+  • STEEP DROP in P2 vs P1 (≥40% decrease) when Drop cause = GENUINE_DEMAND_DROP
+    — possible obsolescence, fleet retirement, or process change. Stock was
+    available throughout — consumption fell anyway. Flag and ask the planner to
+    verify the material is still in use.
   • SPIKE without HCE flag — a large step in the cumulative line with no amber
     dot. A single WO consumed a lot but didn't meet HCE thresholds.
   • LONG FLAT TAIL — consumption stopped recently, stock remains. Look at the
-    last 30–60 days of the orange line.
+    last 30–60 days of the orange line. Cross-check the violet SOH line: if
+    stock is healthy and consumption is flat, that's a genuine demand pause.
   • FEW EVENTS — woCount ≤ 2 means the rate is statistically unreliable.
   • PURPLE / Working Redundant — material with stock-runway beyond the
     configured threshold; algorithm already flagged this if the traffic light
@@ -95,7 +109,7 @@ verdict semantics:
   "review" — a planner needs to look at this manually
 
 signals is an array of zero or more from:
-  ["negativeNet","sharpDrop","sharpRise","spikeNoHce","flatTail","fewEvents","workingRedundant","seasonal","other"]
+  ["negativeNet","sharpDrop","sharpRise","stockoutDriven","spikeNoHce","flatTail","fewEvents","workingRedundant","seasonal","other"]
 
 suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|action", "newValue":<value>, "rationale":"<why>" }.`;
 
@@ -161,7 +175,9 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     'p1Rate', 'p1Flag', 'p2Rate', 'p2Flag', 'p2Months', 'rateChange', 'rateChangeFlag', 'adjP2', 'hceText',
     'invAdjCount', 'daysSinceLastIssue', 'woCount',
     'mrpType', 'stock', 'cmin', 'cmax', 'recMin', 'recMax', 'recMrpType', 'runway',
-    'trafficLight', 'action'
+    'trafficLight', 'action',
+    // APP-E1 (v2.1.3) — stockout-aware drop diagnostic tokens
+    'lastConsumptionDate', 'rateDropCause', 'stockoutSummary'
   ];
 
   /* ─── Parameter defaults (read with factory fallback) ───────────────────── */

@@ -1216,7 +1216,8 @@
       { key:'invAdjSigmaThreshold',label:'Inv Adj σ threshold', type:'number', step:0.5 },
       { key:'wrSoftMonths',        label:'WR soft months',  type:'number', step:1 },
       { key:'wrHardMonths',        label:'WR hard months',  type:'number', step:1 },
-      { key:'wrMrpTypes',          label:'WR MRP types',    type:'list',   placeholder:'PD, ZE' }
+      { key:'wrMrpTypes',          label:'WR MRP types',    type:'list',   placeholder:'PD, ZE' },
+      { key:'socBackCalcMonths',   label:'SOH back-calc months', type:'number', step:1 }
     ];
 
     const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};

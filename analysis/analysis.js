@@ -624,6 +624,23 @@
         <div class="stat-cell"><span class="lab">Stock on hand</span><div class="v">${mat.stock ?? '—'}</div></div>
         <div class="stat-cell"><span class="lab">Stock value (CAD)</span><div class="v">${AppLocale.fmtCAD(mat.totValueOh)}</div></div>
         <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
+        ${(() => {
+          // APP-E1 (v2.1.3) — surface the stockout-aware diagnostic when relevant
+          const lastCons = mat.lastConsumptionDate || null;
+          if (!lastCons) return '';
+          const swCount = (mat.stockoutWindows || []).length;
+          const swDays  = (mat.stockoutWindows || []).reduce((s,w) => s + (w.days||0), 0);
+          const swDisp  = swCount === 0
+            ? '<span style="color:var(--accent-ok,#4fd06d)">none</span>'
+            : `<span style="color:var(--accent-crit,#ff5a5a)">${swCount} window${swCount===1?'':'s'} · ${swDays}d</span>`;
+          const cause   = mat.rateDropCause || null;
+          const causeCell = cause ? `<div class="stat-cell"><span class="lab">Drop cause</span><div class="v" style="color:${cause==='STOCKOUT_DRIVEN' ? 'var(--accent-crit,#ff5a5a)' : 'var(--accent-warn,#ff9e4c)'}">${cause === 'STOCKOUT_DRIVEN' ? '⚠ Stockout-driven' : 'Genuine demand drop'}</div></div>` : '';
+          return `
+            <div class="stat-cell"><span class="lab">Last consumption</span><div class="v">${lastCons}</div></div>
+            <div class="stat-cell"><span class="lab">Stockouts (back-calc)</span><div class="v">${swDisp}</div></div>
+            ${causeCell}
+          `;
+        })()}
       </div>
 
       ${renderMrpCompare(mat)}

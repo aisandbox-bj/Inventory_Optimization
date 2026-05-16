@@ -13,7 +13,7 @@
   'use strict';
 
   const SCHEMA_VERSION = '1.0.0';
-  const APP_VERSION    = '2.1.1';
+  const APP_VERSION    = '2.1.3-dev';
 
   /* ─── Factory defaults — seeded from the existing Python skill ──────────── */
   const FACTORY_DEFAULTS = Object.freeze({
@@ -32,7 +32,8 @@
     invAdjConfirmedDates:   [],                     // User-confirmed cycle-count dates (excluded from rate)
     wrSoftMonths:           6,                      // Stock-runway ≥ this AND mt ∈ wrMrpTypes → PURPLE soft (Possible WR)
     wrHardMonths:           9,                      // Stock-runway ≥ this → PURPLE hard (Likely WR). Lowered from 12 in v2.0.1.
-    wrMrpTypes:             ['PD']                  // MRP types that trigger the WR check at all. PD-only is the safe default (V1 self-corrects via draw-down).
+    wrMrpTypes:             ['PD'],                 // MRP types that trigger the WR check at all. PD-only is the safe default (V1 self-corrects via draw-down).
+    socBackCalcMonths:      6                       // APP-E1 (v2.1.3): SOH back-calc window in months, anchored at lastConsumptionDate. Must be ≥ p2Months. Diagnostic for stockout-driven vs genuine demand drops.
   });
 
   const SCOPE_MODES = ['fleet', 'manual', 'byClassification', 'byVendor', 'parameterSearch'];
@@ -71,7 +72,8 @@
     invAdjConfirmedDates:   'Dates the operator has confirmed as inventory adjustments. Transactions on these dates are excluded from the rate calculation (same mechanic as HCE, but labelled <b>Inv Adj</b>).',
     wrSoftMonths:           'Stock-runway threshold (months at P2 rate) above which a material on a watched MRP type is flagged as <b>Possible Working Redundant</b> (PURPLE soft). Default 6 mo.',
     wrHardMonths:           'Stock-runway threshold (months at P2 rate) above which a material on a watched MRP type is flagged as <b>Likely Working Redundant</b> (PURPLE hard — write-down review). Default 9 mo (lowered from 12 in v2.0.1).',
-    wrMrpTypes:             'MRP types that trigger the Working Redundant check. Comma-separated. Default <code>PD</code> only; V1 is consumption-driven and self-corrects via draw-down. Add codes (e.g. <code>ZE</code>) if the site uses non-standard MRP types that should also be evaluated.'
+    wrMrpTypes:             'MRP types that trigger the Working Redundant check. Comma-separated. Default <code>PD</code> only; V1 is consumption-driven and self-corrects via draw-down. Add codes (e.g. <code>ZE</code>) if the site uses non-standard MRP types that should also be evaluated.',
+    socBackCalcMonths:      'Stock-on-hand <b>back-calc window</b> in months — used by APP-E1 stockout-aware drop detection. The window is anchored at each material\'s <em>last consumption event</em> and extends backward by this many months (then forward to today). Lets the operator see SOH behaviour in the run-up to zero-consumption — distinguishes <b>stockout-driven drops</b> (replenishment failed) from <b>genuine demand drops</b> (consumption stopped while stock was healthy). Must be ≥ <code>p2Months</code>. Default 6 mo.'
   });
 
   /* ─── Empty scope (one of each mode pre-shaped) ─────────────────────────── */
@@ -181,6 +183,14 @@
     if (typeof p.wrHardMonths === 'number' && p.wrHardMonths < 0) errors.push('wrHardMonths cannot be negative');
     if (typeof p.wrSoftMonths === 'number' && typeof p.wrHardMonths === 'number' && p.wrHardMonths < p.wrSoftMonths) errors.push('wrHardMonths must be ≥ wrSoftMonths');
     if (p.wrMrpTypes !== undefined && (!Array.isArray(p.wrMrpTypes) || p.wrMrpTypes.length === 0)) errors.push('wrMrpTypes must be a non-empty array');
+    // APP-E1 (v2.1.3) — SOH back-calc window. Floor: must be ≥ p2Months so the
+    // diagnostic window always covers the rate-change comparison period.
+    if (typeof p.socBackCalcMonths === 'number') {
+      if (p.socBackCalcMonths < 1) errors.push('socBackCalcMonths must be ≥ 1');
+      if (typeof p.p2Months === 'number' && p.socBackCalcMonths < p.p2Months) {
+        errors.push(`socBackCalcMonths (${p.socBackCalcMonths}) must be ≥ p2Months (${p.p2Months}) — back-calc window must cover the rate-change comparison period`);
+      }
+    }
     return { ok: errors.length === 0, errors };
   }
 

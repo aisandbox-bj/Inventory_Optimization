@@ -26,7 +26,12 @@
     textDim:  '#9BABA8',
     annot:    '#FBBF24',
     annotDim: '#9BABA8',
-    crit:     '#EF4444'
+    crit:     '#EF4444',
+    // APP-E1 (v2.1.3) — stockout-aware diagnostic palette
+    sohLine:    '#A78BFA',                   // soft violet — SOH back-calc line (right axis)
+    stockBand:  'rgba(239,83,80,0.16)',      // muted red wash — stockout windows
+    stockEdge:  'rgba(239,83,80,0.55)',      // crisp red edge — stockout window borders
+    lastCons:   '#FB923C'                    // burnt orange — vertical "last consumption" marker
   };
 
   function el(name, attrs, children){
@@ -249,6 +254,86 @@
       trendLine(material.p2Start, material.p2End, material.p2Rate, PAL.p2Line, `P2 · ${material.p2Rate.toFixed(1)}/mo`);
     }
 
+    // ─── APP-E1 · SOH back-calc overlay + stockout bands + last-cons marker ─
+    // Renders on a SECONDARY right-side Y-axis (SOH is in units-in-stock,
+    // not cumulative consumption — distinct scale). Stockout windows render
+    // as red wash bands behind the main chart. Last consumption marker is a
+    // vertical orange dashed line so the operator can read "this is where
+    // consumption stopped" at a glance.
+    const sohSeries = material.stockOnHandSeries || [];
+    const stockoutWindows = material.stockoutWindows || [];
+    const lastConsDate = material.lastConsumptionDate || null;
+    const hasSohOverlay = sohSeries.length > 0;
+    let yScaleSOH = null;
+    if (hasSohOverlay) {
+      // Build SOH y-scale independent of cumulative scale
+      const sohVals = sohSeries.map(p => p.soh);
+      const sohMin = Math.min(0, ...sohVals);
+      const sohMax = Math.max(...sohVals, 1) * 1.08;
+      yScaleSOH = (v) => MARGIN.top + (1 - (v - sohMin) / (sohMax - sohMin)) * innerH;
+
+      // (a) Stockout bands — render FIRST so they sit behind the SOH line
+      for (const w of stockoutWindows) {
+        const ws = new Date(w.start).getTime();
+        const we = new Date(w.end).getTime();
+        // Add a half-day pad on each side so single-day stockouts are visible
+        const x1 = xScale(Math.max(xMin, ws - 43200000));
+        const x2 = xScale(Math.min(xMax, we + 43200000));
+        if (x2 <= x1) continue;
+        svg.appendChild(rect(x1, MARGIN.top, x2 - x1, innerH, { fill: PAL.stockBand }));
+        // Crisp edge lines top + bottom of the band for definition
+        svg.appendChild(line(x1, MARGIN.top, x2, MARGIN.top, { stroke: PAL.stockEdge, width: 0.7, opacity: 0.8 }));
+        svg.appendChild(line(x1, MARGIN.top + innerH, x2, MARGIN.top + innerH, { stroke: PAL.stockEdge, width: 0.7, opacity: 0.8 }));
+        // Label centered above the band
+        const cx = (x1 + x2) / 2;
+        const lab = w.days >= 2 ? `STOCKOUT · ${w.days}d` : 'STOCKOUT';
+        svg.appendChild(text(cx, MARGIN.top + innerH - 6, lab, { anchor: 'middle', fill: PAL.stockEdge, size: 8.5, weight: 600, tracking: 1 }));
+      }
+
+      // (b) SOH back-calc line — daily, drawn as a smooth polyline
+      const sohPts = sohSeries
+        .filter(p => {
+          const t = new Date(p.date).getTime();
+          return t >= xMin && t <= xMax;
+        })
+        .map(p => {
+          const x = xScale(new Date(p.date).getTime());
+          const y = yScaleSOH(p.soh);
+          return `${x},${y}`;
+        });
+      if (sohPts.length >= 2) {
+        svg.appendChild(polyline(sohPts.join(' '), { stroke: PAL.sohLine, width: 1.8, opacity: 0.95, cap: 'round', join: 'round' }));
+      }
+
+      // (c) Right Y-axis for SOH — ticks + label
+      const sohTicks = niceTicks(sohMin, sohMax, 4);
+      for (const v of sohTicks) {
+        const y = yScaleSOH(v);
+        svg.appendChild(line(MARGIN.left + innerW, y, MARGIN.left + innerW + 4, y, { stroke: PAL.sohLine, width: 1, opacity: 0.7 }));
+        svg.appendChild(text(MARGIN.left + innerW + 8, y + 3, fmtNum(v), { anchor: 'start', fill: PAL.sohLine, size: 9, opacity: 0.85 }));
+      }
+      svg.appendChild(text(W - 14, MARGIN.top + innerH/2, 'SOH (UNITS)', { anchor: 'middle', fill: PAL.sohLine, size: 9, rotate: 90, tracking: 1.3 }));
+    }
+
+    // (d) Last consumption marker — vertical orange dashed line
+    if (lastConsDate) {
+      const t = new Date(lastConsDate).getTime();
+      if (t >= xMin && t <= xMax) {
+        const x = xScale(t);
+        svg.appendChild(line(x, MARGIN.top, x, MARGIN.top + innerH, {
+          stroke: PAL.lastCons, width: 1.6, dash: '5 3', opacity: 0.9
+        }));
+        // Label placed at the bottom of the marker so it doesn't collide with the
+        // P1/P2 zone labels at the top
+        svg.appendChild(text(x + 4, MARGIN.top + innerH - 22, 'LAST CONSUMPTION', {
+          fill: PAL.lastCons, size: 8.5, weight: 600, tracking: 1.2
+        }));
+        svg.appendChild(text(x + 4, MARGIN.top + innerH - 12, lastConsDate, {
+          fill: PAL.lastCons, size: 8.5, opacity: 0.85
+        }));
+      }
+    }
+
     // ─── Inv Adj annotations (vertical dashed purple lines on confirmed dates) ─
     const invAdj = material.invAdj || [];
     for (const ev of invAdj) {
@@ -291,8 +376,13 @@
     }
 
     // ─── Legend (top-right) ───────────────────────────────────────────────
+    // APP-E1: extra entries added when SOH overlay or stockout windows present.
     const legY = MARGIN.top - 14;
-    let legX = W - MARGIN.right - 160;
+    const legHasSoh = hasSohOverlay;
+    const legHasStockout = stockoutWindows.length > 0;
+    const legEntries = 3 + (legHasSoh ? 1 : 0) + (legHasStockout ? 1 : 0);
+    // Push legend left when entries grow so it doesn't run off the right edge
+    let legX = W - MARGIN.right - (legEntries * 64);
     svg.appendChild(line(legX, legY, legX + 18, legY, { stroke: PAL.cumLine, width: 2 }));
     svg.appendChild(text(legX + 24, legY + 3, 'CUMULATIVE', { fill: PAL.text, size: 9, tracking: 1 }));
     legX += 100;
@@ -301,6 +391,16 @@
     legX += 50;
     svg.appendChild(line(legX, legY, legX + 18, legY, { stroke: PAL.p2Line, width: 2, dash: '5 3' }));
     svg.appendChild(text(legX + 24, legY + 3, 'P2', { fill: PAL.text, size: 9, tracking: 1 }));
+    if (legHasSoh) {
+      legX += 50;
+      svg.appendChild(line(legX, legY, legX + 18, legY, { stroke: PAL.sohLine, width: 1.8 }));
+      svg.appendChild(text(legX + 24, legY + 3, 'SOH', { fill: PAL.text, size: 9, tracking: 1 }));
+    }
+    if (legHasStockout) {
+      legX += 60;
+      svg.appendChild(rect(legX, legY - 5, 18, 9, { fill: PAL.stockBand, stroke: PAL.stockEdge, opacity: 1 }));
+      svg.appendChild(text(legX + 24, legY + 3, 'STOCKOUT', { fill: PAL.text, size: 9, tracking: 1 }));
+    }
 
     // ─── Pattern marker (LUMPY badge top-left) ────────────────────────────
     if (material.pattern === 'LUMPY') {

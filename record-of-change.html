@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.1.1 · released 2026-05-12
+     Inventory Optimization App · v2.1.3-dev · 2026-05-16
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
-     Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.1
+     Latest tag : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.1
      This file is the canonical changelog — the version above is the build
      that ships THIS file, not necessarily the version you ran an analysis
      under (that's recorded in metadata.appVersion of each saved JSON).
@@ -11,190 +11,310 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="2.1.1" />
-<meta name="app-released" content="2026-05-12" />
+<meta name="app-version" content="2.1.3-dev" />
+<meta name="app-released" content="2026-05-16" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
-.roc-head{
-  background:var(--bg-panel);
-  border:1px solid var(--border-soft);
-  padding:28px 32px;
-  margin-bottom:24px;
-  position:relative;
-  overflow:hidden;
+/* ════════════════════════════════════════════════════════════════════════
+   Record of Change · brand-pack-aligned restyle (v2.1.3-dev)
+   Extends brand-tokens.css. Uses the standard panel grammar (deep-navy
+   background, soft cyan border, radial glow), pill-style status tags, and
+   mono meta blocks for files-touched + rollback notes.
+═══════════════════════════════════════════════════════════════════════ */
+
+main.shell { padding-top: 28px; }
+
+/* ─── Hero — panel grammar (radial glow + eyebrow + title + sub) ────────── */
+.roc-head {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 30px 34px;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
 }
-.roc-head::before{
-  content:"";
-  position:absolute;
-  width:280px; height:280px;
-  border-radius:50%;
-  background:rgba(31,206,216,0.10);
-  filter:blur(70px);
-  top:-120px; right:-120px;
-  pointer-events:none;
-  z-index:0;
+.roc-head::before {
+  content: "";
+  position: absolute;
+  width: 320px; height: 320px;
+  border-radius: 50%;
+  background: rgba(31,206,216,0.10);
+  filter: blur(85px);
+  top: -110px; right: -110px;
+  pointer-events: none;
+  z-index: 0;
 }
-.roc-head > *{ position:relative; z-index:1; }
-.roc-head .pre{
-  font-family:var(--font-mono);
-  color:var(--accent);
-  letter-spacing:2.5px;
-  font-size:11px;
-  text-transform:uppercase;
-  margin-bottom:10px;
+.roc-head > * { position: relative; z-index: 1; }
+.roc-head .pre {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
 }
-.roc-head h1{
-  font-family:var(--font-display);
-  font-weight:700;
-  font-size:38px;
-  letter-spacing:3px;
-  text-transform:uppercase;
-  color:var(--text-pri);
-  margin-bottom:8px;
+.roc-head h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 38px;
+  letter-spacing: 3px;
+  line-height: 1.05;
+  text-transform: uppercase;
+  color: var(--text-pri);
+  margin-bottom: 12px;
 }
-.roc-head .sub{
-  font-family:var(--font-body);
-  font-size:13.5px;
-  color:var(--text-sec);
-  line-height:1.55;
-  max-width:760px;
+.roc-head .sub {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 780px;
+}
+.roc-head .sub em { color: var(--text-sec); font-style: italic; }
+.roc-head .sub code {
+  background: rgba(31,206,216,0.08);
+  border: 1px solid rgba(31,206,216,0.16);
+  color: var(--accent);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-radius: var(--r-sm);
 }
 
-.rollback-panel{
-  background:var(--bg-elevated);
-  border:1px solid var(--border-soft);
-  border-left:3px solid var(--status-warn);
-  padding:18px 22px;
-  margin-bottom:24px;
+/* ─── Rollback how-to panel — warn-amber accent ────────────────────────── */
+.rollback-panel {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--status-warn);
+  border-radius: var(--r-md);
+  padding: 20px 24px;
+  margin-bottom: 28px;
 }
-.rollback-panel .lab{
-  font-family:var(--font-mono);
-  color:var(--status-warn);
-  letter-spacing:1.8px;
-  font-size:11px;
-  text-transform:uppercase;
-  margin-bottom:8px;
+.rollback-panel .lab {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--status-warn);
+  margin-bottom: 6px;
 }
-.rollback-panel h3{
-  font-family:var(--font-display);
-  font-weight:700;
-  font-size:16px;
-  letter-spacing:1.4px;
-  text-transform:uppercase;
-  color:var(--text-pri);
-  margin-bottom:10px;
+.rollback-panel h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 0.5px;
+  color: var(--text-pri);
+  margin-bottom: 14px;
 }
-.rollback-panel p{
-  font-family:var(--font-body);
-  font-size:12.5px;
-  color:var(--text-sec);
-  line-height:1.55;
-  margin-bottom:10px;
+.rollback-panel p {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-sec);
+  margin-bottom: 10px;
 }
-.rollback-panel code{
-  background:rgba(0,0,0,0.30);
-  color:var(--accent);
-  padding:2px 7px;
-  font-family:var(--font-mono);
-  font-size:11.5px;
-  border-radius:2px;
+.rollback-panel p:last-child { margin-bottom: 0; }
+.rollback-panel code {
+  background: rgba(31,206,216,0.08);
+  border: 1px solid rgba(31,206,216,0.16);
+  color: var(--accent);
+  padding: 1px 7px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  border-radius: var(--r-sm);
 }
-.rollback-panel pre{
-  background:rgba(0,0,0,0.30);
-  color:var(--text-sec);
-  padding:10px 14px;
-  font-family:var(--font-mono);
-  font-size:11.5px;
-  line-height:1.55;
-  border-radius:2px;
-  overflow-x:auto;
-  margin:8px 0;
+.rollback-panel pre {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-sec);
+  overflow-x: auto;
+  margin: 10px 0;
 }
 
-.roc-list{
-  display:flex;
-  flex-direction:column;
-  gap:18px;
+/* ─── Entries list ─────────────────────────────────────────────────────── */
+.roc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-.roc-entry{
-  background:var(--bg-panel);
-  border:1px solid var(--border-soft);
-  padding:22px 26px;
-  position:relative;
+
+/* ─── Each entry — panel grammar with status stripe + glow ─────────────── */
+.roc-entry {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 24px 28px;
+  position: relative;
+  overflow: hidden;
 }
-.roc-entry.dev{ border-left:3px solid var(--status-warn); }
-.roc-entry.release{ border-left:3px solid var(--accent-green); }
-.roc-entry .head{
-  display:flex;
-  align-items:baseline;
-  gap:16px;
-  margin-bottom:14px;
-  flex-wrap:wrap;
+.roc-entry::before {
+  content: "";
+  position: absolute;
+  width: 240px; height: 240px;
+  border-radius: 50%;
+  background: rgba(31,206,216,0.06);
+  filter: blur(70px);
+  top: -90px; right: -90px;
+  pointer-events: none;
+  z-index: 0;
 }
-.roc-entry .ver{
-  font-family:var(--font-display);
-  font-weight:700;
-  font-size:22px;
-  letter-spacing:1.5px;
-  color:var(--accent);
-  text-transform:uppercase;
+.roc-entry > * { position: relative; z-index: 1; }
+.roc-entry.dev     { border-left: 3px solid var(--status-warn); }
+.roc-entry.release { border-left: 3px solid var(--accent-green); }
+
+/* Header row — version chip + pill + date */
+.roc-entry .head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
-.roc-entry.release .ver{ color:var(--accent-green); }
-.roc-entry.dev .ver{ color:var(--status-warn); }
-.roc-entry .date{
-  font-family:var(--font-mono);
-  font-size:11px;
-  letter-spacing:1.3px;
-  color:var(--text-muted);
-  text-transform:uppercase;
+.roc-entry .ver {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: 2px;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--accent);
 }
-.roc-entry .tag{
-  font-family:var(--font-mono);
-  font-size:10.5px;
-  letter-spacing:1.3px;
-  padding:3px 9px;
-  border:1px solid var(--border-soft);
-  color:var(--text-sec);
-  text-transform:uppercase;
+.roc-entry.dev     .ver { color: var(--status-warn); }
+.roc-entry.release .ver { color: var(--accent-green); }
+.roc-entry .date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
-.roc-entry .tag.dev{ color:var(--status-warn); border-color:var(--status-warn); }
-.roc-entry .tag.released{ color:var(--accent-green); border-color:var(--accent-green); }
-.roc-entry h4{
-  font-family:var(--font-heading);
-  font-weight:600;
-  font-size:14px;
-  letter-spacing:.8px;
-  color:var(--text-pri);
-  margin:14px 0 6px;
+
+/* Status tag — pill style (matches .pill from brand-tokens.css) */
+.roc-entry .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--text-sec);
 }
-.roc-entry ul{
-  list-style:none;
-  padding:0;
-  margin:0 0 4px 0;
+.roc-entry .tag::before {
+  content: "";
+  width: 7px; height: 7px;
+  background: var(--text-muted);
+  display: inline-block;
+  flex-shrink: 0;
 }
-.roc-entry li{
-  font-family:var(--font-body);
-  font-size:13px;
-  color:var(--text-sec);
-  line-height:1.55;
-  padding:4px 0 4px 18px;
-  position:relative;
+.roc-entry .tag.dev {
+  color: var(--status-warn);
+  border-color: rgba(251,191,36,0.30);
+  background: rgba(251,191,36,0.06);
 }
-.roc-entry li::before{
-  content:"";
-  position:absolute;
-  left:0; top:13px;
-  width:7px; height:1px;
-  background:var(--accent);
+.roc-entry .tag.dev::before { background: var(--status-warn); }
+.roc-entry .tag.released {
+  color: var(--accent-green);
+  border-color: rgba(90,182,157,0.35);
+  background: rgba(90,182,157,0.06);
 }
-.roc-entry .commit{
-  font-family:var(--font-mono);
-  font-size:11px;
-  color:var(--text-muted);
-  letter-spacing:.4px;
+.roc-entry .tag.released::before { background: var(--accent-green); }
+
+/* Section headings inside each entry */
+.roc-entry h4 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14.5px;
+  letter-spacing: 0.5px;
+  color: var(--text-pri);
+  margin: 20px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(31,206,216,0.12);
 }
-.roc-entry .commit a{ color:var(--accent); text-decoration:none; }
-.roc-entry .commit a:hover{ color:var(--accent-glow); }
+.roc-entry h4:first-of-type { margin-top: 6px; }
+
+/* Bulleted lists with cyan dash markers */
+.roc-entry ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 4px;
+}
+.roc-entry li {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-sec);
+  padding: 5px 0 5px 20px;
+  position: relative;
+}
+.roc-entry li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 15px;
+  width: 10px; height: 1px;
+  background: var(--accent);
+}
+.roc-entry ul ul {
+  margin-top: 5px;
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border-soft);
+}
+.roc-entry ul ul li { padding-left: 14px; font-size: 12.5px; }
+.roc-entry ul ul li::before { width: 7px; top: 14px; }
+
+/* Inline emphasis */
+.roc-entry b, .roc-entry strong { color: var(--text-pri); font-weight: 600; }
+.roc-entry em { color: var(--accent-glow); font-style: italic; }
+
+/* Code spans inside entry body */
+.roc-entry code {
+  background: rgba(31,206,216,0.08);
+  border: 1px solid rgba(31,206,216,0.16);
+  color: var(--accent);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  border-radius: var(--r-sm);
+}
+.roc-entry a { color: var(--accent); }
+.roc-entry a:hover { color: var(--accent-glow); text-decoration: underline; }
+
+/* Meta block — files touched / boundary notes / rollback */
+.roc-entry .commit {
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  letter-spacing: 0.2px;
+  color: var(--text-muted);
+}
+.roc-entry .commit.rollback { border-left-color: var(--status-warn); }
+.roc-entry .commit b, .roc-entry .commit strong { color: var(--text-pri); }
+.roc-entry .commit code {
+  background: rgba(0,0,0,0.35);
+  border-color: transparent;
+  color: var(--accent);
+  padding: 1px 6px;
+  font-size: 11.5px;
+}
+.roc-entry .commit a { color: var(--accent); text-decoration: none; }
+.roc-entry .commit a:hover { color: var(--accent-glow); text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -203,7 +323,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub active" href="record-of-change.html" title="You are on the Record of Change page">v2.0.0-dev · RoC</a>
+    <a class="sub active" href="record-of-change.html" title="You are on the Record of Change page">v2.1.3-dev · RoC</a>
   </div>
   <div class="links">
     <a href="index.html">Dashboard</a>
@@ -258,6 +378,36 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-16</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-E1 · Stockout-aware consumption drop detection</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding 2026-05-15: <em>"you cannot consume what you don't have."</em> Many cases of uncharacteristic zero consumption — especially in P2 — are stock-out artefacts, not real demand drops. Previously the pipeline's <code>rateDropFlag</code> treated any <code>P2 ≤ 0.6 × P1</code> as a sharp drop without distinguishing the cause. Lowering Min/Max on a stockout-driven "drop" makes the stockout self-fulfilling. Fix surfaces the cause + the visual signal needed to verify it.</li>
+        <li><b>New parameter <code>socBackCalcMonths</code></b> (default 6). The SOH back-calc window in months, anchored at each material's <em>last consumption event</em> and extending backward, then forward to today. Operator-overridable on intake Step 5 and in Settings → Parameter defaults. Floor constraint: must be ≥ <code>p2Months</code> (so the diagnostic window always covers the rate-change comparison period).</li>
+        <li><b>Anchor design.</b> The window anchors at <code>lastConsumptionDate = max(postingDate where mvt ∈ {261, 201})</code> per material — NOT at today. For healthy materials with continuous consumption, last-consumption ≈ today, so the window is naturally [today − X, today]. For materials with long zero-consumption tails, the window anchors at the date consumption stopped — exactly the run-up where the diagnosis lives. Operator's framing: <em>"did I have a snap consumption increase, or did my replenishment process fail?"</em> The visual answers the question.</li>
+        <li><b>New shared module <code>shared/inventory-back-calc.js</code></b> (pure, deterministic, no side effects). Walks MB51 backwards from current SOH applying +109 / -261 / -201 / +101 / -102 / +262 / +202 rules (all other movement types deliberately ignored — adjustments aren't real demand or supply). Designed to be called from Trace's D14 inventory back-calc overlay too — math primitive lives once, both tools call it.</li>
+        <li><b>Pipeline output per material</b> now carries five new fields: <code>lastConsumptionDate</code>, <code>stockOnHandSeries</code> (daily SOH back-calc), <code>stockoutWindows</code> (periods where SOH ≤ 0, with day-counts), <code>rateDropCause</code> (<code>STOCKOUT_DRIVEN</code> / <code>GENUINE_DEMAND_DROP</code> / null), <code>stockoutDrivenDrop</code> (boolean). Augments — doesn't replace — the existing <code>rateDropFlag</code>: the drop is still flagged, but the cause is named so downstream consumers (operator, LLM) narrate it correctly.</li>
+        <li><b>Consumption chart visualisation</b> (the operator's key diagnostic): on the analysis page material detail, the existing cumulative chart gains three overlays. <b>(a) Red wash bands</b> for stockout windows (SOH ≤ 0), with crisp edge lines and a "STOCKOUT · Nd" label. <b>(b) Violet SOH back-calc line</b> on a SECONDARY right-side Y-axis (SOH is units-in-stock, not cumulative consumption — distinct scale). <b>(c) Orange dashed vertical "LAST CONSUMPTION" marker</b> at <code>lastConsumptionDate</code>. Legend extends with SOH + STOCKOUT entries when relevant.</li>
+        <li><b>Material detail panel</b> adds three new stat cells when applicable: Last consumption (date) · Stockouts in back-calc window (count + total days, green if none / red if any) · Drop cause (Stockout-driven in red / Genuine demand drop in orange). Operator sees the diagnostic at-a-glance without running an LLM review.</li>
+        <li><b>LLM prompt context</b> extends the per-material STATISTICS block with <code>lastConsumptionDate</code> / <code>stockoutSummary</code> / <code>rateDropCause</code>. The <code>rateChangeFlag</code> token now reads <em>"⚠ SHARP DROP — STOCKOUT-DRIVEN (consumption stopped because stock ran out, not because demand dropped)"</em> or <em>"⚠ SHARP DROP — GENUINE DEMAND DROP"</em> when the cause is known. Chart description updates accordingly. New top-priority WATCH FOR bullet: <em>"STOCKOUT-DRIVEN DROP — do NOT recommend lowering Min/Max — the material still has demand; the supply chain failed."</em> New signal name <code>stockoutDriven</code> in the signals[] array.</li>
+        <li><b>No SCHEMA_VERSION bump.</b> All additions are additive to per-material output; the canonical intake JSON shape is unchanged. <code>APP_VERSION</code> → <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/canonical-schema.js</code> (APP_VERSION + socBackCalcMonths factory default + description + validator), <code>shared/inventory-back-calc.js</code> <b>(NEW)</b>, <code>shared/pipeline.js</code> (per-material back-calc + classification + 5 new output fields), <code>shared/chart.js</code> (SOH overlay + stockout bands + last-cons marker + right Y-axis + legend extension), <code>shared/llm.js</code> (cause-aware rateChangeFlag + stockoutSummary + new tokens in buildContext), <code>shared/config.js</code> (FACTORY_PROMPT_TEMPLATE: new STATISTICS lines + chart description update + stockout-driven WATCH FOR bullet + signal name + PROMPT_PLACEHOLDERS), <code>intake/intake.html</code> + <code>intake/intake.js</code> (script load + Step 5 input), <code>settings/settings.js</code> (defaults input), <code>analysis/analysis.html</code> + <code>analysis/analysis.js</code> (script load + 3 new stat cells on detail panel), <code>record-of-change.html</code> (this entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore from <code>App/v2/_rollback/APP-E1-pre/</code> created before any edit (11 files). Stage C — <code>git revert</code> the APP-E1 commit on the clone-to-tmp working repo; push the revert. Stage D — <code>git checkout v2.1.2</code> (or whatever the prior tag is). <b>Rollback boundary is clean:</b> no schema change, no parser change, the new shared module is independent (no other module imports it), and per-material new output fields default to null/empty arrays when absent — saved intakes from before, during, and after this change are behaviourally identical at the canonical-JSON boundary. The auto-upgrade story for operators on the v2.1.0 factory prompt: customised prompts unaffected; operators on v2.1.0 factory will see the older STATISTICS block until they hit "Reset to factory" in Settings (deliberate scope-tightening — no second auto-upgrade layer added for this dev build).
+      </div>
+    </article>
+
     <!-- ───────── v2.1.2-dev ───────── -->
     <article class="roc-entry dev">
       <div class="head">
@@ -287,7 +437,7 @@ git -C /tmp/peek push --force-with-lease origin main
         Files touched: <code>intake/intake.html</code> (+1 modal block above the existing Reuse modal) · <code>intake/intake.js</code> (+1 state field <code>alignmentAck</code>, +1 setup function <code>setupAlignmentGate</code>, wired into <code>DOMContentLoaded</code>) · <code>intake/intake.css</code> (+1 self-contained <code>.align-*</code> block, +1 <code>body.intake-gated</code> dim layer) · <code>.gitignore</code> (+<code>_rollback/</code> entry) · <code>record-of-change.html</code> (this entry).
       </div>
 
-      <div class="commit">
+      <div class="commit rollback">
         <b>Rollback:</b> Stage A (working copy only) — restore from <code>App/v2/_rollback/APP-E6-pre/</code> created before any edit. Stage C (committed + pushed) — <code>git revert</code> the APP-E6 commit on a clone-to-tmp checkout, then push the revert. Stage D (tagged) — <code>git checkout v2.1.1</code> per the standard rollback panel above. <b>The rollback boundary is clean</b> because <code>state.alignmentAck</code> is transient and never written to canonical JSON — saved intakes from before, during, and after the gate are all behaviourally identical at the analysis-pipeline boundary.
       </div>
     </article>
@@ -316,7 +466,7 @@ git -C /tmp/peek push --force-with-lease origin main
         Files touched: <code>shared/canonical-schema.js</code> (APP_VERSION → 2.1.1) · <code>analysis/analysis.js</code> (showMassModal/hideMassModal isolation, softCloseMassReview no-wipe, openColFilterPopover refactor, MASS_SELECT_COLS + MASS_RESULTS_COLS + filter/sort/badge wiring, renderMassRows signature change, updateMassChip copy) · <code>analysis/analysis.css</code> (.col-filter-pop z-index 2000, .mass-filter-badge) · <code>user-manual.html</code> §11c (modal close retention + filter affordances) · <code>record-of-change.html</code> (this entry).
       </div>
 
-      <div class="commit">
+      <div class="commit rollback">
         <b>Rollback:</b> <code>git checkout v2.1.0</code> in <code>/tmp/peek</code> and copy the files back. No schema change — older intakes are unaffected.
       </div>
     </article>
@@ -347,7 +497,7 @@ git -C /tmp/peek push --force-with-lease origin main
         <b>Boundary contract preserved:</b> active context selection and Custom text live in <code>settings.client.*</code> localStorage keys only — never written to the canonical intake JSON. The intake JSON contract stays clean (SCHEMA_VERSION still 1.0.0). LLM verdicts and signals continue to be session-only in-memory; no localStorage writes for review data.
       </div>
 
-      <div class="commit">
+      <div class="commit rollback">
         <b>Rollback:</b> v2.0.1 is the prior tag. Operators with customised templates are unaffected; operators on legacy factory get the new prompt auto-applied. To revert to v2.0.1 prompt behaviour: <code>git checkout v2.0.1</code> in /tmp/peek and copy the affected files back. Or in-app: edit the prompt template in Settings to whatever you prefer — operator-saved overrides always win.
       </div>
     </article>
@@ -380,7 +530,7 @@ git -C /tmp/peek push --force-with-lease origin main
         Files touched: <code>shared/canonical-schema.js</code> (APP_VERSION → 2.0.1, +3 defaults, +3 descriptions, +4 guarded validators) · <code>shared/pipeline.js</code> (<code>assess()</code> signature gains <code>params</code>, WR block now configurable, call site passes params) · <code>settings/settings.js</code> (3 field defs + new <code>list</code> input type) · <code>intake/intake.js</code> (same 3 field defs + same <code>list</code> input + array-aware dirty detection) · <code>user-manual.html</code> §7f · this file.
       </div>
 
-      <div class="commit">
+      <div class="commit rollback">
         <b>Rollback:</b> revert <code>pipeline.js</code> WR block to literals <code>6</code> and <code>12</code>, drop the three keys from <code>FACTORY_DEFAULTS</code>. Older intakes continue to work either way. Or simply <code>git checkout v2.0.0</code> if that tag is later added retroactively. The pre-v2.0.1 HEAD on origin/main is the rollback point.
       </div>
     </article>

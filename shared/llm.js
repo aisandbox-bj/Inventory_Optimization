@@ -45,9 +45,29 @@
       : 'none';
     const rcText = material.rateChange != null ? `${material.rateChange}%` : 'N/A';
     const adjP2  = (material.adjP2Rate != null) ? `${material.adjP2Rate.toFixed(2)} / mo` : '—';
-    const rateChangeFlag = material.rateDropFlag ? '⚠ SHARP DROP'
-                         : material.rateRiseFlag ? '⚠ SHARP RISE'
-                         : '';
+    // APP-E1 (v2.1.3) — stockout-aware drop signal. When a sharp drop is
+    // traceable to a stockout window in the back-calc, name the cause so the
+    // model doesn't narrate "demand softening" on what's really a supply gap.
+    let rateChangeFlag;
+    if (material.rateDropFlag) {
+      if (material.rateDropCause === 'STOCKOUT_DRIVEN') {
+        rateChangeFlag = '⚠ SHARP DROP — STOCKOUT-DRIVEN (consumption stopped because stock ran out, not because demand dropped)';
+      } else if (material.rateDropCause === 'GENUINE_DEMAND_DROP') {
+        rateChangeFlag = '⚠ SHARP DROP — GENUINE DEMAND DROP (stock was available; consumption fell anyway)';
+      } else {
+        rateChangeFlag = '⚠ SHARP DROP';
+      }
+    } else if (material.rateRiseFlag) {
+      rateChangeFlag = '⚠ SHARP RISE';
+    } else {
+      rateChangeFlag = '';
+    }
+    // Stockout summary string for the prompt — terse, useful for the model
+    const _swCount = (material.stockoutWindows || []).length;
+    const _swDays  = (material.stockoutWindows || []).reduce((s, w) => s + (w.days || 0), 0);
+    const stockoutSummary = _swCount === 0
+      ? 'no stockouts in back-calc window'
+      : `${_swCount} stockout window${_swCount === 1 ? '' : 's'} totalling ${_swDays} day${_swDays === 1 ? '' : 's'}`;
     return {
       customerContext: (customerContext == null || customerContext === '') ? '(none)' : String(customerContext),
       material:     material.material,
@@ -77,7 +97,11 @@
       recMax:       (material.recMax != null) ? material.recMax : '—',
       recMrpType:   material.recMrpType || '—',
       trafficLight: material.trafficLight,
-      action:       material.action
+      action:       material.action,
+      // APP-E1 tokens — surface stockout diagnostic to the prompt template
+      lastConsumptionDate: material.lastConsumptionDate || '—',
+      rateDropCause:       material.rateDropCause || '—',
+      stockoutSummary
     };
   }
 

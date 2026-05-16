@@ -797,6 +797,46 @@
         const rateRiseFlag = (p1f === 'OK' && p1r > 0 && p2f === 'OK' && p2r >= 1.6 * p1r);
         const invAdjCount  = invAdj.length;
 
+        // ─── APP-E1 · Stockout-aware drop diagnostic (v2.1.3-dev) ─────────
+        // Back-calc SOH for the "X months run-up to last consumption" window,
+        // then classify whether any rateDropFlag is stockout-driven or genuine.
+        // Guarded so older code paths still work if inventory-back-calc.js
+        // isn't loaded (graceful no-op).
+        let lastConsumptionDate = _lastIssueDate || null;
+        let stockOnHandSeries   = [];
+        let stockoutWindows     = [];
+        let rateDropCause       = null;
+        let stockoutDrivenDrop  = false;
+        let socBackCalcAnchor   = null;
+        if (typeof InventoryBackCalc !== 'undefined' && typeof stock === 'number') {
+          const backCalcMonths = (typeof params?.socBackCalcMonths === 'number' && params.socBackCalcMonths > 0)
+                                    ? params.socBackCalcMonths
+                                    : 6;
+          const win = InventoryBackCalc.buildWindow({
+            lastConsDate:   lastConsumptionDate,
+            runDate,
+            backCalcMonths
+          });
+          if (win) {
+            socBackCalcAnchor = win.anchor;
+            const out = InventoryBackCalc.backCalcSOH({
+              material:     q.material,
+              currentSOH:   stock,
+              mb51Rows:     tx,
+              windowStart:  win.windowStart,
+              windowEnd:    win.windowEnd
+            });
+            stockOnHandSeries = out.series;
+            stockoutWindows   = out.stockoutWindows;
+            rateDropCause     = InventoryBackCalc.classifyRateDropCause({
+              rateDropFlag,
+              p2Start, p2End,
+              stockoutWindows
+            });
+            stockoutDrivenDrop = (rateDropCause === 'STOCKOUT_DRIVEN');
+          }
+        }
+
         materials.push({
           material:     q.material,
           description:  q.description,
@@ -837,6 +877,13 @@
           daysSinceLastIssue,                      // integer or null
           rateDropFlag,                            // boolean — p2Rate <= 0.6 * p1Rate
           rateRiseFlag,                            // boolean — p2Rate >= 1.6 * p1Rate
+          // APP-E1 (v2.1.3) — stockout-aware diagnostic fields
+          lastConsumptionDate,                     // ISO or null — max(postingDate) where mvt ∈ {261,201}
+          stockOnHandSeries,                       // [{date, soh}] daily SOH back-calc over the window
+          stockoutWindows,                         // [{start, end, days}] periods where SOH ≤ 0
+          rateDropCause,                           // 'STOCKOUT_DRIVEN' | 'GENUINE_DEMAND_DROP' | null
+          stockoutDrivenDrop,                      // boolean — true when rateDropFlag + stockout window overlaps P2
+          socBackCalcAnchor,                       // 'lastConsumption' | 'today' | null — which date anchored the window
           trafficLight: tl.code,
           action:       tl.action,
           // Multi-model is filled in post-bucketing (see below). Defaults to 'Single'.
