@@ -597,19 +597,37 @@
 
     const llmCfg = state.llmByMaterial[mat.material];
 
+    // APP-E18 — pre-compute conditional stat cells (stockout-aware diagnostic
+    // from APP-E1) so they can be slotted into the regrouped stat-grid below.
+    const lastCons = mat.lastConsumptionDate || null;
+    let lastConsCell  = '';
+    let stockoutsCell = '';
+    let dropCauseCell = '';
+    if (lastCons) {
+      const swCount = (mat.stockoutWindows || []).length;
+      const swDays  = (mat.stockoutWindows || []).reduce((s,w) => s + (w.days||0), 0);
+      const swDisp  = swCount === 0
+        ? '<span style="color:var(--accent-ok,#4fd06d)">none</span>'
+        : `<span style="color:var(--accent-crit,#ff5a5a)">${swCount} window${swCount===1?'':'s'} · ${swDays}d</span>`;
+      const cause = mat.rateDropCause || null;
+      lastConsCell  = `<div class="stat-cell"><span class="lab">Last consumption</span><div class="v">${lastCons}</div></div>`;
+      stockoutsCell = `<div class="stat-cell"><span class="lab">Stockouts in window</span><div class="v">${swDisp}</div></div>`;
+      dropCauseCell = cause
+        ? `<div class="stat-cell"><span class="lab">Drop cause</span><div class="v" style="color:${cause==='STOCKOUT_DRIVEN' ? 'var(--accent-crit,#ff5a5a)' : 'var(--accent-warn,#ff9e4c)'}">${cause === 'STOCKOUT_DRIVEN' ? '⚠ Stockout-driven' : 'Genuine demand drop'}</div></div>`
+        : '';
+    }
+
     host.innerHTML = `
-      <div class="detail-head">
-        <div>
+      <div class="detail-head ${mat.trafficLight}">
+        <div class="detail-head-id">
           <div class="mat">${escapeHtml(mat.material)}</div>
           <div class="desc">${escapeHtml(mat.description || '')}</div>
         </div>
-        <div class="spacer"></div>
+        <div class="detail-head-rec">
+          <span class="rec-lab">Algorithmic recommendation</span>
+          <div class="rec-text">${escapeHtml(mat.action)}</div>
+        </div>
         <span class="pill ${pillCls(mat.trafficLight)}"><span class="dot"></span>${mat.trafficLight}</span>
-      </div>
-
-      <div class="action-banner ${mat.trafficLight}">
-        <span class="lab">Algorithmic recommendation</span>
-        ${escapeHtml(mat.action)}
       </div>
 
       <div class="chart-toolbar">
@@ -621,32 +639,18 @@
       <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
 
       <div class="stat-grid">
-        <div class="stat-cell"><span class="lab">P1 rate</span><div class="v ${mat.p1Flag !== 'OK' ? 'warn' : ''}">${mat.p1Flag === 'OK' ? mat.p1Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
-        <div class="stat-cell"><span class="lab">P2 rate</span><div class="v ${mat.p2Flag !== 'OK' ? 'warn' : ''}">${mat.p2Flag === 'OK' ? mat.p2Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
-        <div class="stat-cell"><span class="lab">Adj P2 (HCE excl)</span><div class="v">${adjDisp} <small>${mat.hceP2 && mat.hceP2.length ? '/ mo' : ''}</small></div></div>
-        <div class="stat-cell"><span class="lab">P1 → P2 change</span><div class="v ${(mat.rateChange||0) > 200 ? 'warn' : ''}">${rcDisp}</div></div>
-        <div class="stat-cell"><span class="lab">Total (window)</span><div class="v">${mat.totalNet}</div></div>
-        <div class="stat-cell"><span class="lab">Pattern</span><div class="v ${mat.pattern === 'LUMPY' ? 'warn' : ''}">${mat.pattern}</div></div>
         <div class="stat-cell"><span class="lab">Stock on hand</span><div class="v">${mat.stock ?? '—'}</div></div>
         <div class="stat-cell"><span class="lab">Stock value (CAD)</span><div class="v">${AppLocale.fmtCAD(mat.totValueOh)}</div></div>
         <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
-        ${(() => {
-          // APP-E1 (v2.1.3) — surface the stockout-aware diagnostic when relevant
-          const lastCons = mat.lastConsumptionDate || null;
-          if (!lastCons) return '';
-          const swCount = (mat.stockoutWindows || []).length;
-          const swDays  = (mat.stockoutWindows || []).reduce((s,w) => s + (w.days||0), 0);
-          const swDisp  = swCount === 0
-            ? '<span style="color:var(--accent-ok,#4fd06d)">none</span>'
-            : `<span style="color:var(--accent-crit,#ff5a5a)">${swCount} window${swCount===1?'':'s'} · ${swDays}d</span>`;
-          const cause   = mat.rateDropCause || null;
-          const causeCell = cause ? `<div class="stat-cell"><span class="lab">Drop cause</span><div class="v" style="color:${cause==='STOCKOUT_DRIVEN' ? 'var(--accent-crit,#ff5a5a)' : 'var(--accent-warn,#ff9e4c)'}">${cause === 'STOCKOUT_DRIVEN' ? '⚠ Stockout-driven' : 'Genuine demand drop'}</div></div>` : '';
-          return `
-            <div class="stat-cell"><span class="lab">Last consumption</span><div class="v">${lastCons}</div></div>
-            <div class="stat-cell"><span class="lab">Stockouts in window</span><div class="v">${swDisp}</div></div>
-            ${causeCell}
-          `;
-        })()}
+        ${lastConsCell}
+        <div class="stat-cell"><span class="lab">P1 rate</span><div class="v ${mat.p1Flag !== 'OK' ? 'warn' : ''}">${mat.p1Flag === 'OK' ? mat.p1Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
+        <div class="stat-cell"><span class="lab">P2 rate</span><div class="v ${mat.p2Flag !== 'OK' ? 'warn' : ''}">${mat.p2Flag === 'OK' ? mat.p2Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
+        <div class="stat-cell"><span class="lab">Adj P2 (HCE excl)</span><div class="v">${adjDisp} <small>${mat.hceP2 && mat.hceP2.length ? '/ mo' : ''}</small></div></div>
+        <div class="stat-cell"><span class="lab">Total (window)</span><div class="v">${mat.totalNet}</div></div>
+        <div class="stat-cell"><span class="lab">P1 → P2 change</span><div class="v ${(mat.rateChange||0) > 200 ? 'warn' : ''}">${rcDisp}</div></div>
+        <div class="stat-cell"><span class="lab">Pattern</span><div class="v ${mat.pattern === 'LUMPY' ? 'warn' : ''}">${mat.pattern}</div></div>
+        ${stockoutsCell}
+        ${dropCauseCell}
       </div>
 
       ${renderMrpCompare(mat)}

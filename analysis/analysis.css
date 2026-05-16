@@ -302,16 +302,10 @@
 /* APP-E12 (2026-05-16) — tightened vertical spacing so operator doesn't
    scroll back up to the material list after every selection. Padding,
    margins, and stat-cell vertical metrics all trimmed; min-height killed.
-   APP-E17 (same day, pass 2) — operator markup showed remaining slack
-   across top header, chart toolbar, stat grid (empty 4th cell), and MRP
-   table. Second tightening pass: outer padding 14/18 → 12/16, stat-grid
-   switched to auto-fit so the empty 4th cell on row 3 collapses, MRP
-   row padding 5/14 → 3/12, chart-toolbar/host/caveat margins to zero
-   between them so the chart sits tight against its toolbar + caveat.
    Horizontal real estate unchanged — readability preserved. */
 .material-detail{
   background:var(--bg-panel);border:1px solid var(--border-soft);
-  border-radius:var(--r-sm);padding:12px 16px;
+  border-radius:var(--r-sm);padding:14px 18px;
 }
 .detail-empty{
   padding:60px 32px;text-align:center;color:var(--text-muted);
@@ -322,9 +316,18 @@
   color:var(--text-pri);text-transform:uppercase;margin-bottom:10px;
 }
 
+/* APP-E18 (2026-05-16) — banner-inline recommendation per Graph visuals
+   deck. The action-banner is no longer a separate row; its label + text
+   now occupy the centre column of .detail-head, and the traffic-light
+   tint moves to the head's left border. */
 .detail-head{
-  display:flex;align-items:flex-start;gap:12px;margin-bottom:6px;
-  padding-bottom:5px;border-bottom:1px solid var(--border-soft);
+  display:flex;align-items:stretch;gap:18px;margin-bottom:9px;
+  padding:7px 12px;border:1px solid var(--border-soft);
+  border-left:3px solid var(--accent);background:var(--bg-panel-2);
+  border-radius:var(--r-sm);
+}
+.detail-head .detail-head-id{
+  flex:0 0 auto;min-width:140px;align-self:center;
 }
 .detail-head .mat{
   font-family:var(--font-mono);font-size:16px;color:var(--text-pri);
@@ -334,33 +337,37 @@
   font-family:var(--font-heading);font-weight:500;font-size:14px;
   color:var(--accent);line-height:1.3;margin-top:2px;
 }
-.detail-head .spacer{flex:1;}
-.detail-head .pill{align-self:flex-start;margin-top:2px;}
-
-.action-banner{
-  background:var(--bg-panel-2);border:1px solid var(--border-soft);
-  border-left:3px solid var(--accent);padding:6px 12px;margin-bottom:6px;
+.detail-head .detail-head-rec{
+  flex:1 1 auto;min-width:0;display:flex;flex-direction:column;
+  justify-content:center;padding-left:14px;
+  border-left:1px solid var(--border-soft);
   font-family:var(--font-body);font-size:12.5px;color:var(--text-sec);
-  line-height:1.4;border-radius:var(--r-sm);
+  line-height:1.4;
 }
-.action-banner .lab{
+.detail-head .rec-lab{
   font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.5px;
-  text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:2px;
+  text-transform:uppercase;color:var(--text-muted);
+  display:block;margin-bottom:2px;
 }
-.action-banner.GREEN { border-left-color:var(--status-ok); }
-.action-banner.BLUE  { border-left-color:var(--accent); }
-.action-banner.ORANGE{ border-left-color:var(--status-warn); }
-.action-banner.RED   { border-left-color:var(--status-crit); }
-.action-banner.GREY  { border-left-color:var(--text-disabled); }
-.action-banner.PURPLE{ border-left-color:#9B59B6; }
+.detail-head .rec-text{
+  color:var(--text-sec);
+}
+.detail-head .pill{
+  align-self:center;flex:0 0 auto;
+}
+/* Traffic-light tint — was on .action-banner pre-APP-E18 */
+.detail-head.GREEN { border-left-color:var(--status-ok); }
+.detail-head.BLUE  { border-left-color:var(--accent); }
+.detail-head.ORANGE{ border-left-color:var(--status-warn); }
+.detail-head.RED   { border-left-color:var(--status-crit); }
+.detail-head.GREY  { border-left-color:var(--text-disabled); }
+.detail-head.PURPLE{ border-left-color:#9B59B6; }
 
 /* ─── APP-E11 · Chart toolbar (legend toggles + caveat) ────────────────── */
-/* APP-E12 — tighter top/bottom margins; caveat sits flush under chart.
-   APP-E17 — pulled even tighter; toolbar sits 0px from the action banner
-   above and 0px from the chart-host below. */
+/* APP-E12 — tighter top/bottom margins; caveat sits flush under chart. */
 .chart-toolbar{
   display:flex;align-items:center;gap:14px;
-  margin:0 2px 2px;
+  margin:0 2px 4px;
   font-family:var(--font-mono);font-size:11px;
   color:var(--text-muted);
 }
@@ -381,7 +388,7 @@
 /* chart container */
 .chart-host{
   background:#0C2D3B;border:1px solid var(--border-soft);
-  border-radius:var(--r-sm);padding:4px;margin-bottom:0;
+  border-radius:var(--r-sm);padding:4px;margin-bottom:2px;
   overflow:hidden;
 }
 /* APP-E11 — legend-toggle hide rules. Class is toggled on .chart-host by
@@ -391,31 +398,32 @@
 
 .chart-caveat{
   font-family:var(--font-body);font-size:10.5px;font-style:italic;
-  color:var(--text-muted);line-height:1.3;
-  padding:2px 4px 0;margin-bottom:6px;
+  color:var(--text-muted);line-height:1.35;
+  padding:0 4px;margin-bottom:9px;
 }
 
 /* key stats grid
-   APP-E17 — switched to auto-fit + minmax so when a row has fewer than 4
-   cells (e.g. row 3 when there's no drop-cause cell), remaining cells
-   stretch to fill the width rather than leaving a dead 4th column. Cell
-   padding also dropped from 6/10 → 4/10 for vertical compactness. */
+   APP-E18 (2026-05-16) — single-line cells per Graph visuals deck.
+   Label sits left, value right (justify-content:space-between), so each
+   cell is ~22px tall instead of ~44px. Cells are reordered (in JS) into
+   three thematic groups: stock+runway, consumption rates, variances. */
 .stat-grid{
-  display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
-  gap:5px;margin-bottom:6px;
+  display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;margin-bottom:9px;
 }
-@media (max-width:780px){ .stat-grid{ grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); } }
+@media (max-width:780px){ .stat-grid{ grid-template-columns:repeat(2,1fr); } }
 .stat-cell{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
   background:var(--bg-panel-2);border:1px solid var(--border-soft);
-  padding:4px 10px;border-radius:var(--r-sm);
+  padding:4px 10px;border-radius:var(--r-sm);min-width:0;
 }
 .stat-cell .lab{
   font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.2px;
-  text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:1px;
+  text-transform:uppercase;color:var(--text-muted);flex-shrink:0;
 }
 .stat-cell .v{
-  font-family:var(--font-mono);font-size:14px;letter-spacing:.3px;
-  color:var(--accent);line-height:1.2;
+  font-family:var(--font-mono);font-size:13px;letter-spacing:.3px;
+  color:var(--accent);line-height:1.2;text-align:right;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .stat-cell .v.warn{ color:var(--status-warn); }
 .stat-cell .v.crit{ color:var(--status-crit); }
@@ -747,18 +755,14 @@
 .mass-chip-open:hover{ background:rgba(31,206,216,0.10); }
 
 /* ─── MRP Settings · Current vs Recommended (material detail panel, v2) ─── */
-/* APP-E12 — row padding tightened; header padding tightened.
-   APP-E17 — pass 2: outer margin 4/0/10 → 2/0/6, header padding 6/14 →
-   4/12, row padding 5/14 → 3/12. Brings the four-row Current vs
-   Recommended table from ~140px tall to ~100px without losing the value
-   font size. */
+/* APP-E12 — row padding tightened; header padding tightened. */
 .mrp-compare{
-  margin:2px 0 6px;
+  margin:4px 0 10px;
   background:var(--bg-panel);
   border:1px solid var(--border-soft);
 }
 .mrp-compare-head{
-  padding:4px 12px;
+  padding:6px 14px;
   border-bottom:1px solid var(--border-soft);
   display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;
 }
@@ -775,7 +779,7 @@
   width:100%; border-collapse:collapse; font-family:var(--font-body); font-size:13px;
 }
 .mrp-compare-table th, .mrp-compare-table td{
-  padding:3px 12px; border-bottom:1px solid rgba(155,171,168,.06); vertical-align:middle;
+  padding:5px 14px; border-bottom:1px solid rgba(155,171,168,.06); vertical-align:middle;
 }
 .mrp-compare-table tbody tr:last-child td{ border-bottom:none; }
 .mrp-compare-table th{

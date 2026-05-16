@@ -569,6 +569,37 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>analysis/analysis.css</code> from <code>_rollback/APP-E17-pre/</code>. Stage C — <code>git revert</code> the APP-E17 commit. <b>The rollback boundary is clean</b>: pure CSS spacing + a one-line stat-grid <code>grid-template-columns</code> change, no logic, no schema, no canonical-JSON effect.
       </div>
+
+      <h4>APP-E18 · Material detail panel — banner-inline recommendation + single-line metric cells (per Graph visuals deck)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator dropped a PowerPoint mock-up (<code>Review docs/Graph visuals/UNTITLED.pptx</code>) showing the target layout for the material detail panel. APP-E12 and APP-E17 — both spacing-only tightening passes — were operator-flagged as "not great". The deck specifies a structural change, not a margin tweak: move the algorithmic-recommendation text inline with the material number / description / traffic-light pill (one banner row instead of two), and compress the 4×3 metric grid by putting each cell's label and value on the same line instead of stacked.</li>
+        <li><b>APP-E17 rolled back as part of this chunk.</b> The CSS spacing tweaks APP-E17 made to <code>.material-detail</code>, <code>.detail-head</code>, <code>.action-banner</code>, <code>.chart-toolbar</code>, <code>.chart-caveat</code>, <code>.stat-grid</code> (auto-fit), <code>.stat-cell</code>, and <code>.mrp-compare</code> are entirely superseded by APP-E18's structural restyle. Restoring <code>analysis/analysis.css</code> from <code>_rollback/APP-E17-pre/</code> was the first edit in this chunk, then APP-E18 changes were applied on top of that clean baseline.</li>
+        <li><b>Changes (analysis.js · <code>renderDetail()</code>):</b>
+          <ul>
+            <li><strong>Banner merge.</strong> <code>.action-banner</code> block is gone; its label + <code>mat.action</code> text now sit in a new <code>.detail-head-rec</code> centre column inside <code>.detail-head</code>. Material number / description live in a new <code>.detail-head-id</code> left column; the traffic-light pill stays on the right. Traffic-light class moves from <code>.action-banner</code> to <code>.detail-head</code>.</li>
+            <li><strong>Stat-grid reordered into three thematic groups</strong> per operator note ("stock with runway, consumption rates and variances together"): row 1 = Stock on hand · Stock value · Runway @ P2 · Last consumption; row 2 = P1 rate · P2 rate · Adj P2 (HCE excl) · Total (window); row 3 = P1 → P2 change · Pattern · Stockouts in window · Drop cause (conditional). Same column count (4), no new columns — per operator instruction.</li>
+            <li>Conditional cells from APP-E1 (Last consumption, Stockouts, Drop cause) were lifted out of the inline IIFE into pre-computed string variables so they can be slotted into the regrouped grid at the correct positions.</li>
+          </ul>
+        </li>
+        <li><b>Changes (analysis.css):</b>
+          <ul>
+            <li><code>.detail-head</code> is now a self-contained banner card (border, background, left-border traffic-light tint, rounded corners) — the styling that previously belonged to <code>.action-banner</code>. Three flex columns: identity (fixed min-width), recommendation (flex-grow, dashed divider on the left edge of the centre column to echo the deck's grouping cue), pill (centre-aligned, fixed). The traffic-light <code>.GREEN</code> / <code>.BLUE</code> / <code>.ORANGE</code> / <code>.RED</code> / <code>.GREY</code> / <code>.PURPLE</code> selectors moved from <code>.action-banner</code> to <code>.detail-head</code>.</li>
+            <li><code>.action-banner</code> rule block deleted entirely (the class is no longer emitted by <code>renderDetail()</code>).</li>
+            <li><code>.stat-cell</code> switched from block-with-label-on-top to <code>display:flex; align-items:baseline; justify-content:space-between</code>. Label sits left; value right-aligns. Cell height ≈ 22px instead of ≈ 44px — recovers roughly 60–70px across three rows. Value font 14 → 13px; padding 6/10 → 4/10; grid gap 6 → 4. Grid stays at fixed <code>repeat(4, 1fr)</code> (pre-E17 baseline) so the layout matches the deck mock-up exactly on desktop.</li>
+            <li>No other rules touched. <code>.chart-toolbar</code>, <code>.chart-host</code>, <code>.chart-caveat</code>, <code>.mrp-compare</code> revert to their pre-APP-E17 values via the rollback.</li>
+          </ul>
+        </li>
+        <li>No JS-logic change, no analytical change, no schema change, no canonical-JSON shape change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. No SCHEMA_VERSION bump.</li>
+        <li><b>What did NOT ship.</b> Subtle row-group separators (e.g. a thin divider between rows 1/2 and 2/3) — left out for v1; operator can call for them after seeing the result. Cell-grouping is conveyed by reading order alone for now.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>analysis/analysis.js</code> (<code>renderDetail()</code> template restructure + pre-computed conditional cells), <code>analysis/analysis.css</code> (first restored from <code>_rollback/APP-E17-pre/</code>, then <code>.detail-head</code> rewritten as banner-card with merged recommendation column + traffic-light tint moved, <code>.action-banner</code> block deleted, <code>.stat-cell</code> switched to inline-flex layout), <code>record-of-change.html</code> (this APP-E18 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>analysis/analysis.css</code> AND <code>analysis/analysis.js</code> from <code>_rollback/APP-E18-pre/</code> (note: the APP-E18-pre snapshot captures the <i>post-E17</i> state; restoring it brings APP-E17 back with it). To rollback APP-E18 <i>without</i> reintroducing APP-E17, restore <code>analysis.js</code> from <code>_rollback/APP-E18-pre/</code> and <code>analysis.css</code> from <code>_rollback/APP-E17-pre/</code>. Stage C — <code>git revert</code> the APP-E18 commit. <b>Rollback boundary is clean</b>: pure DOM template + CSS, no logic, no schema, no canonical-JSON effect.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->
