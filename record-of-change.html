@@ -645,6 +645,27 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>shared/parsers.js</code> and <code>intake/intake.js</code> from <code>_rollback/APP-T-01-pre/</code>. Stage C — <code>git revert</code> the APP-T-01 commit. <b>Rollback boundary is clean</b>: alias-map widening + tooltip additions. No JS logic change, no analytical change, no schema change, no canonical-JSON shape change. Saved intakes from before this chunk load identically; only intakes parsed under the new alias map carry the new fields.
       </div>
+
+      <h4>APP-E19 · Material detail panel — stat-cell row order tightened (operator follow-up to APP-E18)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator screenshot showed the desired grouping after seeing APP-E18 live. The previous row order grouped <i>stock-related cells together</i> (row 1) and <i>rate cells together</i> (row 2); operator's preferred order tells a different narrative: raw headline numbers first, then derived / time-based metrics, then adjusted / data-quality metrics. Cells are unchanged, fonts unchanged, columns unchanged — only the row each cell sits in moves.</li>
+        <li><b>New order</b> (4 columns × 3 rows, row-major):
+          <ul>
+            <li><b>Row 1 — headline raw values:</b> Stock on hand · Stock value (CAD) · P1 rate · P2 rate.</li>
+            <li><b>Row 2 — derived / time:</b> Runway @ P2 · Last consumption · P1 → P2 change · Pattern.</li>
+            <li><b>Row 3 — adjusted / data-quality:</b> Adj P2 (HCE excl) · Total (window) · Stockouts in window · Drop cause (when present).</li>
+          </ul>
+        </li>
+        <li>Pure template-order change in <code>renderDetail()</code>. No CSS touched, no logic touched, no canonical-JSON shape change, no schema change. Conditional cells (<code>lastConsCell</code> in row 2; <code>stockoutsCell</code> and <code>dropCauseCell</code> in row 3) keep the same hide-behaviour from APP-E18.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>analysis/analysis.js</code> (stat-grid cell order inside <code>renderDetail()</code>), <code>record-of-change.html</code> (this APP-E19 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>analysis/analysis.js</code> from <code>_rollback/APP-E19-pre/</code>. Stage C — <code>git revert</code> the APP-E19 commit. <b>Rollback boundary is clean</b>: cell order only.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->
