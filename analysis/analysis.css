@@ -299,13 +299,16 @@
 }
 
 /* ─── Material detail ───────────────────────────────────────────────────── */
+/* APP-E12 (2026-05-16) — tightened vertical spacing so operator doesn't
+   scroll back up to the material list after every selection. Padding,
+   margins, and stat-cell vertical metrics all trimmed; min-height killed.
+   Horizontal real estate unchanged — readability preserved. */
 .material-detail{
   background:var(--bg-panel);border:1px solid var(--border-soft);
-  border-radius:var(--r-sm);padding:22px 24px;
-  min-height:600px;
+  border-radius:var(--r-sm);padding:14px 18px;
 }
 .detail-empty{
-  padding:80px 32px;text-align:center;color:var(--text-muted);
+  padding:60px 32px;text-align:center;color:var(--text-muted);
   font-family:var(--font-mono);font-size:12px;letter-spacing:.5px;line-height:1.55;
 }
 .detail-empty .big{
@@ -314,8 +317,8 @@
 }
 
 .detail-head{
-  display:flex;align-items:flex-start;gap:14px;margin-bottom:12px;
-  padding-bottom:14px;border-bottom:1px solid var(--border-soft);
+  display:flex;align-items:flex-start;gap:12px;margin-bottom:8px;
+  padding-bottom:8px;border-bottom:1px solid var(--border-soft);
 }
 .detail-head .mat{
   font-family:var(--font-mono);font-size:16px;color:var(--text-pri);
@@ -323,20 +326,20 @@
 }
 .detail-head .desc{
   font-family:var(--font-heading);font-weight:500;font-size:14px;
-  color:var(--accent);line-height:1.3;margin-top:3px;
+  color:var(--accent);line-height:1.3;margin-top:2px;
 }
 .detail-head .spacer{flex:1;}
 .detail-head .pill{align-self:flex-start;margin-top:2px;}
 
 .action-banner{
   background:var(--bg-panel-2);border:1px solid var(--border-soft);
-  border-left:3px solid var(--accent);padding:10px 14px;margin-bottom:14px;
-  font-family:var(--font-body);font-size:13px;color:var(--text-sec);
-  line-height:1.5;border-radius:var(--r-sm);
+  border-left:3px solid var(--accent);padding:7px 12px;margin-bottom:9px;
+  font-family:var(--font-body);font-size:12.5px;color:var(--text-sec);
+  line-height:1.4;border-radius:var(--r-sm);
 }
 .action-banner .lab{
   font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.5px;
-  text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:4px;
+  text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:2px;
 }
 .action-banner.GREEN { border-left-color:var(--status-ok); }
 .action-banner.BLUE  { border-left-color:var(--accent); }
@@ -346,9 +349,10 @@
 .action-banner.PURPLE{ border-left-color:#9B59B6; }
 
 /* ─── APP-E11 · Chart toolbar (legend toggles + caveat) ────────────────── */
+/* APP-E12 — tighter top/bottom margins; caveat sits flush under chart. */
 .chart-toolbar{
   display:flex;align-items:center;gap:14px;
-  margin:4px 2px 6px;
+  margin:0 2px 4px;
   font-family:var(--font-mono);font-size:11px;
   color:var(--text-muted);
 }
@@ -369,7 +373,7 @@
 /* chart container */
 .chart-host{
   background:#0C2D3B;border:1px solid var(--border-soft);
-  border-radius:var(--r-sm);padding:6px;margin-bottom:6px;
+  border-radius:var(--r-sm);padding:4px;margin-bottom:2px;
   overflow:hidden;
 }
 /* APP-E11 — legend-toggle hide rules. Class is toggled on .chart-host by
@@ -379,26 +383,26 @@
 
 .chart-caveat{
   font-family:var(--font-body);font-size:10.5px;font-style:italic;
-  color:var(--text-muted);line-height:1.4;
-  padding:0 4px;margin-bottom:14px;
+  color:var(--text-muted);line-height:1.35;
+  padding:0 4px;margin-bottom:9px;
 }
 
 /* key stats grid */
 .stat-grid{
-  display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;margin-bottom:14px;
+  display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;margin-bottom:9px;
 }
 @media (max-width:780px){ .stat-grid{ grid-template-columns:repeat(2,1fr); } }
 .stat-cell{
   background:var(--bg-panel-2);border:1px solid var(--border-soft);
-  padding:10px 12px;border-radius:var(--r-sm);
+  padding:6px 10px;border-radius:var(--r-sm);
 }
 .stat-cell .lab{
   font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.2px;
-  text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:4px;
+  text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:2px;
 }
 .stat-cell .v{
   font-family:var(--font-mono);font-size:14px;letter-spacing:.3px;
-  color:var(--accent);
+  color:var(--accent);line-height:1.25;
 }
 .stat-cell .v.warn{ color:var(--status-warn); }
 .stat-cell .v.crit{ color:var(--status-crit); }
@@ -715,18 +719,19 @@
 .mass-chip-open:hover{ background:rgba(31,206,216,0.10); }
 
 /* ─── MRP Settings · Current vs Recommended (material detail panel, v2) ─── */
+/* APP-E12 — row padding tightened; header padding tightened. */
 .mrp-compare{
-  margin:8px 0 18px;
+  margin:4px 0 10px;
   background:var(--bg-panel);
   border:1px solid var(--border-soft);
 }
 .mrp-compare-head{
-  padding:10px 16px;
+  padding:6px 14px;
   border-bottom:1px solid var(--border-soft);
   display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;
 }
 .mrp-compare-head h4{
-  font-family:var(--font-display); font-weight:700; font-size:13px;
+  font-family:var(--font-display); font-weight:700; font-size:12.5px;
   letter-spacing:1.4px; text-transform:uppercase; color:var(--text-pri);
   margin:0;
 }
@@ -738,7 +743,7 @@
   width:100%; border-collapse:collapse; font-family:var(--font-body); font-size:13px;
 }
 .mrp-compare-table th, .mrp-compare-table td{
-  padding:10px 14px; border-bottom:1px solid rgba(155,171,168,.06); vertical-align:middle;
+  padding:5px 14px; border-bottom:1px solid rgba(155,171,168,.06); vertical-align:middle;
 }
 .mrp-compare-table tbody tr:last-child td{ border-bottom:none; }
 .mrp-compare-table th{
