@@ -550,14 +550,16 @@
       if (months < 12) issues.push({ code:'mb51_span', sev:'crit', msg:`MB51 spans only ${months} months — minimum 12 required` });
 
       const movs = uniq(mb51.map(r => String(r.movementType || '').trim())).filter(Boolean).sort();
-      const expected = ['261','262','201','202'];
+      const expected = ['109','261','262','201','202'];
       const unexpected = movs.filter(m => !expected.includes(m));
       if (unexpected.length) warnings.push({ code:'mb51_movts', sev:'warn', msg:`MB51 has unexpected movement types: ${unexpected.join(', ')} — will be ignored downstream` });
 
       const has261 = movs.includes('261');
       const has262 = movs.includes('262');
+      const has109 = movs.includes('109');
       if (!has261) issues.push({ code:'mb51_no_261', sev:'crit', msg:'MB51 has no 261 (goods issue) movements' });
       if (!has262) warnings.push({ code:'mb51_no_262', sev:'warn', msg:'MB51 has no 262 (return) movements — net = gross' });
+      if (!has109) warnings.push({ code:'mb51_no_109', sev:'warn', msg:'MB51 has no 109 (goods receipt) movements — the stock-on-hand line on the analysis chart will show drawdowns only. Re-export with movement type 109 included to see replenishment.' });
 
       const uniqMats = new Set(mb51.map(r => String(r.material || '').trim()).filter(Boolean));
       tiles.push({ lab:'MB51 unique materials', v:uniqMats.size.toLocaleString(), desc:'distinct material numbers' });

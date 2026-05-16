@@ -418,6 +418,22 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit">
         Files touched: <code>shared/inventory-back-calc.js</code> (MVT_SIGN cleanup + comment rewrite), <code>shared/pipeline.js</code> (pre-group MB51 by material; pass full slice to backCalcSOH), <code>shared/canonical-schema.js</code> (plain-English description), <code>shared/chart.js</code> (legend + axis labels), <code>shared/config.js</code> (prompt template chart description), <code>intake/intake.js</code> (label rename), <code>settings/settings.js</code> (label rename), <code>analysis/analysis.js</code> (stat tile label), <code>record-of-change.html</code> (this FIX-1 entry).
       </div>
+
+      <h4>APP-E10 · Intake warning when MB51 has no goods receipts</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding during live test of APP-E1: the stock-on-hand line on the analysis chart was showing drawdowns only — never any replenishment movement. Root cause: the operator's MB51 export was filtered to consumption movements only (<code>261 / 201 / 262 / 202</code>) at the SAP side, so the <code>109</code> site goods-receipts never made it into the file. The back-calc had no receipts to walk through, so the line declined monotonically and looked broken. The fix surfaces this at intake so the operator catches it before running the analysis.</li>
+        <li><b>What the operator sees.</b> When MB51 contains no movement type <code>109</code> rows, the Step 3 data-quality gate now emits a soft warning: <em>"MB51 has no 109 (goods receipt) movements — the stock-on-hand line on the analysis chart will show drawdowns only. Re-export with movement type 109 included to see replenishment."</em> The warning is review-required (not halt) and renders alongside the existing data-quality warnings (no 262 returns, unexpected movement types, IW39 coverage, master reconciliation). The operator can still proceed if they choose.</li>
+        <li><b>Also: <code>109</code> added to the DQ gate's expected movement list.</b> FIX-1 added <code>109</code> to the analytical pipeline's <code>MVT_SIGN</code> map but did not update the intake DQ gate's list of expected movement types — so well-formed MB51 files containing <code>109</code> rows were triggering the "unexpected movement types" warning. Corrected: the expected list is now <code>['109','261','262','201','202']</code>.</li>
+        <li>No schema change. No new files. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code> (same-day follow-up to APP-E1, not a new version).</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>intake/intake.js</code> (DQ gate — <code>109</code> added to expected MVTs; new <code>mb51_no_109</code> warning push), <code>record-of-change.html</code> (this APP-E10 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>intake/intake.js</code> from <code>_rollback/MB51-receipt-warning-pre/</code> (single file). Stage C — <code>git revert</code> the APP-E10 commit on the clone-to-tmp working repo; push the revert. <b>The rollback boundary is clean</b>: no schema change, no parser change, no pipeline change, no chart change. The only behavioural difference is whether the DQ gate emits one extra warning when an MB51 lacks <code>109</code> rows — saved intakes from before, during, and after this change are behaviourally identical at the canonical-JSON boundary.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->
