@@ -19,7 +19,12 @@
       material:     ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.', 'SKU', 'Part', 'Part No', 'Part No.', 'Part Number'],
       description:  ['Material Description', 'Material descr.', 'Description', 'Mat Desc'],
       quantity:     ['Quantity', 'Qty', 'Qty in unit of entry', 'Qty in unit', 'Qty in UnE'],
-      movementType: ['Movement Type', 'Movement type', 'MvT', 'Mvt Type']
+      movementType: ['Movement Type', 'Movement type', 'MvT', 'Mvt Type'],
+      /* APP-T-01b — plant alias added so per-file plant breakdown is visible
+         in the Intake drop-stats panel. No analytical change in this chunk —
+         pipeline still ignores plant on MB51 rows. Plant-scoped filtering /
+         scope picker / Settings toggle land in a follow-up chunk. */
+      plant:        ['Plant']
     },
     iw39: {
       order:          ['Order', 'Order Number'],
@@ -216,7 +221,8 @@
       material:     'string',
       description:  'string',
       quantity:     'number',
-      movementType: 'string'
+      movementType: 'string',
+      plant:        'string'  /* APP-T-01b */
     },
     iw39: {
       order:          'string',
