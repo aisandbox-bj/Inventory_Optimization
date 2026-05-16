@@ -471,6 +471,22 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>analysis/analysis.css</code> from <code>_rollback/APP-E12-pre/</code> (single file matters; the analysis.js and record-of-change snapshots are companions). Stage C — <code>git revert</code> the APP-E12 commit. <b>The rollback boundary is clean</b>: pure CSS spacing change, no logic, no schema, no canonical-JSON effect.
       </div>
+
+      <h4>APP-E13 · Analysis-page action row — grouped by output type + JSON download</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding 2026-05-16 PM: the action row at the bottom of the Analysis page is a flat strip of seven buttons with similar styling and ambiguous names like "Export this bucket" / "Export ALL (combined)". Hard to tell at a glance which button does what. Two operator-flagged needs in one chunk: (a) group by output type so the row is readable, (b) add a "Download canonical JSON" button — previously the only way to grab the analysis JSON was from intake, lost once you moved to the Analysis page.</li>
+        <li><b>What the operator sees.</b> The action row now reads left-to-right as five clearly-labelled groups: <strong>Data quality</strong> · Inv Adj review. <strong>PDF</strong> · Pack (selected). <strong>Excel</strong> · this bucket / all (1 file) / all (separate files). <strong>JSON</strong> · Canonical dataset. <strong>LLM</strong> · Mass review (run) / Reload saved. Each group sits under a small mono uppercase label. Button names rewritten to say what they DO without the tooltip having to carry the meaning.</li>
+        <li><b>JSON download (new).</b> "JSON · Canonical dataset" serializes the in-memory <code>state.json</code> (everything the pipeline read in — parsed MB51 / IW39 / Fleet / Inventory Master rows, parameters, metadata) and triggers a local browser download. Filename: <code>&lt;assessment&gt;-&lt;runDate&gt;-canonical.json</code>. Pure local — nothing leaves the browser. Reloadable later via the Intake page's reuse flow.</li>
+        <li>No SCHEMA_VERSION bump. No new shared modules. No analytical change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>analysis/analysis.js</code> (<code>renderExportActions</code> rewritten to grouped HTML; new <code>downloadCanonicalJson</code> + <code>setExportProgress</code> helpers; click handler wired for <code>#btnDownloadJson</code>), <code>analysis/analysis.css</code> (new <code>.export-group</code> / <code>.export-group-label</code> / <code>.export-group-buttons</code> rules; <code>.export-actions</code> padding 18/24 → 14/20 with bigger gap and bottom-aligned cluster), <code>record-of-change.html</code> (this APP-E13 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>analysis/analysis.js</code> + <code>analysis/analysis.css</code> from <code>_rollback/APP-E13-pre/</code>. Stage C — <code>git revert</code> the APP-E13 commit. <b>The rollback boundary is clean</b>: render-only UI change, no schema, no pipeline, no LLM, no canonical-JSON content change. The new "Canonical dataset" button reads <code>state.json</code> directly; absence of the button in the rolled-back version means no JSON download from Analysis, but the data itself is unchanged.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->

@@ -484,12 +484,27 @@
 }
 
 /* ─── Export actions ────────────────────────────────────────────────────── */
+/* APP-E13 (2026-05-16) — buttons grouped by output type (Data quality / PDF /
+   Excel / JSON / LLM) with a small mono label above each cluster. Reduces
+   "which button does what" cognitive load and makes the JSON-download
+   addition discoverable rather than buried in a flat row. */
 .export-actions{
   background:var(--bg-panel);border:1px solid var(--border-soft);
-  border-radius:var(--r-sm);padding:18px 24px;display:flex;gap:12px;align-items:center;
-  flex-wrap:wrap;
+  border-radius:var(--r-sm);padding:14px 20px;display:flex;gap:16px;
+  align-items:flex-end;flex-wrap:wrap;
 }
 .export-actions .label{margin-right:auto;}
+.export-group{
+  display:flex;flex-direction:column;gap:5px;
+}
+.export-group-label{
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.6px;
+  text-transform:uppercase;color:var(--text-muted);
+  padding-left:2px;
+}
+.export-group-buttons{
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+}
 .export-progress{
   font-family:var(--font-mono);font-size:11px;color:var(--accent);
   letter-spacing:.5px;animation:pulse 1.2s ease-in-out infinite;

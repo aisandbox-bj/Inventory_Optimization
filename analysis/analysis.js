@@ -846,15 +846,48 @@
   ═════════════════════════════════════════════════════════════════════════ */
   function renderExportActions(){
     const host = $('#exportActions');
+    // APP-E13 — grouped action row. Order chosen so the most-used path runs
+    // left-to-right: open the data-quality review, pick PDF/Excel/JSON
+    // outputs, then optionally run/reload an LLM review.
     host.innerHTML = `
-      <div class="label" style="margin-right:auto;">Bulk operations</div>
-      <button id="btnInvAdj" class="ghost" title="Re-open the Inventory Adjustment Review modal. Flags MB51 dates with anomalously high issue-transaction counts (likely cycle counts) and excludes confirmed dates from rate calculations.">⚠ Inv Adj review</button>
-      <button id="btnPdfPack" class="primary" title="Export a PDF pack — one page per selected material (chart + key stats + MRP comparison + HCE + Inv Adj). Right-click a row in the list to 'Mark for PDF print', then click here.">⤓ Export PDF Pack</button>
-      <button id="btnMassReview" class="primary" title="Pick up to 50 materials from this bucket and run the LLM against each one in sequence. Produces an Excel + JSON deliverable. In-memory only — wiped on modal close.">✦ Mass LLM Review</button>
-      <button id="btnLoadMassReview" class="ghost" title="Reload a previously-downloaded mass-review JSON. Use this after a session was wiped (closed) to view the saved LLM annotations again. The matching canonical intake JSON must already be loaded on this page.">⤒ Reload saved review</button>
-      <button id="btnExportBucket" class="primary">⤓ Export this bucket</button>
-      <button id="btnExportCombined" class="primary">⤓ Export ALL (combined)</button>
-      <button id="btnExportAll">⤓ Export all (separate files)</button>
+      <div class="export-group">
+        <span class="export-group-label">Data quality</span>
+        <div class="export-group-buttons">
+          <button id="btnInvAdj" class="ghost" title="Open the Inventory Adjustment review modal — flags MB51 dates with anomalously high issue-transaction counts (likely cycle counts) so they can be excluded from rate math.">⚠ Inv Adj review</button>
+        </div>
+      </div>
+
+      <div class="export-group">
+        <span class="export-group-label">PDF</span>
+        <div class="export-group-buttons">
+          <button id="btnPdfPack" class="primary" title="One PDF, one page per selected material (chart + key stats + MRP comparison + HCE + Inv Adj). Right-click a row in the list to 'Mark for PDF print', then click here.">⤓ PDF Pack (selected)</button>
+        </div>
+      </div>
+
+      <div class="export-group">
+        <span class="export-group-label">Excel</span>
+        <div class="export-group-buttons">
+          <button id="btnExportBucket" class="primary" title="One Excel workbook for the currently-selected bucket only.">⤓ Excel — this bucket</button>
+          <button id="btnExportCombined" class="primary" title="One Excel workbook containing every bucket in this analysis, on separate tabs.">⤓ Excel — all (1 file)</button>
+          <button id="btnExportAll" class="ghost" title="One Excel workbook per bucket, downloaded in sequence (useful when the combined file is too large to open).">⤓ Excel — all (separate files)</button>
+        </div>
+      </div>
+
+      <div class="export-group">
+        <span class="export-group-label">JSON</span>
+        <div class="export-group-buttons">
+          <button id="btnDownloadJson" class="primary" title="Download the canonical intake JSON for this analysis (everything the pipeline read in — parsed MB51, IW39, Fleet, Inventory Master, parameters, metadata). Safe to share / reload later via the Intake page.">⤓ Canonical dataset</button>
+        </div>
+      </div>
+
+      <div class="export-group">
+        <span class="export-group-label">LLM</span>
+        <div class="export-group-buttons">
+          <button id="btnMassReview" class="primary" title="Pick up to 50 materials from this bucket and run the LLM against each one in sequence. Produces an Excel + JSON deliverable. In-memory only — wiped on modal close unless you download.">✦ Mass review (run)</button>
+          <button id="btnLoadMassReview" class="ghost" title="Reload a previously-downloaded Mass-Review JSON. Use this after a session was wiped (closed) to view the saved LLM annotations again. The matching canonical intake JSON must already be loaded on this page.">⤒ Reload saved review</button>
+        </div>
+      </div>
+
       <span id="exportProgress" class="export-progress" style="display:none;"></span>
       <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
     `;
@@ -867,6 +900,40 @@
     $('#btnExportBucket').addEventListener('click', exportThisBucket);
     $('#btnExportCombined').addEventListener('click', exportCombined);
     $('#btnExportAll').addEventListener('click', exportAllBuckets);
+    $('#btnDownloadJson').addEventListener('click', downloadCanonicalJson);
+  }
+
+  /* ─── APP-E13 · Canonical-dataset JSON download ───────────────────────
+     Serializes the in-memory canonical intake JSON (everything the pipeline
+     read in) and triggers a browser download. Filename derives from the
+     metadata.assessmentName + runDate so it lands as a re-loadable artifact.
+     Nothing leaves the browser — pure local download. */
+  function downloadCanonicalJson(){
+    if (!state.json) { setExportProgress('No analysis loaded'); return; }
+    try {
+      const json = state.json;
+      const text = JSON.stringify(json, null, 2);
+      const safe = s => String(s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+      const name = safe(json?.metadata?.assessmentName || 'assessment');
+      const date = (state.result?.runDate || json?.metadata?.runDate || '').slice(0, 10);
+      const fname = `${name}${date ? '-' + date : ''}-canonical.json`;
+      const blob = new Blob([text], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setExportProgress(`Downloaded ${fname}`);
+      setTimeout(() => setExportProgress(''), 3000);
+    } catch (err) {
+      setExportProgress(`JSON download failed: ${err.message}`);
+    }
+  }
+  function setExportProgress(msg){
+    const el = $('#exportProgress');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? '' : 'none';
   }
 
   async function exportThisBucket(){
