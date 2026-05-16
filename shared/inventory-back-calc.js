@@ -250,12 +250,122 @@
     };
   }
 
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-E11 — Stockout-aware P2 anchoring + dominance detection
+     ═════════════════════════════════════════════════════════════════════════
+     The APP-E1 back-calc surfaces stockout windows from the MB51 movements.
+     APP-E11 uses those windows to decide:
+       (a) where to anchor the P2 (recent-rate) comparison window when the
+           material has been in a stockout for too long; the answer is the
+           LAST consumption date, not runDate — analysing zero-consumption
+           ongoing-stockout days as "demand" misleads the rate-drop verdict.
+       (b) whether the chosen P2 window is so dominated by stockouts that
+           a numeric P2-vs-P1 verdict cannot be trusted at all (multiple
+           stockout windows inside P2); in that case the pipeline flags the
+           material STOCKOUT-DOMINATED and the traffic-light is forced GREY.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Does the tail of the back-calc series end in an ongoing stockout of
+   * sufficient duration to invalidate runDate-anchored P2?
+   *
+   * "Ongoing at runDate" means the last stockout window's `end` is at or
+   * within 1 day of runDate. "Sufficient duration" defaults to 7 days
+   * (configurable). Returns boolean.
+   *
+   * @param {Array}  stockoutWindows — output from backCalcSOH
+   * @param {string} runDate         — ISO date the analysis is run against
+   * @param {number} [minDays=7]     — minimum stockout duration to count
+   */
+  function isTailInOngoingStockout(stockoutWindows, runDate, minDays) {
+    if (!Array.isArray(stockoutWindows) || stockoutWindows.length === 0) return false;
+    const rdMs = toMs(runDate);
+    if (rdMs == null) return false;
+    const thr = (typeof minDays === 'number' && minDays > 0) ? minDays : 7;
+    // Inspect the LATEST stockout window (last entry — they're chronological)
+    const last = stockoutWindows[stockoutWindows.length - 1];
+    const endMs = toMs(last.end);
+    if (endMs == null) return false;
+    // "Ongoing at runDate" — end is at or within 1 day of runDate
+    const stillOngoing = (rdMs - endMs) <= 86400000;
+    if (!stillOngoing) return false;
+    const days = (typeof last.days === 'number') ? last.days : (daysBetween(last.start, last.end) + 1);
+    return days >= thr;
+  }
+
+  /**
+   * Count distinct stockout windows that overlap [rangeStart, rangeEnd].
+   * Used to detect "stockout-dominated" P2 windows.
+   *
+   * @param {Array}  stockoutWindows
+   * @param {string} rangeStart — ISO date inclusive
+   * @param {string} rangeEnd   — ISO date inclusive
+   * @returns {number}
+   */
+  function countStockoutsInRange(stockoutWindows, rangeStart, rangeEnd) {
+    if (!Array.isArray(stockoutWindows) || stockoutWindows.length === 0) return 0;
+    const rsMs = toMs(rangeStart);
+    const reMs = toMs(rangeEnd);
+    if (rsMs == null || reMs == null) return 0;
+    let n = 0;
+    for (const w of stockoutWindows) {
+      const ws = toMs(w.start);
+      const we = toMs(w.end);
+      if (ws == null || we == null) continue;
+      // Standard interval overlap test
+      if (ws <= reMs && we >= rsMs) n++;
+    }
+    return n;
+  }
+
+  /**
+   * Choose the P2 (recent-rate) comparison window.
+   *
+   * Default behaviour: anchor at runDate, step back p2Months.
+   *
+   * APP-E11 override: when `tailInOngoingStockout` is true AND a valid
+   * `lastConsDate` is available, re-anchor at lastConsDate — analysing the
+   * trailing ongoing-stockout days as "recent demand" misleads the rate
+   * comparison. The recent-rate window then represents the operator's
+   * last observation of true demand before the stockout began.
+   *
+   * @param {Object} args
+   * @param {string} args.runDate                 — ISO date
+   * @param {string|null} args.lastConsDate       — ISO date or null
+   * @param {number} args.p2Months                — months to step back
+   * @param {boolean} args.tailInOngoingStockout  — see isTailInOngoingStockout()
+   * @returns {{ p2Start:string, p2End:string, anchor:'runDate'|'lastConsumption' }}
+   */
+  function chooseP2Window({ runDate, lastConsDate, p2Months, tailInOngoingStockout }) {
+    const months = Math.max(1, p2Months || 3);
+    const rdMs = toMs(runDate);
+    if (rdMs == null) return { p2Start: null, p2End: null, anchor: 'runDate' };
+    if (tailInOngoingStockout && lastConsDate) {
+      const lcMs = toMs(lastConsDate);
+      if (lcMs != null) {
+        return {
+          p2Start: toIsoDay(addMonths(lcMs, -months)),
+          p2End:   toIsoDay(lcMs),
+          anchor:  'lastConsumption'
+        };
+      }
+    }
+    return {
+      p2Start: toIsoDay(addMonths(rdMs, -months)),
+      p2End:   toIsoDay(rdMs),
+      anchor:  'runDate'
+    };
+  }
+
   /* ─── Public API ──────────────────────────────────────────────────────── */
   global.InventoryBackCalc = Object.freeze({
     backCalcSOH,
     lastConsumptionDate,
     classifyRateDropCause,
     buildWindow,
+    isTailInOngoingStockout,
+    countStockoutsInRange,
+    chooseP2Window,
     MVT_SIGN
   });
 

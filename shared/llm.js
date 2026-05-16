@@ -48,8 +48,14 @@
     // APP-E1 (v2.1.3) — stockout-aware drop signal. When a sharp drop is
     // traceable to a stockout window in the back-calc, name the cause so the
     // model doesn't narrate "demand softening" on what's really a supply gap.
+    // APP-E11 — STOCKOUT-DOMINATED short-circuits everything: when multiple
+    // stockouts fall inside the P2 window, the rate verdict isn't trustworthy
+    // and the math has already forced GREY. Tell the model not to push a
+    // demand-rate narrative; the issue is supply continuity.
     let rateChangeFlag;
-    if (material.rateDropFlag) {
+    if (material.stockoutDominated) {
+      rateChangeFlag = '⚠ STOCKOUT-DOMINATED RECENT-RATE WINDOW — multiple stockouts inside P2 make the rate untrustworthy; verify supply continuity, do NOT recommend Min/Max change on the basis of P2 rate';
+    } else if (material.rateDropFlag) {
       if (material.rateDropCause === 'STOCKOUT_DRIVEN') {
         rateChangeFlag = '⚠ SHARP DROP — STOCKOUT-DRIVEN (consumption stopped because stock ran out, not because demand dropped)';
       } else if (material.rateDropCause === 'GENUINE_DEMAND_DROP') {
@@ -101,7 +107,11 @@
       // APP-E1 tokens — surface stockout diagnostic to the prompt template
       lastConsumptionDate: material.lastConsumptionDate || '—',
       rateDropCause:       material.rateDropCause || '—',
-      stockoutSummary
+      stockoutSummary,
+      // APP-E11 tokens — P2 anchor + stockout-dominated state
+      p2AnchorMode:        material.p2AnchorMode || 'runDate',
+      stockoutDominated:   !!material.stockoutDominated,
+      p2StockoutCount:     (material.p2StockoutCount != null) ? material.p2StockoutCount : 0
     };
   }
 

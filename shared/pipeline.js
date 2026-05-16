@@ -325,6 +325,7 @@
   /* ─── Traffic-light decision (port of assess() in 04_mrp_analysis.py) ───── */
   /**
    * Rules in priority order:
+   *  0. stockoutDominated (APP-E11)           → GREY   ("stockout-dominated P2 — manual review")
    *  1. p2Flag != OK or p2Rate == 0           → GREY   ("no recent consumption")
    *  2. mrpType == "NOT IN MASTER"             → GREY   ("excluded")
    *  3. recMin is null                         → GREY   ("not calculable")
@@ -341,7 +342,19 @@
    * outcome is upgraded to ORANGE with a "few events" rationale. RED, GREY,
    * and PURPLE keep their priority (they're already review-priority).
    */
-  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params){
+  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated){
+    // ── APP-E11 · STOCKOUT-DOMINATED gate (rule 0) ──────────────────────
+    // More than one stockout window inside the chosen P2 window — the P2
+    // rate (and therefore the rate-change verdict) is not trustworthy.
+    // Forced GREY with a stockout-specific message; supply continuity
+    // should be addressed before any Min/Max change.
+    if (stockoutDominated) {
+      return finalise({
+        code:'GREY',
+        action:'Stockout-dominated recent-rate window — multiple stockouts inside the P2 window make the rate unreliable. Verify supply continuity before changing Min/Max.',
+        recMin:null, recMax:null
+      }, woCount);
+    }
     // ── GREY gates ───────────────────────────────────────────────────────
     if (p2f !== 'OK' || p2r === 0) {
       return finalise({ code:'GREY', action:'Refer for manual review — no recent (P2) consumption', recMin:null, recMax:null }, woCount);
@@ -715,6 +728,91 @@
       for (const q of qualifying) {
         const tx = txByMat.get(q.material) || [];
 
+        // ── Master lookup (moved up — back-calc needs `stock` early) ──────
+        const masterRow     = masterIdx.get(q.material);
+        const mrpType       = masterRow ? (masterRow.mrpInd || '') : 'NOT IN MASTER';
+        const stock         = masterRow ? masterRow.totQtyOh : null;
+        const cmin          = masterRow ? masterRow.mrpMin   : null;
+        const cmax          = masterRow ? masterRow.mrpMax   : null;
+        const safetyStock   = masterRow ? masterRow.safetyStock : null;
+        const materialGroup = masterRow ? (masterRow.materialGroup || '') : '';
+        const manufacturer  = masterRow ? (masterRow.manufacturer  || '') : '';
+        const totValueOh    = masterRow ? masterRow.totValueOh : null;
+
+        // ── Signal scan: net issues/returns + last consumption date ───────
+        // Pulled up so APP-E11's P2-anchoring decision can see lastConsDate.
+        let _issuesQty = 0, _returnsQty = 0, _lastIssueDate = '';
+        for (const r of tx) {
+          const mt = String(r.movementType || '').trim();
+          if (!VALID_TYPES.has(mt)) continue;
+          const qv = Math.abs(parseFloat(r.quantity) || 0);
+          if (ISSUE_TYPES.has(mt)) {
+            _issuesQty += qv;
+            const d = String(r.postingDate || '');
+            if (d > _lastIssueDate) _lastIssueDate = d;
+          } else if (RETURN_TYPES.has(mt)) {
+            _returnsQty += qv;
+          }
+        }
+        const lastConsumptionDate = _lastIssueDate || null;
+
+        // ── APP-E1 · Back-calc SOH series (pulled up — APP-E11 needs ──────
+        // stockoutWindows to make the P2 anchoring decision below).
+        let stockOnHandSeries = [];
+        let stockoutWindows   = [];
+        let socBackCalcAnchor = null;
+        if (typeof InventoryBackCalc !== 'undefined' && typeof stock === 'number') {
+          const backCalcMonths = (typeof params?.socBackCalcMonths === 'number' && params.socBackCalcMonths > 0)
+                                    ? params.socBackCalcMonths
+                                    : 6;
+          const win = InventoryBackCalc.buildWindow({
+            lastConsDate:   lastConsumptionDate,
+            runDate,
+            backCalcMonths
+          });
+          if (win) {
+            socBackCalcAnchor = win.anchor;
+            // FIX-1 — pass the FULL per-material MB51 slice (includes 109
+            // site receipts), not the bucket-filtered `tx`.
+            const fullMb51 = mb51FullByMat.get(q.material) || [];
+            const out = InventoryBackCalc.backCalcSOH({
+              material:     q.material,
+              currentSOH:   stock,
+              mb51Rows:     fullMb51,
+              windowStart:  win.windowStart,
+              windowEnd:    win.windowEnd
+            });
+            stockOnHandSeries = out.series;
+            stockoutWindows   = out.stockoutWindows;
+          }
+        }
+
+        // ── APP-E11 · Per-material P2 anchor selection ───────────────────
+        // If the back-calc tail is in an ongoing stockout > 7 days, anchor
+        // P2 at lastConsumptionDate (not runDate) — analysing the trailing
+        // ongoing-stockout days as "recent demand" misleads the rate-drop
+        // verdict. Default behaviour (anchor at runDate) preserved when
+        // there is no qualifying ongoing stockout. The chosen window
+        // shadows the outer-scope p2Start/p2End for the rest of this
+        // iteration ONLY; the top-level pipeline return still uses defaults.
+        let p2AnchorMode = 'runDate';
+        let p2Start = addMonths(runDate, -p2Months);
+        let p2End   = runDate;
+        if (typeof InventoryBackCalc !== 'undefined') {
+          const tailInStockout = InventoryBackCalc.isTailInOngoingStockout(stockoutWindows, runDate, 7);
+          const p2win = InventoryBackCalc.chooseP2Window({
+            runDate,
+            lastConsDate: lastConsumptionDate,
+            p2Months,
+            tailInOngoingStockout: tailInStockout
+          });
+          if (p2win && p2win.p2Start && p2win.p2End) {
+            p2Start = p2win.p2Start;
+            p2End = p2win.p2End;
+            p2AnchorMode = p2win.anchor;
+          }
+        }
+
         // P1/P2 rates exclude any transactions on confirmed Inv-Adj dates
         const { rate: p1r, flag: p1f } = calcPeriodRate(tx, p1Start, p1End, p1Months, invAdjSet);
         const { rate: p2r, flag: p2f } = calcPeriodRate(tx, p2Start, p2End, p2Months, invAdjSet);
@@ -738,28 +836,32 @@
           adjP2 = { rate: r.rate, flag: r.flag };
         }
 
+        // ── APP-E11 · Stockout-dominated detection ───────────────────────
+        // If MORE THAN ONE stockout window falls inside the chosen P2 window,
+        // P2 is too dominated by stockouts to produce a trustworthy
+        // demand-rate verdict. The traffic-light is forced GREY (handled
+        // inside assess()), and rateDropFlag / rateRiseFlag / rateChange
+        // are suppressed below.
+        let p2StockoutCount = 0;
+        let stockoutDominated = false;
+        if (typeof InventoryBackCalc !== 'undefined' && stockoutWindows.length) {
+          p2StockoutCount = InventoryBackCalc.countStockoutsInRange(stockoutWindows, p2Start, p2End);
+          stockoutDominated = p2StockoutCount > 1;
+        }
+
         const pattern = classifyPattern(tx, params);
         const cum = cumulativeSeries(tx);
-        const rateChange =
-          (p1f === 'OK' && p1r > 0 && p2f === 'OK')
-            ? Math.round((p2r - p1r) / p1r * 1000) / 10
-            : null;
-
-        const masterRow = masterIdx.get(q.material);
-        const mrpType       = masterRow ? (masterRow.mrpInd || '') : 'NOT IN MASTER';
-        const stock         = masterRow ? masterRow.totQtyOh : null;
-        const cmin          = masterRow ? masterRow.mrpMin   : null;
-        const cmax          = masterRow ? masterRow.mrpMax   : null;
-        const safetyStock   = masterRow ? masterRow.safetyStock : null;
-        const materialGroup = masterRow ? (masterRow.materialGroup || '') : '';
-        const manufacturer  = masterRow ? (masterRow.manufacturer  || '') : '';
-        const totValueOh    = masterRow ? masterRow.totValueOh : null;
+        const rateChange = stockoutDominated
+          ? null
+          : ((p1f === 'OK' && p1r > 0 && p2f === 'OK')
+              ? Math.round((p2r - p1r) / p1r * 1000) / 10
+              : null);
 
         const rmin = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * minMonths) : null;
         const rmax = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
 
         const woCount = countIssueWorkOrders(tx);
-        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params);
+        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated);
         bucketSummary[tl.code] = (bucketSummary[tl.code] || 0) + 1;
         bucketSummary.total++;
         summary[tl.code]  = (summary[tl.code]  || 0) + 1;
@@ -776,22 +878,8 @@
                               ? 'V1'
                               : (mrpType || 'PD');
 
-        // v2.1.0 signal fields (additive — fed into the LLM prompt's WATCH-FOR
-        // block so the model can name the specific signal that tripped).
-        // No client identifiers; purely derived from transaction data.
-        let _issuesQty = 0, _returnsQty = 0, _lastIssueDate = '';
-        for (const r of tx) {
-          const mt = String(r.movementType || '').trim();
-          if (!VALID_TYPES.has(mt)) continue;
-          const qv = Math.abs(parseFloat(r.quantity) || 0);
-          if (ISSUE_TYPES.has(mt)) {
-            _issuesQty += qv;
-            const d = String(r.postingDate || '');
-            if (d > _lastIssueDate) _lastIssueDate = d;
-          } else if (RETURN_TYPES.has(mt)) {
-            _returnsQty += qv;
-          }
-        }
+        // v2.1.0 signal fields — netSign / daysSinceLastIssue use the
+        // _issuesQty / _returnsQty / _lastIssueDate computed up top.
         let netSign;
         if (_issuesQty === 0 && _returnsQty === 0)   netSign = 'NO_DATA';
         else if (_issuesQty - _returnsQty < 0)       netSign = 'NEGATIVE (returns dominate)';
@@ -802,54 +890,24 @@
           const _ms = Date.parse(runDate) - Date.parse(_lastIssueDate);
           if (Number.isFinite(_ms)) daysSinceLastIssue = Math.max(0, Math.floor(_ms / 86400000));
         }
-        const rateDropFlag = (p1f === 'OK' && p1r > 0 && p2f === 'OK' && p2r <= 0.6 * p1r);
-        const rateRiseFlag = (p1f === 'OK' && p1r > 0 && p2f === 'OK' && p2r >= 1.6 * p1r);
+        // APP-E11: when STOCKOUT-DOMINATED, suppress rateDropFlag / rateRiseFlag —
+        // the rate comparison is not trustworthy under stockout dominance.
+        const rateDropFlag = !stockoutDominated && (p1f === 'OK' && p1r > 0 && p2f === 'OK' && p2r <= 0.6 * p1r);
+        const rateRiseFlag = !stockoutDominated && (p1f === 'OK' && p1r > 0 && p2f === 'OK' && p2r >= 1.6 * p1r);
         const invAdjCount  = invAdj.length;
 
-        // ─── APP-E1 · Stockout-aware drop diagnostic (v2.1.3-dev) ─────────
-        // Back-calc SOH for the "X months run-up to last consumption" window,
-        // then classify whether any rateDropFlag is stockout-driven or genuine.
-        // Guarded so older code paths still work if inventory-back-calc.js
-        // isn't loaded (graceful no-op).
-        let lastConsumptionDate = _lastIssueDate || null;
-        let stockOnHandSeries   = [];
-        let stockoutWindows     = [];
-        let rateDropCause       = null;
-        let stockoutDrivenDrop  = false;
-        let socBackCalcAnchor   = null;
-        if (typeof InventoryBackCalc !== 'undefined' && typeof stock === 'number') {
-          const backCalcMonths = (typeof params?.socBackCalcMonths === 'number' && params.socBackCalcMonths > 0)
-                                    ? params.socBackCalcMonths
-                                    : 6;
-          const win = InventoryBackCalc.buildWindow({
-            lastConsDate:   lastConsumptionDate,
-            runDate,
-            backCalcMonths
+        // ── APP-E1 · Stockout-driven drop classification ─────────────────
+        // (Back-calc is already done above; this just runs the classifier
+        // against the chosen P2 window.)
+        let rateDropCause      = null;
+        let stockoutDrivenDrop = false;
+        if (typeof InventoryBackCalc !== 'undefined' && rateDropFlag && stockoutWindows.length) {
+          rateDropCause = InventoryBackCalc.classifyRateDropCause({
+            rateDropFlag,
+            p2Start, p2End,
+            stockoutWindows
           });
-          if (win) {
-            socBackCalcAnchor = win.anchor;
-            // FIX-1 — pass the FULL per-material MB51 slice (includes 109
-            // site receipts), not `tx` which is bucket-filtered to consumption
-            // movement types only. Without 109s the back-calc only saw issues
-            // and SOH appeared to monotonically rise as we walked back —
-            // "infinite supply" artefact.
-            const fullMb51 = mb51FullByMat.get(q.material) || [];
-            const out = InventoryBackCalc.backCalcSOH({
-              material:     q.material,
-              currentSOH:   stock,
-              mb51Rows:     fullMb51,
-              windowStart:  win.windowStart,
-              windowEnd:    win.windowEnd
-            });
-            stockOnHandSeries = out.series;
-            stockoutWindows   = out.stockoutWindows;
-            rateDropCause     = InventoryBackCalc.classifyRateDropCause({
-              rateDropFlag,
-              p2Start, p2End,
-              stockoutWindows
-            });
-            stockoutDrivenDrop = (rateDropCause === 'STOCKOUT_DRIVEN');
-          }
+          stockoutDrivenDrop = (rateDropCause === 'STOCKOUT_DRIVEN');
         }
 
         materials.push({
@@ -898,7 +956,11 @@
           stockoutWindows,                         // [{start, end, days}] periods where SOH ≤ 0
           rateDropCause,                           // 'STOCKOUT_DRIVEN' | 'GENUINE_DEMAND_DROP' | null
           stockoutDrivenDrop,                      // boolean — true when rateDropFlag + stockout window overlaps P2
-          socBackCalcAnchor,                       // 'lastConsumption' | 'today' | null — which date anchored the window
+          socBackCalcAnchor,                       // 'lastConsumption' | 'today' | null — which date anchored the back-calc window
+          // APP-E11 (v2.1.3) — P2 anchor + stockout-dominated diagnostic
+          p2AnchorMode,                            // 'runDate' | 'lastConsumption' — where P2 window was anchored for this material
+          p2StockoutCount,                         // integer — number of distinct stockout windows overlapping the chosen P2 window
+          stockoutDominated,                       // boolean — true when p2StockoutCount > 1 (P2 too unreliable for verdict)
           trafficLight: tl.code,
           action:       tl.action,
           // Multi-model is filled in post-bucketing (see below). Defaults to 'Single'.

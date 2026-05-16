@@ -88,7 +88,8 @@
       'stroke-linejoin': opts.join || 'miter',
       'stroke-linecap':  opts.cap  || 'square',
       'stroke-dasharray': opts.dash || null,
-      opacity: opts.opacity != null ? opts.opacity : 1
+      opacity: opts.opacity != null ? opts.opacity : 1,
+      class: opts.class || null
     });
   }
 
@@ -213,7 +214,8 @@
       }
       points.push(`${x},${y}`);
     }
-    svg.appendChild(polyline(points.join(' '), { stroke: PAL.cumLine, width: 2 }));
+    // APP-E11 — tag for legend toggle (.chart-host.hide-cum hides this).
+    svg.appendChild(polyline(points.join(' '), { stroke: PAL.cumLine, width: 2, class: 'chart-cumulative-line' }));
 
     // ─── Trend lines ──────────────────────────────────────────────────────
     // Anchor both endpoints to the cumulative line itself so the trend is a
@@ -266,6 +268,11 @@
     const hasSohOverlay = sohSeries.length > 0;
     let yScaleSOH = null;
     if (hasSohOverlay) {
+      // APP-E11 — wrap the SOH overlay (bands + line + right Y-axis) in a
+      // single <g class="chart-grp-soh"> so the legend toggle can hide the
+      // whole stock-on-hand layer with one CSS rule.
+      const gSoh = el('g', { class: 'chart-grp-soh' });
+
       // Build SOH y-scale independent of cumulative scale
       const sohVals = sohSeries.map(p => p.soh);
       const sohMin = Math.min(0, ...sohVals);
@@ -280,14 +287,14 @@
         const x1 = xScale(Math.max(xMin, ws - 43200000));
         const x2 = xScale(Math.min(xMax, we + 43200000));
         if (x2 <= x1) continue;
-        svg.appendChild(rect(x1, MARGIN.top, x2 - x1, innerH, { fill: PAL.stockBand }));
+        gSoh.appendChild(rect(x1, MARGIN.top, x2 - x1, innerH, { fill: PAL.stockBand }));
         // Crisp edge lines top + bottom of the band for definition
-        svg.appendChild(line(x1, MARGIN.top, x2, MARGIN.top, { stroke: PAL.stockEdge, width: 0.7, opacity: 0.8 }));
-        svg.appendChild(line(x1, MARGIN.top + innerH, x2, MARGIN.top + innerH, { stroke: PAL.stockEdge, width: 0.7, opacity: 0.8 }));
+        gSoh.appendChild(line(x1, MARGIN.top, x2, MARGIN.top, { stroke: PAL.stockEdge, width: 0.7, opacity: 0.8 }));
+        gSoh.appendChild(line(x1, MARGIN.top + innerH, x2, MARGIN.top + innerH, { stroke: PAL.stockEdge, width: 0.7, opacity: 0.8 }));
         // Label centered above the band
         const cx = (x1 + x2) / 2;
         const lab = w.days >= 2 ? `STOCKOUT · ${w.days}d` : 'STOCKOUT';
-        svg.appendChild(text(cx, MARGIN.top + innerH - 6, lab, { anchor: 'middle', fill: PAL.stockEdge, size: 8.5, weight: 600, tracking: 1 }));
+        gSoh.appendChild(text(cx, MARGIN.top + innerH - 6, lab, { anchor: 'middle', fill: PAL.stockEdge, size: 8.5, weight: 600, tracking: 1 }));
       }
 
       // (b) SOH back-calc line — daily, drawn as a smooth polyline
@@ -302,17 +309,18 @@
           return `${x},${y}`;
         });
       if (sohPts.length >= 2) {
-        svg.appendChild(polyline(sohPts.join(' '), { stroke: PAL.sohLine, width: 1.8, opacity: 0.95, cap: 'round', join: 'round' }));
+        gSoh.appendChild(polyline(sohPts.join(' '), { stroke: PAL.sohLine, width: 1.8, opacity: 0.95, cap: 'round', join: 'round' }));
       }
 
       // (c) Right Y-axis for SOH — ticks + label
       const sohTicks = niceTicks(sohMin, sohMax, 4);
       for (const v of sohTicks) {
         const y = yScaleSOH(v);
-        svg.appendChild(line(MARGIN.left + innerW, y, MARGIN.left + innerW + 4, y, { stroke: PAL.sohLine, width: 1, opacity: 0.7 }));
-        svg.appendChild(text(MARGIN.left + innerW + 8, y + 3, fmtNum(v), { anchor: 'start', fill: PAL.sohLine, size: 9, opacity: 0.85 }));
+        gSoh.appendChild(line(MARGIN.left + innerW, y, MARGIN.left + innerW + 4, y, { stroke: PAL.sohLine, width: 1, opacity: 0.7 }));
+        gSoh.appendChild(text(MARGIN.left + innerW + 8, y + 3, fmtNum(v), { anchor: 'start', fill: PAL.sohLine, size: 9, opacity: 0.85 }));
       }
-      svg.appendChild(text(W - 14, MARGIN.top + innerH/2, 'STOCK ON HAND', { anchor: 'middle', fill: PAL.sohLine, size: 9, rotate: 90, tracking: 1.3 }));
+      gSoh.appendChild(text(W - 14, MARGIN.top + innerH/2, 'STOCK ON HAND', { anchor: 'middle', fill: PAL.sohLine, size: 9, rotate: 90, tracking: 1.3 }));
+      svg.appendChild(gSoh);
     }
 
     // (d) Last consumption marker — vertical orange dashed line

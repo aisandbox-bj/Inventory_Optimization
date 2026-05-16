@@ -612,7 +612,13 @@
         ${escapeHtml(mat.action)}
       </div>
 
+      <div class="chart-toolbar">
+        <span class="chart-toolbar-lab">Show:</span>
+        <label class="chart-toggle"><input type="checkbox" id="chartToggleConsumption" checked> Consumption</label>
+        <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
+      </div>
       <div class="chart-host" id="chartHost"></div>
+      <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
 
       <div class="stat-grid">
         <div class="stat-cell"><span class="lab">P1 rate</span><div class="v ${mat.p1Flag !== 'OK' ? 'warn' : ''}">${mat.p1Flag === 'OK' ? mat.p1Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
@@ -655,11 +661,31 @@
       ${llmCfg ? renderLlmPanel(llmCfg) : ''}
     `;
 
-    // Render chart
-    AppChart.render($('#chartHost'), mat, { width: 720, height: 320 });
+    // APP-E11 — chart 30% wider (was 720). Caveat caption + legend toggles
+    // wired right after render so toggle state applies to the freshly drawn SVG.
+    AppChart.render($('#chartHost'), mat, { width: 936, height: 320 });
+    wireChartToggles();
 
     // Bind LLM
     $('#btnLlm').addEventListener('click', () => runLlmReview(mat));
+  }
+
+  /* ─── APP-E11 · Chart legend toggle wiring ──────────────────────────────
+     Each checkbox toggles a CSS class on the chart-host. The corresponding
+     CSS rule hides the relevant SVG layer (consumption polyline or SOH
+     group). Called every render — checkbox state is the source of truth. */
+  function wireChartToggles(){
+    const host = $('#chartHost');
+    const cb1  = $('#chartToggleConsumption');
+    const cb2  = $('#chartToggleSoh');
+    if (!host) return;
+    function apply(){
+      if (cb1) host.classList.toggle('hide-cum', !cb1.checked);
+      if (cb2) host.classList.toggle('hide-soh', !cb2.checked);
+    }
+    apply();
+    if (cb1 && !cb1._wired) { cb1.addEventListener('change', apply); cb1._wired = true; }
+    if (cb2 && !cb2._wired) { cb2.addEventListener('change', apply); cb2._wired = true; }
   }
 
   /* ─── MRP Settings Comparison: Current (shaded) vs Recommended (shaded) ─ */

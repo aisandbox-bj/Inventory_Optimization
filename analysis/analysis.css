@@ -345,11 +345,42 @@
 .action-banner.GREY  { border-left-color:var(--text-disabled); }
 .action-banner.PURPLE{ border-left-color:#9B59B6; }
 
+/* ─── APP-E11 · Chart toolbar (legend toggles + caveat) ────────────────── */
+.chart-toolbar{
+  display:flex;align-items:center;gap:14px;
+  margin:4px 2px 6px;
+  font-family:var(--font-mono);font-size:11px;
+  color:var(--text-muted);
+}
+.chart-toolbar-lab{
+  letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--text-muted);
+}
+.chart-toggle{
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  color:var(--text-sec);font-family:var(--font-body);font-size:12px;
+  user-select:none;
+}
+.chart-toggle input{
+  cursor:pointer;accent-color:var(--accent);width:13px;height:13px;
+}
+.chart-toggle:hover{ color:var(--text-pri); }
+
 /* chart container */
 .chart-host{
   background:#0C2D3B;border:1px solid var(--border-soft);
-  border-radius:var(--r-sm);padding:6px;margin-bottom:14px;
+  border-radius:var(--r-sm);padding:6px;margin-bottom:6px;
   overflow:hidden;
+}
+/* APP-E11 — legend-toggle hide rules. Class is toggled on .chart-host by
+   wireChartToggles() in analysis.js; SVG layers are tagged by chart.js. */
+.chart-host.hide-cum .chart-cumulative-line{ display:none; }
+.chart-host.hide-soh .chart-grp-soh{ display:none; }
+
+.chart-caveat{
+  font-family:var(--font-body);font-size:10.5px;font-style:italic;
+  color:var(--text-muted);line-height:1.4;
+  padding:0 4px;margin-bottom:14px;
 }
 
 /* key stats grid */
