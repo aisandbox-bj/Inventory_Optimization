@@ -544,6 +544,31 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>shared/inventory-back-calc.js</code> from <code>_rollback/APP-E16-pre/</code> (single critical file). <code>shared/config.js</code> was edited after the initial snapshot — recover from <code>origin/main</code> at the APP-E15 tip (<code>git show 1cc94c7:shared/config.js</code>); a <code>SNAPSHOT-GAP.txt</code> in the rollback folder flags this honestly. Stage C — <code>git revert</code> the APP-E16 commit. <b>The rollback boundary is clean</b>: no schema change, no canonical-JSON shape change, no API removal. Saved intakes from before this change still load identically; only the back-calc values produced when re-running them shift back to the prior (narrower, less accurate) scope.
       </div>
+
+      <h4>APP-E17 · Material detail panel — second tightening pass (operator markup feedback)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator markup on the post-APP-E12 detail panel surfaced four remaining slack areas: top header (between material number, recommendation banner, and Show toggles), chart-toolbar/chart/caveat triplet (each carried its own margin), the stat grid (empty 4th cell on row 3 when there's no drop-cause stat), and the MRP-compare table (rows still felt loose). This is the second tightening pass that closes those gaps. CSS only.</li>
+        <li><b>Changes (analysis.css):</b>
+          <ul>
+            <li><code>.material-detail</code> outer padding 14/18 → <strong>12/16</strong>.</li>
+            <li><code>.detail-head</code> margin-bottom 8 → <strong>6</strong>, padding-bottom 8 → <strong>5</strong>.</li>
+            <li><code>.action-banner</code> padding 7/12 → <strong>6/12</strong>, margin-bottom 9 → <strong>6</strong>.</li>
+            <li><code>.chart-toolbar</code> margin 0/2/4 → <strong>0/2/2</strong>. <code>.chart-host</code> margin-bottom 2 → <strong>0</strong>. <code>.chart-caveat</code> margin-bottom 9 → <strong>6</strong>, padding-top 0 → 2px. The toolbar / chart / caveat now sit flush — three vertical pieces with effectively no gap, reads as a single unit.</li>
+            <li><strong>Stat grid restructured</strong>: <code>grid-template-columns: repeat(4, 1fr)</code> → <code>repeat(auto-fit, minmax(160px, 1fr))</code>. When row 3 only has 3 cells (no drop-cause for that material), the remaining cells now stretch to fill the row instead of leaving a dead 4th column. Cells with no content disappear cleanly. Cell padding 6/10 → <strong>4/10</strong>; label margin-bottom 2 → 1; value line-height 1.25 → 1.2.</li>
+            <li><code>.mrp-compare</code> margin 4/0/10 → <strong>2/0/6</strong>. <code>.mrp-compare-head</code> padding 6/14 → <strong>4/12</strong>. <code>.mrp-compare-table</code> th/td padding 5/14 → <strong>3/12</strong>. Four-row Current vs Recommended table goes from ~140px → ~100px without shrinking the value font.</li>
+          </ul>
+        </li>
+        <li><b>Cumulative savings.</b> APP-E12 saved ~80–110px; APP-E17 adds another ~50–70px. The detail panel for a typical material with chart + 11 stats + MRP-compare + LLM-review button row now fits in roughly 75% of the vertical real estate it occupied at APP-E11. Operator should be able to pick a different material from the list without scrolling back up on most viewports.</li>
+        <li>No font shrinks below 9.5px. No JS, HTML, or analytical change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>analysis/analysis.css</code> (CSS spacing only — material-detail, detail-head, action-banner, chart-toolbar, chart-host, chart-caveat, stat-grid restructure to auto-fit, stat-cell, mrp-compare and its children), <code>record-of-change.html</code> (this APP-E17 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>analysis/analysis.css</code> from <code>_rollback/APP-E17-pre/</code>. Stage C — <code>git revert</code> the APP-E17 commit. <b>The rollback boundary is clean</b>: pure CSS spacing + a one-line stat-grid <code>grid-template-columns</code> change, no logic, no schema, no canonical-JSON effect.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->
