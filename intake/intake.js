@@ -1522,6 +1522,28 @@
       }
     }
 
+    /* APP-T-01c — cross-file plant consistency. Plant alias was added to
+       MB51 (T-01b) and inventoryMaster (T-01). Compare the plant sets:
+       skip silently if either file has no plant data (T-01b chip already
+       surfaces that absence). Asymmetric difference reported both ways so
+       operator knows whether the gap is "consumption with no master" or
+       "master with no consumption". */
+    const mb51Plants   = new Set(mb51  .map(r => String(r.plant || '').trim()).filter(Boolean));
+    const masterPlants = new Set(master.map(r => String(r.plant || '').trim()).filter(Boolean));
+    if (mb51Plants.size && masterPlants.size) {
+      const mb51Only   = [...mb51Plants  ].filter(p => !masterPlants.has(p));
+      const masterOnly = [...masterPlants].filter(p => !mb51Plants  .has(p));
+      const fmt = (arr) => arr.map(p => `<b>${escapeHtml(p)}</b>`).join(', ');
+      if (mb51Only.length) {
+        const plural = mb51Only.length > 1;
+        out.push(`MB51 contains plant${plural ? 's' : ''} ${fmt(mb51Only)} that ${plural ? 'are' : 'is'} not present in Inventory Master — consumption from ${plural ? 'those plants' : 'that plant'} can't be matched to MRP settings or stock-on-hand.`);
+      }
+      if (masterOnly.length) {
+        const plural = masterOnly.length > 1;
+        out.push(`Inventory Master contains plant${plural ? 's' : ''} ${fmt(masterOnly)} not present in MB51 — those materials have no consumption to analyze in this window.`);
+      }
+    }
+
     return out;
   }
 

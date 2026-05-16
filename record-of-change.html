@@ -698,6 +698,33 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>shared/parsers.js</code> and <code>intake/intake.js</code> from <code>_rollback/APP-T-01b-pre/</code>. Stage C — <code>git revert</code> the APP-T-01b commit. <b>Rollback boundary is clean</b>: one new alias entry + one new display helper. No analytical effect; rolling back simply hides the chip and stops capturing plant on MB51 rows.
       </div>
+
+      <h4>APP-T-01c · Multi-plant infrastructure — phase 2, cross-file plant consistency check</h4>
+      <ul>
+        <li><b>Why it shipped.</b> APP-T-01b made the per-file plant breakdown visible. APP-T-01c is the natural follow-on: compare the plant sets across files and surface gaps before scope selection. If MB51 contains plant rows that don't appear in Inventory Master, the operator can't reliably back the consumption against MRP settings for that plant; if Inventory Master carries plants that don't appear in MB51, those master rows have no consumption to analyze in the loaded window. Both directions warrant a heads-up.</li>
+        <li><b>Where it shows up.</b> The existing "⚠ Cross-file consistency notes:" banner inside the scope-summary step. New notes layer in alongside the existing material / order / sort-field mismatch advisories — same banner, same styling.</li>
+        <li><b>Changes:</b>
+          <ul>
+            <li><code>intake/intake.js</code> — extended <code>computeMismatch(json)</code> with a plant-set comparison. Computes <code>mb51Plants</code> and <code>masterPlants</code> from the canonical row arrays, skips silently if either set is empty (T-01b chip already surfaces absent plant data), and emits asymmetric-difference notes both ways. Plant codes are escaped via <code>escapeHtml()</code> defensively even though SAP plant codes are numeric strings.</li>
+          </ul>
+        </li>
+        <li><b>Example notes the banner will emit</b> (plain-English, one fact per line):
+          <ul>
+            <li><i>MB51 contains plant <b>1120</b> that is not present in Inventory Master — consumption from that plant can't be matched to MRP settings or stock-on-hand.</i></li>
+            <li><i>Inventory Master contains plant <b>1130</b> not present in MB51 — those materials have no consumption to analyze in this window.</i></li>
+          </ul>
+        </li>
+        <li><b>No analytical change.</b> Plant comparison is read-only — it doesn't filter rows, doesn't change verdicts, doesn't change Min/Max recommendations. The note is informational. Plant-conditional <code>openPO</code> selection, Settings opt-in for multi-plant analysis, and the scope-picker modal are still queued (T-01d through T-01f).</li>
+        <li>No JS-logic change beyond the comparison clause, no schema change, no canonical-JSON shape change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. No SCHEMA_VERSION bump.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>intake/intake.js</code> (one new clause inside <code>computeMismatch()</code>), <code>record-of-change.html</code> (this APP-T-01c entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>intake/intake.js</code> from <code>_rollback/APP-T-01c-pre/</code>. Stage C — <code>git revert</code> the APP-T-01c commit. <b>Rollback boundary is clean</b>: one new clause inside an existing function. No analytical effect; rolling back simply removes the plant-mismatch notes from the cross-file consistency banner.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->
