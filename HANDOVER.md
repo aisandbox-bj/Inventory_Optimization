@@ -4,6 +4,12 @@ Paste this into a fresh Claude Code session to bring me up to speed on the proje
 
 ---
 
+> ## ⚠ Above everything else — never hide issues. Credibility is the key currency.
+>
+> Never describe a sidestepped symptom as "gone." Never frame a partial fix as complete. Every wrap-up must separate **what shipped** from **what still produces the symptom but was suppressed / re-anchored / queued.** Impossible values the operator sees (negative SOH, NaN, blank cells, suspicious zeros) are signals of a math/data assumption being wrong — investigate the cause; do not dim, filter, guard, or substitute. The full principle and the 2026-05-16 APP-E11 "Negative SOH gone" overclaim that prompted this rule live in auto-memory `feedback_never_hide_issues.md`. Read it.
+
+---
+
 ## Context
 
 I'm continuing work on the **Inventory Optimization App** — a browser-only single-file-per-page tool for mining MRO inventory optimization (consumption profiling, traffic-light Min/Max recommendations, LLM-reviewable Excel/PDF deliverables). It replaces a legacy Python-script + Excel-handoff workflow.
