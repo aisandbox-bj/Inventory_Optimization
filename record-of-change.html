@@ -725,6 +725,37 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>intake/intake.js</code> from <code>_rollback/APP-T-01c-pre/</code>. Stage C — <code>git revert</code> the APP-T-01c commit. <b>Rollback boundary is clean</b>: one new clause inside an existing function. No analytical effect; rolling back simply removes the plant-mismatch notes from the cross-file consistency banner.
       </div>
+
+      <h4>APP-T-01d · Multi-plant infrastructure — phase 3, Settings toggle for multi-plant opt-in</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Locked decision D25 specifies that single-plant is the default and multi-plant analysis is opt-in. APP-T-01d wires up the opt-in toggle in Settings so the preference persists across sessions, ready to be read by the scope-picker (T-01e) and the plant-conditional column logic (T-01f) when they land. <strong>This chunk only stores the flag — no analytical or parsing behaviour changes yet.</strong></li>
+        <li><b>Where it shows up.</b> New Settings section <b>"06 · Multi-plant analysis"</b>, slotted between the Column alias overrides section and the About section. Existing About section renumbered from 06 to 07. The new section has a single checkbox (<i>Enable multi-plant analysis</i>), a status line showing saved-vs-unsaved state, and a Save button — mirrors the pattern of the existing Save/Revert flows in the Parameter defaults section.</li>
+        <li><b>Persistence.</b> Boolean stored under the new <code>settings.multiPlant</code> localStorage key. Default is <code>false</code> (OFF). The key follows the existing <code>settings.*</code> naming convention so it survives <code>clearSessionData()</code> alongside parameter defaults, LLM keys, prompt template, and column aliases.</li>
+        <li><b>Changes:</b>
+          <ul>
+            <li><code>shared/config.js</code> — added <code>KEY_MULTIPLANT</code> constant plus <code>getMultiPlant()</code> and <code>setMultiPlant(enabled)</code> functions. Both exposed via <code>AppConfig</code>. Default-OFF behaviour comes from <code>v === true</code> coercion — any non-true stored value (including the absent-key case after a fresh install) returns <code>false</code>.</li>
+            <li><code>settings/settings.html</code> — new <code>&lt;section&gt;</code> for "06 · Multi-plant analysis" with the toggle checkbox, status line, and Save button. About section header renumbered 06 → 07. No CSS additions — the existing <code>.set-section</code> / <code>.set-head</code> / <code>.set-body</code> / <code>.actions-row</code> classes carry it. (Minor cosmetic CSS for <code>.mp-toggle-row</code> / <code>.mp-toggle-text</code> / <code>.mp-toggle-status</code> can be added in a follow-up if the default checkbox layout reads as cramped — flag if so.)</li>
+            <li><code>settings/settings.js</code> — new <code>renderMultiPlant()</code> (loads saved state, reflects in checkbox, updates status text), <code>updateMultiPlantStatus()</code> (toggles "Saved/Unsaved" indicator with dirty-state CSS hook), and <code>setupMultiPlantButtons()</code> (wires checkbox change + Save click). Hooked into <code>loadAll()</code> and <code>DOMContentLoaded</code> alongside the existing setup calls.</li>
+          </ul>
+        </li>
+        <li><b>What did NOT ship (queued for follow-up chunks):</b>
+          <ul>
+            <li><b>Scope-picker modal</b> after parse when files contain multiple plants — T-01e.</li>
+            <li><b>Plant-conditional column selection</b> for <code>openPO</code> (GM PO Qty vs MLA PO Qty based on row plant) — T-01f.</li>
+            <li>Cross-page reading of the flag — Intake / Analysis pages currently don't read <code>AppConfig.getMultiPlant()</code> yet. T-01e is the first consumer.</li>
+            <li>Persistent scope chip and <code>assessment.plants</code> canonical-JSON field — both still deferred until the D7 schema bump.</li>
+          </ul>
+        </li>
+        <li>No JS-logic change beyond the toggle wiring, no schema change, no canonical-JSON shape change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. No SCHEMA_VERSION bump.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/config.js</code> (<code>KEY_MULTIPLANT</code> constant + <code>getMultiPlant</code> / <code>setMultiPlant</code> functions + public API exposure), <code>settings/settings.html</code> (new section 06, About renumber to 07), <code>settings/settings.js</code> (<code>renderMultiPlant</code> / <code>updateMultiPlantStatus</code> / <code>setupMultiPlantButtons</code> + wired into <code>loadAll</code> and <code>DOMContentLoaded</code>), <code>record-of-change.html</code> (this APP-T-01d entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>shared/config.js</code>, <code>settings/settings.html</code>, and <code>settings/settings.js</code> from <code>_rollback/APP-T-01d-pre/</code>. Stage C — <code>git revert</code> the APP-T-01d commit. Also wipe the now-unused localStorage key with <code>AppStorage.del('settings.multiPlant')</code> from the browser console, or run a factory reset from the Settings About section. <b>Rollback boundary is clean</b>: additive Settings UI + persistence. No analytical effect — no consumer reads the flag yet.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->

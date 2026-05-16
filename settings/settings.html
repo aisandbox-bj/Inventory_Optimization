@@ -191,10 +191,28 @@
       </div>
     </section>
 
+    <!-- ─── MULTI-PLANT (APP-T-01d) ─── -->
+    <section class="set-section">
+      <div class="set-head">
+        <h3>06 · Multi-plant analysis</h3>
+        <div class="desc">When ON, future Intake sessions will offer a scope-picker to choose which plants to include when files carry data for more than one plant; reads through to plant-conditional column selection (e.g. <code>openPO</code>'s GM PO Qty vs MLA PO Qty). When OFF (the default), assessments are treated as single-plant — same behaviour as today. <b>Note:</b> the scope-picker modal and the plant-conditional column logic are queued for follow-up chunks (T-01e and T-01f); this toggle currently only stores your preference, no analytical effect yet.</div>
+      </div>
+      <div class="set-body">
+        <label class="mp-toggle-row" for="multiPlantToggle">
+          <input type="checkbox" id="multiPlantToggle" />
+          <span class="mp-toggle-text">Enable multi-plant analysis</span>
+        </label>
+        <div id="multiPlantStatus" class="mp-toggle-status"></div>
+        <div class="actions-row">
+          <button id="multiPlantSave" class="primary">Save</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ─── ABOUT / DANGER ZONE ─── -->
     <section class="set-section">
       <div class="set-head">
-        <h3>06 · About</h3>
+        <h3>07 · About</h3>
         <div class="desc">Diagnostics &amp; clean-slate testing.</div>
       </div>
       <div class="set-body">

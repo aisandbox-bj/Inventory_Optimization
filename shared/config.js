@@ -16,10 +16,11 @@
 (function (global) {
   'use strict';
 
-  const KEY_PARAMS  = 'settings.parameters';
-  const KEY_ALIASES = 'settings.columnAliases';
-  const KEY_PROMPT  = 'settings.llm.promptTemplate';
-  const KEY_LLM     = (provider) => `settings.llm.${provider}`;
+  const KEY_PARAMS     = 'settings.parameters';
+  const KEY_ALIASES    = 'settings.columnAliases';
+  const KEY_PROMPT     = 'settings.llm.promptTemplate';
+  const KEY_LLM        = (provider) => `settings.llm.${provider}`;
+  const KEY_MULTIPLANT = 'settings.multiPlant';                       /* APP-T-01d — multi-plant opt-in toggle (default OFF per D25) */
 
   /* ─── Factory prompt template — placeholders resolved at call-time ────────
      v2.1.0: signal-aware, customer-context-prefixed, structured-JSON-response.
@@ -195,6 +196,21 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     return AppStorage.del(KEY_PARAMS);
   }
 
+  /* ─── Multi-plant opt-in (APP-T-01d) ─────────────────────────────────────
+     Default OFF per locked decision D25. When OFF, intake treats data as
+     single-plant; first-match-wins resolves plant-conditional fields like
+     openPO to the primary plant. When ON, future Intake sessions will offer
+     a scope-picker (queued T-01e) and plant-conditional column selection
+     (queued T-01f). In T-01d, this toggle only stores the preference — no
+     parsing or analytical behaviour changes yet. */
+  async function getMultiPlant(){
+    const v = await AppStorage.get(KEY_MULTIPLANT);
+    return v === true;
+  }
+  async function setMultiPlant(enabled){
+    return AppStorage.set(KEY_MULTIPLANT, !!enabled);
+  }
+
   /* ─── LLM provider config ───────────────────────────────────────────────── */
   async function getLlm(provider){
     const v = await AppStorage.get(KEY_LLM(provider));
@@ -280,6 +296,7 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     getLlm, saveLlm, deleteLlm,
     getPromptTemplate, savePromptTemplate, resetPromptTemplate, isPromptTemplateCustomised,
     getAliases, saveAliases,
+    getMultiPlant, setMultiPlant,                                     /* APP-T-01d */
     factoryReset,
     clearSessionData
   });

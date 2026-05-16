@@ -461,6 +461,41 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
+     MULTI-PLANT (APP-T-01d) — toggle preference, default OFF per D25.
+     Stores boolean under 'settings.multiPlant'. No analytical effect in
+     this chunk — the scope-picker modal (T-01e) and the plant-conditional
+     column logic (T-01f) will read this flag once they land.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  async function renderMultiPlant(){
+    const cb = $('#multiPlantToggle');
+    if (!cb) return;
+    const enabled = await AppConfig.getMultiPlant();
+    cb.checked = enabled;
+    updateMultiPlantStatus(enabled, /*dirty*/ false);
+  }
+
+  function updateMultiPlantStatus(enabled, dirty){
+    const el = $('#multiPlantStatus');
+    if (!el) return;
+    const onOff = enabled ? 'ON' : 'OFF (default)';
+    el.textContent = dirty ? `Unsaved · ${onOff}` : `Saved · ${onOff}`;
+    el.className = 'mp-toggle-status' + (dirty ? ' dirty' : '');
+  }
+
+  function setupMultiPlantButtons(){
+    const cb   = $('#multiPlantToggle');
+    const save = $('#multiPlantSave');
+    if (!cb || !save) return;
+    cb.addEventListener('change', () => updateMultiPlantStatus(cb.checked, /*dirty*/ true));
+    save.addEventListener('click', async () => {
+      await AppConfig.setMultiPlant(cb.checked);
+      updateMultiPlantStatus(cb.checked, /*dirty*/ false);
+      toast(`Multi-plant analysis ${cb.checked ? 'enabled' : 'disabled'}`, 'ok');
+    });
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
      Boot
   ═════════════════════════════════════════════════════════════════════════ */
 
@@ -476,6 +511,7 @@
     await renderCtxPanel();
     renderAliases();
     await renderPromptEditor();
+    await renderMultiPlant();                                         /* APP-T-01d */
     await renderAbout();
   }
 
@@ -542,6 +578,7 @@
     setupCtxPanel();
     setupAliasButtons();
     setupPromptButtons();
+    setupMultiPlantButtons();                                         /* APP-T-01d */
     setupAboutButtons();
   });
 
