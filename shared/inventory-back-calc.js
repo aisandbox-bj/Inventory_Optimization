@@ -41,20 +41,83 @@
   'use strict';
 
   /* ─── Movement-type sign map (forward-in-time effect) ─────────────────────
-     Positive sign = increases SOH (receipts, returns).
-     Negative sign = decreases SOH (issues).
-     Zero / absent = no SOH effect (adjustments, transfers between storage
-     locations, etc. — we deliberately exclude these because they don't
-     represent real demand or supply). */
+     APP-E16 (2026-05-16) — broadened per CoWork audit review.
+
+     Positive sign = increases site unrestricted SOH (receipts, returns).
+     Negative sign = decreases site unrestricted SOH (issues).
+
+     ─── SITE OVERRIDE — DO NOT "FIX" BACK TO STANDARD SAP SEMANTICS ───
+     This client uses non-standard semantics for 101 / 107:
+       101 = GR at the 3PL (off-site) warehouse. Does NOT touch site WH.
+       107 = shipping from 3PL toward site (in-transit). Does NOT touch
+             site WH unrestricted yet.
+       109 = GR at the site WH unrestricted. THIS is the site receipt.
+     Standard SAP reference materials treat 101 as a site receipt — that
+     is wrong for this client. Operator-confirmed 2026-05-16. Do NOT
+     "correct" 101/107 back to standard semantics.
+
+     Verified against the SOH back-calc audit tool 2026-05-16: 57-material
+     sample, the broadened map drove |variance|>0 from 15 → 10 materials,
+     calculated<0 from 1 → 0, and reconciled the 1003195/1014958 phase-out
+     pair from −218/+137 down to ~0/+4 once row-level sign detection on
+     309/310 + 411/412 was added (see DIRECTIONAL_MVTS below). */
   const MVT_SIGN = Object.freeze({
-    '109':  +1,    // receipt onto SITE (replenishment that lands at site warehouse)
-    '261':  -1,    // issue to work order (consumes site stock)
-    '201':  -1,    // issue to cost center (consumes site stock)
-    '262':  +1,    // reversal of 261 — material returns into site stock
-    '202':  +1     // reversal of 201 — material returns into site stock
-    // 101 / 102 are 3PL events (not site) and are intentionally excluded.
-    // Other site-stock transfer types can be appended per operator setup.
+    // ── Consumption — GI from site WH ────────────────────────────────
+    '261': -1,   // GI for work / maintenance order (primary demand signal)
+    '201': -1,   // GI to cost centre
+    '221': -1,   // GI to project (PPE and project-coded consumables)
+    '291': -1,   // GI for any account assignment
+    '551': -1,   // GI scrapping (write-off from unrestricted)
+    '543': -1,   // GI from subcon stock at vendor (consumes site stock provided)
+
+    // ── Consumption reversals — back into site WH ────────────────────
+    '262': +1,   // reversal of 261
+    '202': +1,   // reversal of 201
+    '222': +1,   // reversal of 221
+    '292': +1,   // reversal of 291
+    '552': +1,   // reversal of 551 (scrap return)
+
+    // ── Site WH goods receipts ───────────────────────────────────────
+    '109': +1,   // GR at SITE WH (unrestricted) — THE site receipt
+    '712': +1,   // Inventory surplus (count adjustment up)
+
+    // ── Receipt reversals ────────────────────────────────────────────
+    '110': -1,   // reversal of 109
+
+    // ── Inventory variance (count loss) ──────────────────────────────
+    '711': -1,   // Inventory shortage (count adjustment down)
+
+    // ── Subcontracting (stock leaves / returns to site WH) ───────────
+    '541': -1,   // Transfer to subcon stock at vendor
+    '542': +1    // reversal of 541
   });
+
+  /* DIRECTIONAL MVTs — the SAME MVT appears on BOTH legs of an intra-plant
+     or cross-plant transfer; SAP emits source row as negative qty,
+     destination row as positive qty. A fixed sign would mis-sign one of
+     the two legs. For these, trust the row's qty sign as-is. */
+  const DIRECTIONAL_MVTS = Object.freeze(new Set(['309', '310', '411', '412']));
+
+  /* DELIBERATELY EXCLUDED — ruled out for this site's back-calc (CoWork
+     review 2026-05-16). Kept here so future operator review can see what
+     was considered and ruled out vs what was simply never reviewed. */
+  const DELIBERATELY_EXCLUDED = Object.freeze(new Set([
+    // 3PL flow — does NOT touch site WH unrestricted at this site
+    '101', '102', '107', '108', '641', '642',
+    // Initial stock balance — setup artefacts, would inflate back-calc
+    '561', '562',
+    // Bin / storage-location moves within plant — no unrestricted change
+    '311', '312', '313',
+    // QI / block ↔ unrestricted reclassification (handled separately if needed)
+    '321', '322', '343', '344',
+    // Scrap from non-unrestricted stocks
+    '553', '554', '555', '556',
+    // Count variance on non-unrestricted stocks
+    '703', '704', '705', '707', '708',
+    '713', '714', '715', '716', '717', '718',
+    // Sales / outbound / samples — out of scope for this site until confirmed
+    '601', '602', '653', '331', '332'
+  ]));
 
   /* ─── Date helpers ──────────────────────────────────────────────────────── */
   function toMs(s) {
@@ -120,24 +183,34 @@
       return { series: [], stockoutWindows: [], currentSOH, error: 'invalid window' };
     }
 
-    // Group MB51 rows by day. Each day's net delta = Σ (sign × qty).
-    // Rows outside [windowStart, today] are still processed if they touch the
-    // walk path between windowEnd and today — but since we anchor at currentSOH
-    // (today), the walk effectively spans [windowStart, windowEnd].
+    // Group MB51 rows by day. Each day's net delta = Σ signedDelta(row).
+    // APP-E16 — three signed-delta paths:
+    //   (a) DIRECTIONAL MVT (309/310/411/412): trust row's qty sign as-is.
+    //       SAP emits source row as negative, destination row as positive
+    //       under the SAME MVT; a fixed sign would mis-sign one leg.
+    //   (b) MVT in MVT_SIGN: signedDelta = sign × |qty|.
+    //   (c) Otherwise (DELIBERATELY_EXCLUDED or unknown): row skipped.
     const deltasByDay = new Map();   // isoDay → net forward-in-time qty
     for (const r of (mb51Rows || [])) {
       const mt = String(r.movementType || '').trim();
-      const sign = MVT_SIGN[mt];
-      if (!sign) continue;                              // adjustments etc. ignored
       const d = String(r.postingDate || '');
       if (!d) continue;
       const ms = toMs(d);
       if (ms == null) continue;
-      const q = Math.abs(parseFloat(r.quantity) || 0);
-      if (q === 0) continue;
+      const qRaw = parseFloat(r.quantity);
+      if (!Number.isFinite(qRaw) || qRaw === 0) continue;
       // Only days from windowStart through windowEnd matter to the visible series.
       if (ms < startMs - 86400000 || ms > endMs + 86400000) continue;
-      deltasByDay.set(d, (deltasByDay.get(d) || 0) + sign * q);
+
+      let signedDelta;
+      if (DIRECTIONAL_MVTS.has(mt)) {
+        signedDelta = qRaw;                              // (a) row-signed
+      } else {
+        const sign = MVT_SIGN[mt];
+        if (sign == null) continue;                      // (c) not in map / excluded
+        signedDelta = sign * Math.abs(qRaw);             // (b) fixed-sign
+      }
+      deltasByDay.set(d, (deltasByDay.get(d) || 0) + signedDelta);
     }
 
     // Walk backward: SOH(t) = SOH(t+1) - delta(t+1)
@@ -366,7 +439,9 @@
     isTailInOngoingStockout,
     countStockoutsInRange,
     chooseP2Window,
-    MVT_SIGN
+    MVT_SIGN,
+    DIRECTIONAL_MVTS,        // APP-E16 — exposed so callers can introspect / audit
+    DELIBERATELY_EXCLUDED    // APP-E16 — exposed so callers can introspect / audit
   });
 
 })(window);
