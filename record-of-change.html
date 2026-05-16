@@ -487,6 +487,22 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>analysis/analysis.js</code> + <code>analysis/analysis.css</code> from <code>_rollback/APP-E13-pre/</code>. Stage C — <code>git revert</code> the APP-E13 commit. <b>The rollback boundary is clean</b>: render-only UI change, no schema, no pipeline, no LLM, no canonical-JSON content change. The new "Canonical dataset" button reads <code>state.json</code> directly; absence of the button in the rolled-back version means no JSON download from Analysis, but the data itself is unchanged.
       </div>
+
+      <h4>APP-E14 · Per-row delete on the Dashboard's Recent Intakes list</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding 2026-05-16 PM: the only way to remove an intake from the Recent intakes list was the global "Clear session data" button — which wipes every saved intake at once. Too coarse: removing one stale or test intake meant losing everything. Operator asked for a selective per-row delete with a confirm step.</li>
+        <li><b>What the operator sees.</b> The right-most cell of every row in the Recent intakes table now shows two links: <em>Load →</em> (unchanged behaviour) and a new dim <em>Delete</em> link. Hovering the Delete link brightens it to red. Clicking fires a confirm dialog naming the specific intake; on OK the row is removed and the page reloads. The global "Clear session data" button is unchanged — both controls remain available; they're complementary.</li>
+        <li><b>What gets deleted.</b> Three localStorage / IndexedDB keys at most: (1) <code>intake.&lt;name&gt;</code> — the intake JSON itself, (2) the entry for this name in <code>intakes.index</code>, (3) <code>intake.current</code> — but ONLY if the just-deleted intake was the currently-loaded one. Settings, parameters, LLM keys, prompt template, column aliases, and every OTHER saved intake are untouched.</li>
+        <li>No SCHEMA_VERSION bump. No new shared modules. <code>AppStorage.del()</code> already existed (added in v1.x for the clear-session flow); we're just calling it per-row. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>index.html</code> (new <code>.recent td .delete</code> CSS rule; Delete link added to each Recent-intakes row template; per-row delete handler attached alongside the existing Load handler), <code>record-of-change.html</code> (this APP-E14 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>index.html</code> from <code>_rollback/APP-E14-pre/</code>. Stage C — <code>git revert</code> the APP-E14 commit. <b>The rollback boundary is clean</b>: dashboard render-only change. Stored intakes that were deleted by an operator using the new button stay deleted (storage.js write already happened) — this rollback does NOT restore them; only the UI control disappears.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->

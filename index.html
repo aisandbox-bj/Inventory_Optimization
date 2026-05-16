@@ -216,6 +216,14 @@
   font-size:11px;
   letter-spacing:.5px;
 }
+/* APP-E14 — per-row delete link sits beside the "Load →" link, dimmer
+   by default; brightens on hover so an accidental click is unlikely. */
+.recent td .delete{
+  font-family:var(--font-mono);font-size:11px;color:var(--text-disabled);
+  text-decoration:none;letter-spacing:.5px;margin-left:14px;cursor:pointer;
+  transition:color .15s;
+}
+.recent td .delete:hover{ color:var(--status-crit); }
 .recent td .open{
   font-family:var(--font-mono);
   font-size:10.5px;
@@ -413,7 +421,10 @@
         <td>${escapeHtml(e.name)}</td>
         <td class="mode">${escapeHtml(e.mode || '—')}</td>
         <td class="mono" style="color:var(--text-muted);">${escapeHtml(e.createdAt.replace('T',' ').slice(0,16))}</td>
-        <td><a class="open" href="#" data-name="${escapeAttr(e.name)}">Load →</a></td>
+        <td>
+          <a class="open" href="#" data-name="${escapeAttr(e.name)}">Load →</a>
+          <a class="delete" href="#" data-name="${escapeAttr(e.name)}" title="Delete this saved intake (cannot be undone)">Delete</a>
+        </td>
       </tr>
     `).join('');
 
@@ -424,6 +435,37 @@
         if (!json) { alert('Intake not found in local storage.'); return; }
         await AppStorage.set('intake.current', json);
         window.location.href = 'analysis/analysis.html';
+      });
+    });
+
+    /* APP-E14 — per-row delete. Confirms first; removes the intake JSON
+       AND the index entry; reloads the page so counts + row list stay
+       in sync. Settings, parameters, and other intakes are untouched. */
+    body.querySelectorAll('a.delete').forEach(a => {
+      a.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        const name = a.dataset.name;
+        const ok = confirm(
+          `Delete saved intake "${name}"?\n\n` +
+          `This removes the intake JSON from local storage and drops it from the recent-intakes list. ` +
+          `Cannot be undone.\n\n` +
+          `Settings, parameter defaults, LLM keys, and OTHER saved intakes are not affected.`
+        );
+        if (!ok) return;
+        try {
+          await AppStorage.del('intake.' + name);
+          const currentIdx = (await AppStorage.get('intakes.index')) || [];
+          const newIdx = currentIdx.filter(it => it.name !== name);
+          await AppStorage.set('intakes.index', newIdx);
+          // Also clear the current-intake slot if it's the one we just deleted
+          const current = await AppStorage.get('intake.current');
+          if (current && current.metadata && current.metadata.assessmentName === name) {
+            await AppStorage.del('intake.current');
+          }
+          window.location.reload();
+        } catch (err) {
+          alert(`Delete failed: ${err.message}`);
+        }
       });
     });
   }
