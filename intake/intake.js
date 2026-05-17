@@ -17,7 +17,7 @@
     iw39:            'IW39 — Work Orders',
     fleetMaster:     'Fleet Master',
     inventoryMaster: 'Inventory Master',
-    userList:        'User material list',
+    userList:        'User list (materials or work orders)',
     materialVendor:  'Material — Vendor mapping',
     leadTimes:       'Lead Times',
     prHistory:       'PR History'
@@ -495,14 +495,52 @@
     if (required.length && required.every(s => state.parsed[s])) {
       runDqGate();
     }
-    // Auto-populate manual list textarea when user-list type + file uploaded
+    // Auto-populate manual list textarea when user-list type + file uploaded.
+    // APP-E22: file can have a Material column OR an Order column. Whichever
+    // is populated drives the listType + chooser UI state.
     if (state.assessmentType === 'userList' && state.parsed.userList) {
-      const mats = uniq(state.parsed.userList.canonical
-        .map(r => String(r.material || '').trim())
-        .filter(Boolean));
-      state.scope.manual.materials = mats;
+      const rows = state.parsed.userList.canonical;
+      const mats = uniq(rows.map(r => String(r.material || '').trim()).filter(Boolean));
+      const ords = uniq(rows.map(r => String(r.order    || '').trim()).filter(Boolean));
       const ta = $('#manualPaste');
-      if (ta) ta.value = mats.join('\n');
+      if (mats.length && ords.length) {
+        /* Both columns populated — error condition per APP-E22 spec. Keep
+           materials and ignore orders; flag in detection. */
+        state.scope.manual.materials  = mats;
+        state.scope.manual.workOrders = [];
+        state.scope.manual.listType   = 'materials';
+        if (ta) ta.value = mats.join('\n');
+        setManualUiMode('materials');
+        state.scope.manual.detection = {
+          confidence: 'override', materialHits: mats.length, workOrderHits: ords.length,
+          ambiguous: 0, unknown: 0, total: mats.length,
+          source: 'userListFile-bothColumns', userOverride: true,
+          warning: 'File had both Material and Order columns — used Material; ignored Order.'
+        };
+      } else if (ords.length) {
+        state.scope.manual.workOrders = ords;
+        state.scope.manual.materials  = [];
+        state.scope.manual.listType   = 'workOrders';
+        if (ta) ta.value = ords.join('\n');
+        setManualUiMode('workOrders');
+        state.scope.manual.detection = {
+          confidence: 'high', materialHits: 0, workOrderHits: ords.length,
+          ambiguous: 0, unknown: 0, total: ords.length,
+          source: 'userListFile-orderColumn', userOverride: false
+        };
+      } else {
+        state.scope.manual.materials  = mats;
+        state.scope.manual.workOrders = [];
+        state.scope.manual.listType   = 'materials';
+        if (ta) ta.value = mats.join('\n');
+        setManualUiMode('materials');
+        state.scope.manual.detection = {
+          confidence: 'high', materialHits: mats.length, workOrderHits: 0,
+          ambiguous: 0, unknown: 0, total: mats.length,
+          source: 'userListFile-materialColumn', userOverride: false
+        };
+      }
+      renderManualDetectChip();
       renderScopePreview();
     }
     if (state.assessmentType === 'paramSearch') renderParamSearch();
@@ -601,14 +639,27 @@
           renderSchema();
           renderAllDropStats();                    // refresh per-drop counts + cross-file recon
           populateScopeOptions();
-          // If user re-mapped the userList file, re-derive scope.manual.materials
+          // If user re-mapped the userList file, re-derive scope.manual.{materials|workOrders}
+          // APP-E22: branch on which column (material vs order) is now populated.
           if (state.assessmentType === 'userList' && source === 'userList' && state.parsed.userList) {
-            const mats = uniq(state.parsed.userList.canonical
-              .map(r => String(r.material || '').trim())
-              .filter(Boolean));
-            state.scope.manual.materials = mats;
+            const rows = state.parsed.userList.canonical;
+            const mats = uniq(rows.map(r => String(r.material || '').trim()).filter(Boolean));
+            const ords = uniq(rows.map(r => String(r.order    || '').trim()).filter(Boolean));
             const ta = $('#manualPaste');
-            if (ta) ta.value = mats.join('\n');
+            if (ords.length && !mats.length) {
+              state.scope.manual.workOrders = ords;
+              state.scope.manual.materials  = [];
+              state.scope.manual.listType   = 'workOrders';
+              if (ta) ta.value = ords.join('\n');
+              setManualUiMode('workOrders');
+            } else {
+              state.scope.manual.materials  = mats;
+              state.scope.manual.workOrders = [];
+              state.scope.manual.listType   = 'materials';
+              if (ta) ta.value = mats.join('\n');
+              setManualUiMode('materials');
+            }
+            renderManualDetectChip();
             renderScopePreview();
           }
           renderJsonPreview();
@@ -895,14 +946,40 @@
     }
 
     if (mode === 'manual') {
-      const list = state.scope.manual.materials;
-      const masterMats = new Set(master.map(r => String(r.material || '').trim()));
-      const mb51Mats   = new Set(mb51.map(r => String(r.material || '').trim()));
-      const inMaster   = list.filter(m => masterMats.has(m)).length;
-      const inMb51     = list.filter(m => mb51Mats.has(m)).length;
-      host.innerHTML = list.length === 0
-        ? `<span class="v warn">no materials provided</span> &middot; paste or upload below`
-        : `<span class="v">${list.length}</span> material${list.length===1?'':'s'} &middot; in MB51: <span class="v">${inMb51}</span> &middot; in Inventory Master: <span class="v">${inMaster}</span>`;
+      /* APP-E22 — branch on listType. WO list previews IW39 coverage + the
+         number of materials the WO set will resolve to in MB51. */
+      const lt = state.scope.manual.listType || 'materials';
+      if (lt === 'workOrders') {
+        const list = state.scope.manual.workOrders || [];
+        const ordMb51 = new Set(mb51.map(r => String(r.order || '').trim()));
+        const ordIw39 = new Set((state.parsed.iw39?.canonical || []).map(r => String(r.order || '').trim()));
+        const inMb51  = list.filter(o => ordMb51.has(o)).length;
+        const inIw39  = list.filter(o => ordIw39.has(o)).length;
+        /* Materials touched by these orders in MB51 = the derived material bucket */
+        const woSet = new Set(list);
+        const derivedMats = new Set();
+        for (const r of mb51) {
+          if (woSet.has(String(r.order || '').trim())) {
+            const m = String(r.material || '').trim();
+            if (m) derivedMats.add(m);
+          }
+        }
+        const iw39Chip = state.parsed.iw39
+          ? `in IW39: <span class="v">${inIw39}</span>`
+          : `<span class="v warn">IW39 not loaded</span>`;
+        host.innerHTML = list.length === 0
+          ? `<span class="v warn">no work orders provided</span> &middot; paste or upload below`
+          : `<span class="v">${list.length}</span> work order${list.length===1?'':'s'} &middot; in MB51: <span class="v">${inMb51}</span> &middot; ${iw39Chip} &middot; resolves to <span class="v">${derivedMats.size}</span> material${derivedMats.size===1?'':'s'}`;
+      } else {
+        const list = state.scope.manual.materials || [];
+        const masterMats = new Set(master.map(r => String(r.material || '').trim()));
+        const mb51Mats   = new Set(mb51.map(r => String(r.material || '').trim()));
+        const inMaster   = list.filter(m => masterMats.has(m)).length;
+        const inMb51     = list.filter(m => mb51Mats.has(m)).length;
+        host.innerHTML = list.length === 0
+          ? `<span class="v warn">no materials provided</span> &middot; paste or upload below`
+          : `<span class="v">${list.length}</span> material${list.length===1?'':'s'} &middot; in MB51: <span class="v">${inMb51}</span> &middot; in Inventory Master: <span class="v">${inMaster}</span>`;
+      }
     }
 
     if (mode === 'byClassification') {
@@ -973,17 +1050,193 @@
     return out;
   }
 
-  /* ─── Manual paste handling ─────────────────────────────────────────────── */
+  /* ─── Manual paste handling ─────────────────────────────────────────────────
+     APP-E22 — list can be materials OR work orders. Auto-detect with override:
+       · Three buttons above the textarea: [Auto] [Materials] [Work Orders]
+       · Auto runs detectListTypeFromTokens against parsed inventoryMaster /
+         MB51 / IW39 and chooses materials vs workOrders.
+       · Operator can flip with one click; flip persists until they re-pick Auto.
+       · Detection chip below textarea reports counts + IW39 cross-check. */
+
+  function parseManualTokens(){
+    const ta = $('#manualPaste');
+    if (!ta) return [];
+    return ta.value
+      .split(/[\s,;\t]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  function detectListTypeFromTokens(tokens){
+    const matMaster = new Set((state.parsed.inventoryMaster?.canonical || [])
+      .map(r => String(r.material || '').trim()).filter(Boolean));
+    const matMb51   = new Set((state.parsed.mb51?.canonical || [])
+      .map(r => String(r.material || '').trim()).filter(Boolean));
+    const ordMb51   = new Set((state.parsed.mb51?.canonical || [])
+      .map(r => String(r.order || '').trim()).filter(Boolean));
+    const ordIw39   = new Set((state.parsed.iw39?.canonical || [])
+      .map(r => String(r.order || '').trim()).filter(Boolean));
+
+    const materialSet = new Set([...matMaster, ...matMb51]);
+    const orderSet    = new Set([...ordMb51, ...ordIw39]);
+
+    let mHits = 0, wHits = 0, both = 0, none = 0;
+    for (const t of tokens) {
+      const isMat = materialSet.has(t);
+      const isOrd = orderSet.has(t);
+      if (isMat && isOrd) both++;
+      else if (isMat) mHits++;
+      else if (isOrd) wHits++;
+      else none++;
+    }
+
+    const n = tokens.length;
+    if (n === 0) {
+      return { listType: null, confidence: 'none', materialHits: 0, workOrderHits: 0, ambiguous: 0, unknown: 0, total: 0 };
+    }
+    const matVotes = mHits + both;
+    const woVotes  = wHits + both;
+
+    let listType = null;
+    let confidence = 'low';
+    if (mHits === n && wHits === 0) { listType = 'materials';  confidence = 'high'; }
+    else if (wHits === n && mHits === 0) { listType = 'workOrders'; confidence = 'high'; }
+    else if (matVotes >= 0.8 * n && wHits === 0) { listType = 'materials';  confidence = 'medium'; }
+    else if (woVotes  >= 0.8 * n && mHits === 0) { listType = 'workOrders'; confidence = 'medium'; }
+    /* else: mixed / ambiguous → listType stays null, operator must pick */
+
+    return {
+      listType, confidence,
+      materialHits: mHits, workOrderHits: wHits,
+      ambiguous: both, unknown: none, total: n
+    };
+  }
+
+  function getManualUiMode(){
+    /* Which chooser button is active. DOM is the source of truth; not persisted. */
+    const active = document.querySelector('#manualTypeBar .ml-type.active');
+    return active ? active.dataset.type : 'auto';
+  }
+
+  function setManualUiMode(mode){
+    document.querySelectorAll('#manualTypeBar .ml-type').forEach(b => {
+      b.classList.toggle('active', b.dataset.type === mode);
+    });
+  }
+
+  function applyManualSelection(tokens, det){
+    /* Apply detection result + chooser mode to state.scope.manual. */
+    const uiMode = getManualUiMode();
+    let listType;
+    if (uiMode === 'materials' || uiMode === 'workOrders') {
+      listType = uiMode;
+    } else {
+      /* auto */
+      listType = det.listType || 'materials';   /* fall back to materials when ambiguous */
+    }
+    state.scope.manual.listType = listType;
+    if (listType === 'workOrders') {
+      state.scope.manual.workOrders = tokens.slice();
+      state.scope.manual.materials  = [];
+    } else {
+      state.scope.manual.materials  = tokens.slice();
+      state.scope.manual.workOrders = [];
+    }
+    state.scope.manual.detection = {
+      confidence:   det.confidence,
+      materialHits: det.materialHits,
+      workOrderHits: det.workOrderHits,
+      ambiguous:    det.ambiguous,
+      unknown:      det.unknown,
+      total:        det.total,
+      source:       'paste',
+      userOverride: (uiMode !== 'auto'),
+      pickedAt:     (typeof AppLocale !== 'undefined' ? AppLocale.localStampCompact() : new Date().toISOString())
+    };
+  }
+
+  function renderManualDetectChip(){
+    const chip = $('#manualDetectChip');
+    if (!chip) return;
+    const tokens = parseManualTokens();
+    if (tokens.length === 0) {
+      chip.className = 'ml-detect-chip hidden';
+      chip.innerHTML = '';
+      return;
+    }
+    const det = detectListTypeFromTokens(tokens);
+    const uiMode = getManualUiMode();
+    const lt = state.scope.manual.listType;
+    const iw39Loaded = !!(state.parsed.iw39);
+    const ordIw39 = new Set((state.parsed.iw39?.canonical || [])
+      .map(r => String(r.order || '').trim()));
+    const woConfirmed = tokens.filter(t => ordIw39.has(t)).length;
+    const woMissing   = tokens.length - woConfirmed;
+
+    let cls = 'info', txt = '';
+    if (uiMode === 'auto') {
+      if (det.listType === null) {
+        cls = 'warn';
+        txt = `Could not auto-detect &middot; <span class="v">${det.materialHits}</span> look like materials, <span class="v">${det.workOrderHits}</span> look like work orders, <span class="v">${det.unknown}</span> matched neither. Pick <b>Materials</b> or <b>Work Orders</b> above.`;
+      } else if (det.listType === 'materials') {
+        cls = det.confidence === 'high' ? 'ok' : 'info';
+        const note = det.unknown ? ` &middot; ${det.unknown} unmatched` : '';
+        txt = `Auto-detected &middot; <span class="v">${tokens.length}</span> items look like materials${note} &middot; scope = <b>Materials</b>`;
+      } else {
+        cls = det.confidence === 'high' ? 'ok' : 'info';
+        const iw = iw39Loaded
+          ? ` &middot; IW39 confirms <span class="v">${woConfirmed} / ${tokens.length}</span>`
+          : ' &middot; IW39 not loaded — coverage cannot be verified';
+        const warn = (iw39Loaded && woMissing > 0)
+          ? ` &middot; <span class="v">${woMissing}</span> not in IW39 (still filter MB51)`
+          : '';
+        txt = `Auto-detected &middot; <span class="v">${tokens.length}</span> items look like work orders${iw}${warn} &middot; scope = <b>Work Orders</b>`;
+      }
+    } else {
+      if (lt === 'workOrders') {
+        const iw = iw39Loaded
+          ? ` &middot; IW39 confirms <span class="v">${woConfirmed} / ${tokens.length}</span>`
+          : ' &middot; IW39 not loaded — coverage cannot be verified';
+        const warn = (iw39Loaded && woMissing > 0)
+          ? ` &middot; <span class="v">${woMissing}</span> not in IW39 (still filter MB51)`
+          : '';
+        txt = `Set manually to <b>Work Orders</b> &middot; <span class="v">${tokens.length}</span> items${iw}${warn}`;
+        cls = (iw39Loaded && woMissing > tokens.length * 0.2) ? 'warn' : 'info';
+      } else {
+        const masterMats = new Set((state.parsed.inventoryMaster?.canonical || [])
+          .map(r => String(r.material || '').trim()));
+        const inMaster = tokens.filter(t => masterMats.has(t)).length;
+        txt = `Set manually to <b>Materials</b> &middot; <span class="v">${tokens.length}</span> items &middot; in Inventory Master: <span class="v">${inMaster}</span>`;
+        cls = 'info';
+      }
+    }
+    chip.className = `ml-detect-chip ${cls}`;
+    chip.innerHTML = txt;
+  }
+
+  function refreshManualScope(){
+    const tokens = parseManualTokens();
+    const det = detectListTypeFromTokens(tokens);
+    applyManualSelection(tokens, det);
+    renderManualDetectChip();
+    renderScopePreview();
+    renderJsonPreview();
+  }
+
   function setupManualPaste(){
     const ta = $('#manualPaste');
-    ta.addEventListener('input', () => {
-      state.scope.manual.materials = ta.value
-        .split(/[\s,;\t]+/)
-        .map(s => s.trim())
-        .filter(Boolean);
-      renderScopePreview();
-      renderJsonPreview();
+    if (ta) {
+      ta.addEventListener('input', refreshManualScope);
+    }
+    /* Wire the three list-type chooser buttons. */
+    document.querySelectorAll('#manualTypeBar .ml-type').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setManualUiMode(btn.dataset.type);
+        refreshManualScope();
+      });
     });
+    /* Initial chip state. */
+    renderManualDetectChip();
   }
 
   function setupClassifInputs(){
@@ -1632,19 +1885,30 @@
     json.metadata.uploadedAt     = state.uploadedAt || now;
     json.metadata.assessmentType = state.assessmentType;
     json.scope                   = JSON.parse(JSON.stringify(state.scope));
-    // For userList type: scope.manual.materials is already maintained by
-    // either the file-upload handler (onParseUpdated) OR the textarea paste
-    // handler (setupManualPaste). Whichever was most recent is the source
-    // of truth. We just lock scope.mode = 'manual'.
+    // For userList type: scope.manual.{materials|workOrders} is already maintained
+    // by either the file-upload handler (onParseUpdated) OR the textarea paste
+    // handler (setupManualPaste). Whichever was most recent is the source of
+    // truth. We just lock scope.mode = 'manual'.
+    // APP-E22: defensive fallback recognises either column on the userList file.
     if (state.assessmentType === 'userList') {
       json.scope.mode = 'manual';
-      // If neither file nor paste populated, fall back to userList canonical
-      if ((!json.scope.manual || !json.scope.manual.materials || !json.scope.manual.materials.length) && state.parsed.userList) {
-        const mats = state.parsed.userList.canonical
-          .map(r => String(r.material || '').trim())
-          .filter(Boolean);
-        json.scope.manual = { materials: uniq(mats) };
+      const m = json.scope.manual || {};
+      const hasMaterials  = !!(m.materials  && m.materials.length);
+      const hasWorkOrders = !!(m.workOrders && m.workOrders.length);
+      if (!hasMaterials && !hasWorkOrders && state.parsed.userList) {
+        const rows = state.parsed.userList.canonical;
+        const mats = uniq(rows.map(r => String(r.material || '').trim()).filter(Boolean));
+        const ords = uniq(rows.map(r => String(r.order    || '').trim()).filter(Boolean));
+        if (ords.length && !mats.length) {
+          json.scope.manual = { materials: [], workOrders: ords, listType: 'workOrders', detection: m.detection || null };
+        } else {
+          json.scope.manual = { materials: mats, workOrders: [], listType: 'materials',  detection: m.detection || null };
+        }
       }
+      /* Ensure new fields are always present on the canonical (legacy support). */
+      if (!json.scope.manual.listType) json.scope.manual.listType = 'materials';
+      if (!Array.isArray(json.scope.manual.workOrders)) json.scope.manual.workOrders = [];
+      if (!Array.isArray(json.scope.manual.materials))  json.scope.manual.materials  = [];
     }
     json.parameters              = { ...state.paramsRun };
     for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {

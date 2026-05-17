@@ -1085,3 +1085,61 @@ body.intake-gated .intake-grid > section.panel:first-of-type{
   filter:saturate(.55);
 }
 body.intake-gated #reuseOpen{ pointer-events:none; opacity:.45; }
+
+/* ─── APP-E22 · Manual list-type chooser + auto-detect chip ─────────────── */
+.ml-typebar{
+  display:flex; align-items:center; gap:6px;
+  margin: 6px 0 10px 0;
+  font-size:11px;
+}
+.ml-typebar-lbl{
+  color:var(--text-muted);
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  font-size:10px;
+  margin-right:4px;
+}
+.ml-type{
+  background: var(--bg-soft, rgba(255,255,255,.04));
+  border: 1px solid var(--border-soft, rgba(255,255,255,.08));
+  color: var(--text-sec, #c7d2dc);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing:.02em;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.ml-type:hover{ background: var(--bg-card2, rgba(255,255,255,.06)); color: var(--text-pri, #e8eef4); }
+.ml-type.active{
+  background: rgba(31, 206, 216, .14);
+  border-color: rgba(31, 206, 216, .55);
+  color: #1FCED8;
+  font-weight: 600;
+}
+.ml-detect-chip{
+  margin-top: 8px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+.ml-detect-chip.hidden{ display:none; }
+.ml-detect-chip .v{ color: var(--text-pri, #e8eef4); font-weight: 600; }
+.ml-detect-chip.ok{
+  background: rgba(90, 182, 157, .10);
+  border-color: rgba(90, 182, 157, .35);
+  color: #6fc7a8;
+}
+.ml-detect-chip.warn{
+  background: rgba(251, 191, 36, .10);
+  border-color: rgba(251, 191, 36, .40);
+  color: #f4c14a;
+}
+.ml-detect-chip.info{
+  background: rgba(100, 181, 246, .08);
+  border-color: rgba(100, 181, 246, .30);
+  color: #82b8e8;
+}

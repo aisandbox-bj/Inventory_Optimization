@@ -213,8 +213,8 @@
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
           <label class="drop drop-cond" data-source="userList" data-needed-by="userList" data-conditional="userList">
-            <div class="name">User material list <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional)</em></div>
-            <div class="hint">Convenience input for User-list assessment. One material per row — or comma/tab-delimited.<br><b>Or skip this and paste materials directly in Step 4 (Manual) below.</b></div>
+            <div class="name">User list <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional · materials or work orders)</em></div>
+            <div class="hint">Convenience input for User-list assessment. One <b>material</b> or <b>work order</b> per row — or comma/tab-delimited. File can have a <code>Material</code> column OR an <code>Order</code> column (not both).<br><b>Or skip this and paste directly in Step 4 (Manual) below.</b></div>
             <span class="file">drag .xlsx / .csv / .txt here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv,.txt" />
           </label>
@@ -296,15 +296,23 @@
           <div class="scope-preview">no models selected</div>
         </div>
 
-        <!-- Manual pane -->
+        <!-- Manual pane — APP-E22: accepts materials OR work orders with auto-detect. -->
         <div class="scope-pane hidden" data-mode="manual">
-          <h5>Paste material numbers (one per line; commas, tabs, semicolons also OK)</h5>
+          <h5>Paste material numbers <em style="font-style:normal;color:var(--text-muted);font-weight:normal;">or</em> work-order numbers (one per line; commas, tabs, semicolons also OK)</h5>
+          <div class="ml-typebar" id="manualTypeBar" role="tablist" aria-label="List type">
+            <span class="ml-typebar-lbl">List type:</span>
+            <button type="button" class="ml-type active" data-type="auto"       title="Detect from paste / file">Auto</button>
+            <button type="button" class="ml-type"        data-type="materials"  title="Treat all rows as material numbers">Materials</button>
+            <button type="button" class="ml-type"        data-type="workOrders" title="Treat all rows as maintenance / work-order numbers">Work Orders</button>
+          </div>
           <div class="panel-sub" style="margin-bottom:8px;font-size:11.5px;color:var(--text-muted);">
-            For <b>User-list</b> assessments: paste materials directly here — no file upload needed.
+            For <b>User-list</b> assessments: paste materials <em>or</em> work orders directly here — no file upload needed.
             If you also dropped a user-list file in Step 1, it pre-fills this box; you can edit / append freely.
+            Default is <b>Auto</b> — the tool guesses based on what matches Inventory Master, MB51, and IW39 (if loaded).
           </div>
           <textarea id="manualPaste" placeholder="10001234&#10;10005678&#10;10009999"></textarea>
-          <div class="scope-preview">no materials provided</div>
+          <div id="manualDetectChip" class="ml-detect-chip hidden"></div>
+          <div class="scope-preview">no items provided</div>
         </div>
 
         <!-- By Classification pane -->

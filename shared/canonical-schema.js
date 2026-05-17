@@ -82,7 +82,7 @@
     const scope = {
       mode,
       fleet:            { models: [] },
-      manual:           { materials: [] },
+      manual:           { materials: [], workOrders: [], listType: 'materials', detection: null }, /* APP-E22 — listType: 'materials' | 'workOrders'; detection holds intake-time auto-detect metadata */
       byClassification: {
         inventoryTypes: [],
         mrpClassifiers: [],

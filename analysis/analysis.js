@@ -98,7 +98,12 @@
   function describeScope(j){
     const m = j.scope.mode;
     if (m === 'fleet')              return `Fleet · ${(j.scope.fleet?.models || []).join(' / ') || '—'}`;
-    if (m === 'manual')             return `Manual · ${(j.scope.manual?.materials || []).length} materials`;
+    if (m === 'manual') {
+      /* APP-E22 — branch on listType for plain-English summary. */
+      const mm = j.scope.manual || {};
+      if (mm.listType === 'workOrders') return `Manual · ${(mm.workOrders || []).length} work orders`;
+      return `Manual · ${(mm.materials || []).length} materials`;
+    }
     if (m === 'byClassification') {
       const f = j.scope.byClassification;
       const bits = [];

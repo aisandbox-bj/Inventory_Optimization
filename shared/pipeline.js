@@ -578,14 +578,32 @@
   }
 
   function bucketsManual(json, mb51){
-    const mats = new Set((json.scope.manual && json.scope.manual.materials) || []);
+    /* APP-E22 — branch on scope.manual.listType. When 'workOrders', filter
+       MB51 by `order` and derive the material set from matched transactions
+       (so downstream traffic-light / LLM / Excel see a normal material bucket
+       and don't need branch awareness). Legacy assessments without listType
+       default to 'materials' (existing behaviour). */
+    const m = json.scope.manual || {};
+    const useWO = (m.listType === 'workOrders');
+    const set = new Set((useWO ? m.workOrders : m.materials) || []);
     const transactions = mb51.filter(t => {
-      const m = String(t.material || '').trim();
-      if (!mats.has(m)) return false;
+      const v = String((useWO ? t.order : t.material) || '').trim();
+      if (!set.has(v)) return false;
       const mt = String(t.movementType || '').trim();
       return VALID_TYPES.has(mt);
     });
-    return [{ key: 'manual', name: 'Manual list', kind: 'manual', materials: mats, transactions }];
+    const materials = useWO
+      ? new Set(transactions.map(t => String(t.material || '').trim()).filter(Boolean))
+      : set;
+    return [{
+      key:          'manual',
+      name:         useWO ? 'Manual WO list' : 'Manual list',
+      kind:         'manual',
+      listType:     useWO ? 'workOrders' : 'materials',
+      orders:       useWO ? set : null,
+      materials,
+      transactions
+    }];
   }
 
   function bucketsByClassification(json, mb51, master){

@@ -24,7 +24,16 @@
          in the Intake drop-stats panel. No analytical change in this chunk —
          pipeline still ignores plant on MB51 rows. Plant-scoped filtering /
          scope picker / Settings toggle land in a follow-up chunk. */
-      plant:        ['Plant']
+      plant:        ['Plant'],
+      /* APP-FIX-T-04b (2026-05-17) — purchaseOrder alias was missing on
+         MB51, which broke Trace's PR-to-PO-to-receipt chain join (PR
+         History supplies the PO number, MB51 109 rows need to match by PO
+         to register a Site WH receipt). Without this alias, every row's
+         purchaseOrder field is undefined → zero matches → every chain
+         reads as IN_FLIGHT or PR_ONLY. Audit §"MB51_Opn.xlsx" col 24
+         confirms the header is verbatim "Purchase order". String type
+         to preserve leading zeros on PO numbers like 9600010502. */
+      purchaseOrder: ['Purchase order', 'PO', 'PO Number', 'PO No', 'PO No.', 'Purchasing Document']
     },
     iw39: {
       order:          ['Order', 'Order Number'],
@@ -90,6 +99,8 @@
     },
     userList: {
       material:    ['Material', 'Material Number', 'Material No', 'Material No.', "Mat'l", 'Mat No', 'Mat. No.', 'SKU', 'Part', 'Part No', 'Part No.', 'Part Number'],
+      /* APP-E22 — accept either a material OR an order column on uploaded user-list files. */
+      order:       ['Order', 'Order Number', 'Order No', 'Order No.', 'Maintenance Order', 'Work Order', 'WO', 'WO Number', 'Order Num'],
       description: ['Description', 'Material Description', 'Mat Desc']
     },
     materialVendor: {
@@ -256,7 +267,8 @@
       description:  'string',
       quantity:     'number',
       movementType: 'string',
-      plant:        'string'  /* APP-T-01b */
+      plant:         'string',  /* APP-T-01b */
+      purchaseOrder: 'string'   /* APP-FIX-T-04b — preserve PO leading zeros for PR↔MB51 join */
     },
     iw39: {
       order:          'string',
@@ -312,6 +324,7 @@
     },
     userList: {
       material:    'string',
+      order:       'string',  /* APP-E22 — preserve leading zeros on order numbers */
       description: 'string'
     },
     materialVendor: {
