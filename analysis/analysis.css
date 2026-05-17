@@ -333,6 +333,34 @@
   font-family:var(--font-mono);font-size:16px;color:var(--text-pri);
   letter-spacing:.5px;
 }
+/* APP-E26 (2026-05-17) — material-number copy button. Sits inline next to
+   the material number; small icon-only with brand cyan on hover. Visible
+   but not loud. Placeholder ahead of the cross-tool "Trace it!" button
+   (APP-T-07). */
+.detail-head .mat-row{
+  display:flex; align-items:center; gap:8px;
+}
+.detail-head .mat-copy{
+  background:transparent; border:1px solid var(--border-soft);
+  color:var(--text-muted); cursor:pointer;
+  font-family:var(--font-mono); font-size:12px; line-height:1;
+  padding:2px 6px; border-radius:3px;
+  transition:all .12s;
+  min-width:24px; text-align:center;
+}
+.detail-head .mat-copy:hover{
+  color:var(--accent); border-color:var(--accent);
+  background:rgba(31,206,216,0.06);
+}
+.detail-head .mat-copy:active{ transform:translateY(1px); }
+.detail-head .mat-copy.copied{
+  color:var(--status-ok); border-color:var(--status-ok);
+  background:rgba(52,211,153,0.08);
+}
+.detail-head .mat-copy.failed{
+  color:var(--status-crit); border-color:var(--status-crit);
+  background:rgba(239,68,68,0.08);
+}
 .detail-head .desc{
   font-family:var(--font-heading);font-weight:500;font-size:14px;
   color:var(--accent);line-height:1.3;margin-top:2px;

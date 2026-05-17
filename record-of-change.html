@@ -883,6 +883,159 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>intake/intake.js</code> from <code>_rollback/APP-FIX-T-03a-pre/</code>. Stage C — <code>git revert</code> the APP-FIX-T-03a commit. <b>Rollback boundary is clean</b>: two small clauses inside a single function. Rolling back re-introduces both bugs (JSON-load throws, PR History greys out on User List / Parameter Search assessments).
       </div>
+
+      <h4>APP-T-04 · Calibre Trace — left-rail navigation + scope-selection machinery (Trace bridge phase 3)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator framing 2026-05-17: <em>"What 'filter' leads me to a Trace analysis? Currently I'm investigating out-of-stock root causes... but that won't always be the case. I will not know until I start using it."</em> Picking which v0.3 view to port first was the wrong question to optimise for. T-04 builds the SCOPE tool that lets the operator discover which views matter — multi-material views then ship one chunk at a time as the operator names which one is most useful next.</li>
+        <li><b>What lands — the left rail.</b> Vertical 240px-wide rail on the Trace page, sticky to viewport. Copper-orange <code>#E58E2D</code> Calibre signature accent on Trace-specific surfaces (active view marker, scope summary chip, mode-radio highlight, etc.); the cyan stays for shared / cross-tool elements. <code>CALIBRE TRACE · v0.4-dev</code> brand chip at the top of the rail. Rail collapses to a 64px icon strip on viewports below 980px so the chart area doesn't crowd out.</li>
+        <li><b>What lands — the SCOPE selector.</b>
+          <ul>
+            <li><strong>Mode toggle</strong> — Single material OR Multi-material. Determines which views light up below; non-matching views grey out (not hidden — operator sees what's possible).</li>
+            <li><strong>Single mode:</strong> compact search + scrolling material list (the picker from T-03 reflowed into the rail, two-line entries instead of three). Default behaviour unchanged.</li>
+            <li><strong>Multi mode — four scope mechanisms, any combination:</strong>
+              <ul>
+                <li><b>Paste / upload a material list</b> — textarea accepts whitespace / comma / tab-delimited material numbers.</li>
+                <li><b>One-click "Use Tune's list"</b> — pulls <code>json.scope.manual.materials</code> when present. <strong>Honest constraint surfaced in-place:</strong> if the assessment's scope mode isn't <code>manual</code> (e.g. fleet / paramSearch / byClassification), the button explains why it can't pull a list and points the operator to the other filters. No misleading silent failure.</li>
+                <li><b>Material-group filter</b> — searchable checkbox list of distinct <code>inventoryMaster.materialGroup</code> values, sorted by count desc.</li>
+                <li><b>Stock-level filter</b> — categorical: <code>Any · OOS (SOH ≤ 0) · Below MRP Min (V1) · Below Safety Stock (PD) · Above MRP Max (V1)</code>. <strong>MRP-aware</strong> — Below-MRP-Min only matches V1 materials with mrpMin defined; Below-SS only matches PD materials with safetyStock defined. No false positives across MRP types.</li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li><b>What lands — the VIEW list below SCOPE.</b>
+          <ul>
+            <li><strong>Single-material views:</strong> ▶ <i>Procurement Chain</i> (the T-03 view — relocated, not rewritten); ◌ <i>Phase Distribution</i> (queued).</li>
+            <li><strong>Multi-material views — all queued, all disabled with a tooltip:</strong> Internal Process MoM · Supplier Performance · 3PL Performance · Cancellation Diagnostic · Unit-Cost Sensitivity · Year-on-Year · Volume cumulative · Data Table. Each becomes its own chunk when the operator names which one is most useful next — same rhythm as the Tune APP-E chunks.</li>
+          </ul>
+        </li>
+        <li><b>What lands — content area and banner.</b> Compact 3-column banner above the view content area: material identity (single mode) OR scope-summary (multi mode) · assessment name · source-data counts. View area below renders the active view; empty-state HTML for the queued views explains what's coming and asks the operator to name which view they want first.</li>
+        <li><b>Persistence.</b> <code>trace.viewState</code> in <code>AppStorage</code> holds scopeMode + scopeSingle + scopeMulti (mode, materials, groups, stockFilter) + activeView. Re-opening the Trace page lands where the operator left off. Stale references (e.g. a material that no longer exists in this assessment) fall through to default-first-material — no broken state on assessment switch.</li>
+        <li><b>No new chain-compute logic.</b> The chain calculation from T-03 (Phase A–E join across PR History + MB51) is unchanged — relocated from the old detail-panel host into <code>#contentView</code>. State classification (COMPLETE / NOT_YET_CONSUMED / IN_FLIGHT / PR_ONLY / CANCELLED) unchanged. Caveat caption beneath the chart unchanged.</li>
+        <li><b>No analytical effect on Tune.</b> Trace reads its own copy of canonical JSON; doesn't write back. Tune's verdicts, rates, runway, Min/Max recommendations all identical. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. No SCHEMA_VERSION bump.</li>
+        <li><b>Refinements during operator test (same-session, 2026-05-17):</b>
+          <ul>
+            <li><strong>Banner refresh on every multi-scope change.</strong> First test surfaced the banner going stale — operator clicked "Use Tune's list" expecting visible feedback but only the small rail-summary chip updated. Now <code>renderBanner()</code> fires after all four multi-mode change handlers (Use Tune's list, Paste apply, group checkbox, stock filter) so the big banner reflects the operator's choice immediately.</li>
+            <li><strong>Drop the view-mode lockout — any view clickable in any scope.</strong> First build hard-locked Multi-material views behind <code>scopeMode === 'multi'</code> (via a <code>data-mode</code> attribute on each view button). Operator-flagged: <em>"these should all be active with a single material."</em> Correct framing — multi-material views ARE meaningful for a single material (a single-material set is just N=1) and queued views should be discoverable even when not built. Removed the <code>data-mode</code> filter; replaced <code>.disabled</code> styling with a new <code>.queued</code> class that's visually de-emphasised but clickable. Clicking Procurement Chain in multi-mode now lands on an honest "Procurement Chain renders one material at a time — switch to Single material" panel rather than refusing the click. Click any queued view in any scope → the operator-named-follow-up panel.</li>
+            <li><strong>Honest 0-complete-chains diagnostic.</strong> Operator finding on real assessment: material with 31 chains showed 0 complete, 14 in-flight, 17 cancelled. Reasonable question: <em>"why are chains not complete?"</em> The page now surfaces a diagnostic chip above the chart when <code>complete.length === 0</code>, splitting the cause into three measurable scenarios: (a) MB51 has zero MVT-109 rows for this material — likely export filter OR real-world incomplete; (b) MB51 has 109 rows but none of those POs appear in PR History — likely PR window too short, or PO-number format mismatch; (c) overlap exists but chain compute missed it — bug, please flag. Numbers in the chip are computed live from the current canonical JSON. Per the never-hide-issues principle — surface what's measurable rather than let the operator guess.</li>
+          </ul>
+        </li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>trace/trace.html</code> (rail markup + restructured content area — full rewrite around the new grid layout; same-session refinement removed <code>data-mode</code> filter + <code>.disabled</code> class, replaced with <code>.queued</code>), <code>trace/trace.js</code> (scope state machine + multi-scope computation including MRP-aware stock filter + view dispatch + persistence; ports T-03's chain compute and swimlane render unchanged; same-session refinement: banner-refresh on 4 multi-mode change handlers + dropped view-mode lockout + added <code>renderZeroCompleteDiagnostic()</code> for the no-complete-chains story), <code>trace/trace.css</code> (rail styling, copper-orange accents, scope-section layouts, responsive collapse at 980px; same-session refinement: <code>.view-btn.queued</code> styling + <code>.chain-diagnostic</code> panel), <code>record-of-change.html</code> (this APP-T-04 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>trace/trace.html</code>, <code>trace/trace.js</code>, and <code>trace/trace.css</code> from <code>_rollback/APP-T-04-pre/</code>. Stage C — <code>git revert</code> the APP-T-04 commit. <b>Rollback boundary is clean</b>: the Trace page is wholly self-contained — no shared module touched, no schema change, no analytical effect. Reverting drops back to T-03's single-material-only banner layout.
+      </div>
+
+      <h4>APP-E25 · Inventory Adjustment Review modal — show once per assessment (was popping every Analysis page load)</h4>
+      <ul>
+        <li><b>Operator finding 2026-05-17.</b> The Inventory Adjustment Review modal — which auto-pops when MB51 has days with issue-counts above the σ-threshold (cycle-count candidates) — was re-popping every time the operator clicked into Analysis, even after they'd dismissed it on a prior visit. <em>"Save the selection in JSON and do not keep showing it every time."</em></li>
+        <li><b>Root cause.</b> The auto-popup gate (<code>analysis.js</code>) tracked dismissal via a <strong>per-session JS flag</strong> (<code>state._invAdjSeen</code>) which reset on every page reload. The user-chosen excluded dates DID persist to <code>parameters.invAdjConfirmedDates</code> in canonical JSON, but there was no per-assessment record of "operator has reviewed this" — so on reload the modal couldn't distinguish "operator hasn't seen this yet" from "operator already dismissed it".</li>
+        <li><b>Changes:</b>
+          <ul>
+            <li><code>shared/canonical-schema.js</code> — added <code>invAdjReviewed: false</code> to <code>FACTORY_DEFAULTS</code>. Per-assessment boolean. New assessments default false → modal pops up on first Analysis visit. Operator-confirmed-or-dismissed flips it to <code>true</code> for that assessment, persists to local storage.</li>
+            <li><code>analysis/analysis.js</code> — auto-popup gate switched from <code>!state._invAdjSeen</code> to <code>!state.json.parameters.invAdjReviewed</code>. Reads from canonical JSON instead of in-memory flag.</li>
+            <li><code>analysis/analysis.js</code> — <code>closeInvAdjModal()</code> made async; sets <code>state.json.parameters.invAdjReviewed = true</code> + persists via <code>AppStorage.set('intake.current', …)</code> before returning. Idempotent guard so the flip happens at most once per assessment. Triggered by all close paths: Skip / Cancel button, ✕ close icon, backdrop click, and the post-Confirm cleanup.</li>
+          </ul>
+        </li>
+        <li><b>Operator can still re-open the modal manually</b> via the orange "N Inv-Adj candidate" link in the pipeline-status header, or via the existing <code>#btnInvAdj</code> button on the analysis page. Closing again is a no-op (flag's already true; persist guard skips the write).</li>
+        <li><b>Legacy assessments</b> (saved before APP-E25) have no <code>invAdjReviewed</code> field. JS reads <code>undefined</code> which evaluates falsy → modal auto-pops once on the next visit. After dismissal, the field is set and persisted. Operator pays a one-time pop on legacy data; the next visit and every subsequent visit is silent.</li>
+        <li>No analytical change. No SCHEMA_VERSION bump (additive optional field on parameters). <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. Pipeline / rates / Min/Max / Trace all unaffected.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/canonical-schema.js</code> (one new entry in <code>FACTORY_DEFAULTS</code>), <code>analysis/analysis.js</code> (auto-popup gate + persistent flag flip on close), <code>record-of-change.html</code> (this APP-E25 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>shared/canonical-schema.js</code> and <code>analysis/analysis.js</code> from <code>_rollback/APP-E25-pre/</code>. Stage C — <code>git revert</code> the APP-E25 commit. <b>Rollback boundary is clean</b>: one new schema-defaults entry + a small gate-change in the analysis page. Reverting re-introduces the per-session in-memory flag (modal re-pops on every Analysis page reload).
+      </div>
+
+      <h4>APP-E26 · Copy-material-number button on Analysis detail panel (placeholder ahead of APP-T-07 "Trace it!")</h4>
+      <ul>
+        <li><b>Operator finding 2026-05-17.</b> Highlighting the material number to copy it for use elsewhere is a frequent action; doing it by text-selection is fiddly on the brand-styled background. <em>"Add a small 'copy' button next to the material number — smaller than my drawing, but visible — to prevent me from having to copy it by highlighting. For now, this will do while we wait to build the 'trace-it' button (APP-T-07)."</em></li>
+        <li><b>Changes:</b>
+          <ul>
+            <li><code>analysis/analysis.js</code> — <code>renderDetail()</code> template wraps the material number in a new <code>.mat-row</code> flex container with a small <code>.mat-copy</code> button (Unicode ⧉ glyph) immediately to the right. Click handler uses <code>navigator.clipboard.writeText()</code> with a <code>execCommand('copy')</code> fallback for non-secure contexts (older browsers on <code>file://</code>). On success: glyph swaps to ✓ with cyan-tinted success styling for 1.2s. On failure: glyph swaps to ✕ with red-tinted failure styling + console warning. Idempotent guard so the click handler isn't double-bound across re-renders.</li>
+            <li><code>analysis/analysis.css</code> — new <code>.detail-head .mat-row</code> flex wrapper + <code>.detail-head .mat-copy</code> button styling. Sized at ~24×22px with monospace glyph; transparent background, soft border at rest, cyan on hover, success/failure colours via class swap. Active state nudges down 1px for tactile feedback.</li>
+          </ul>
+        </li>
+        <li><b>Operator-facing positioning.</b> Operator's own framing: this is a stopgap. The real cross-tool affordance is the "Trace it!" button (APP-T-07) which launches Trace pre-loaded for the selected material — that lands as part of the Trace-bridge sequence after the multi-material view chunks. The copy button stays after T-07 lands (it's still useful for non-Trace use cases — pasting into SAP, an email, etc.).</li>
+        <li>No analytical change, no schema change, no Trace impact. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>analysis/analysis.js</code> (template addition + click handler with clipboard API + fallback + glyph-swap feedback), <code>analysis/analysis.css</code> (<code>.mat-row</code> + <code>.mat-copy</code> rules), <code>record-of-change.html</code> (this APP-E26 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>analysis/analysis.js</code> and <code>analysis/analysis.css</code> from <code>_rollback/APP-E26-pre/</code>. Stage C — <code>git revert</code> the APP-E26 commit. <b>Rollback boundary is clean</b>: one template insert + one event-handler block + two CSS rule blocks. Removing them returns the material-number row to plain text (operator falls back to text-selection until APP-T-07 lands).
+      </div>
+
+      <h4>APP-FIX-T-04b · Procurement Chain refinements + MB51 <code>purchaseOrder</code> alias (root-cause fix)</h4>
+      <ul>
+        <li><b>Operator side-by-side review 2026-05-17.</b> Comparison of the live v0.4 Trace page against the v0.3 master file (material 2004641) revealed four issues. The first one is a load-bearing parser bug; the other three are view refinements.</li>
+        <li>
+          <b>Root cause — MB51 <code>purchaseOrder</code> alias was never added.</b>
+          <div class="card cal-bar">
+            <div class="card-label">Field-mapping bug</div>
+            <div class="card-content">Trace's chain compute joins PR History rows to MB51 rows on the PO number. The reader pulls <code>r.purchaseOrder</code> off each MB51 row. <strong>MB51's alias map only had <code>order</code> (work order), <code>plant</code> (added APP-T-01b), and the basics — no <code>purchaseOrder</code> alias.</strong> Every MB51 row's <code>purchaseOrder</code> field came back <code>undefined</code>, so the join produced zero matches → zero phases C/D/E → every chain registered IN_FLIGHT or PR_ONLY → the "0 of POs made it to site" diagnostic was technically correct but the underlying cause was a missing parser entry, not real-world data. <strong>Fix:</strong> added <code>purchaseOrder</code> to <code>ALIASES.mb51</code> (header: verbatim "Purchase order", per the CoWork audit §"MB51_Opn.xlsx" col 24) and <code>FIELD_TYPES.mb51</code> (string, to preserve leading zeros on 10-digit PO numbers like 9600010502).</div>
+          </div>
+        </li>
+        <li>
+          <b>Existing assessments need a re-parse.</b>
+          <div class="card cal-bar">
+            <div class="card-label">Migration</div>
+            <div class="card-content">Saved canonical JSONs from before this fix don't have the <code>purchaseOrder</code> field on their MB51 rows. The diagnostic chip on the Procurement Chain view now detects this case explicitly and recommends the action: re-open the intake on the Intake page, click Save, return to Analysis / Trace — the new save re-runs the parser with the widened alias map. New intakes get the field automatically.</div>
+          </div>
+        </li>
+        <li>
+          <b>Swimlane refinements (operator's other three findings):</b>
+          <ul>
+            <li><strong>Cancelled-before-PO PRs no longer render on the swimlane.</strong> Filter changed from <code>c.state !== 'PR_ONLY'</code> to <code>!!c.po</code> — a chain only appears in the timeline if it reached PO. Cancelled-after-PO chains still appear (with the dim red overlay) so the operator can see them in context. The full PR list — including cancelled-before-PO — is available on the new Raw Data view. Matches v0.3's behaviour where <code>CHAINS</code> was hand-curated to only include the 12 PO-reached entries (40 cancelled-before-PO lived in the funnel metric only).</li>
+            <li><strong>Calendar-days axis moved to the top of the chart.</strong> <code>scales.x.position: 'top'</code> in the Chart.js config. Operator can now see scale immediately without scrolling to the bottom of long chain lists.</li>
+            <li><strong>Raw Data lifted into its own view.</strong> New <code>Raw Data</code> button in the rail under "Single material" sits next to Procurement Chain. The chain table is no longer rendered below the swimlane on the Procurement Chain view; it has its own surface. Procurement Chain now: summary cells → diagnostic (when needed) → swimlane chart → caveat. Raw Data: header row → full chain table.</li>
+          </ul>
+        </li>
+        <li><b>About the porting question.</b> Honest answer surfaced during this review: the chart RENDERING in trace.js was ported from v0.3's <code>buildSwimlane()</code> function, but the chain COMPUTATION logic was rebuilt from the doc-comments in v0.3 (because v0.3's <code>CHAINS</code> was hard-coded data, not computed at runtime). There's no existing chain-construction logic to lift. The field-mapping bug above is the consequence of a rebuild rather than a port — v0.3 didn't need to read <code>r.purchaseOrder</code> from MB51 because v0.3's chains were transcribed from xlsx by hand.</li>
+        <li>No SCHEMA_VERSION bump (additive alias on existing source). No analytical-pipeline change in Tune. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. Re-parsing an old intake doesn't change Tune's verdicts — the new <code>purchaseOrder</code> field sits on MB51 rows and is read only by Trace.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/parsers.js</code> (<code>purchaseOrder</code> added to <code>ALIASES.mb51</code> + <code>FIELD_TYPES.mb51</code> — root-cause fix), <code>trace/trace.html</code> (new <code>Raw Data</code> view button in the rail), <code>trace/trace.js</code> (swimlane filter changed to <code>!!c.po</code>; Chart.js x-axis <code>position: 'top'</code>; new <code>renderRawData()</code> view + <code>renderActiveView</code> dispatch + multi-mode-on-raw-data empty state; diagnostic gains a fourth scenario for stale-parse pre-T-04b intakes), <code>trace/trace.css</code> (<code>.raw-data-head</code> styling), <code>record-of-change.html</code> (this APP-FIX-T-04b entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>shared/parsers.js</code>, <code>trace/trace.html</code>, <code>trace/trace.js</code>, and <code>trace/trace.css</code> from <code>_rollback/APP-FIX-T-04b-pre/</code>. Stage C — <code>git revert</code> the APP-FIX-T-04b commit. <b>Caveat:</b> rolling back the parser change re-introduces the field-mapping bug — chains will return to 0-complete. Saved intakes that were re-parsed under the fix retain the <code>purchaseOrder</code> field on disk; reverting the parser doesn't strip it from saved JSONs, so they continue working. <b>Rollback boundary:</b> one new alias entry + one new view + three small Trace-side refinements. No schema change, no Tune-pipeline impact.
+      </div>
+
+      <h4>APP-FIX-T-04c · Three QA fixes against the v0.3 master file (cancellation logic + swimlane filter + diagnostic copy)</h4>
+      <ul>
+        <li><b>Operator side-by-side QA 2026-05-17.</b> After APP-FIX-T-04b's parser fix, the operator compared v0.4's Procurement Chain view against v0.3's master file for material 2004641. Three mismatches surfaced; all are fixed here.</li>
+        <li>
+          <b>Fix 1 · Cancellation logic OR → AND.</b> v0.3's source docs are explicit:
+          <code>"Cancelled PR ledger — rows where Status='N' + Deletion Indicator=true"</code>
+          (the <code>+</code> reads as AND). v0.4's first build used OR (<code>deletionIndicator === 'true'</code> OR <code>processingStatus === 'N'</code>), which over-classified PRs as cancelled — caught chains that were merely intermediate-state. For material 2004641, v0.3 reports <b>40 cancelled before PO + 12 progressed to PO = 52 PR Generated</b>; v0.4 was reporting <b>52 cancelled out of 54</b> — exact off-by-12 matched the 12 progressed-to-PO chains my OR logic was mis-classifying. Flipped to <strong>AND</strong> per v0.3's documented ledger filter. Expected v0.4 outcome on the same data: 40 cancelled, 14 with PO (12 site-received + 2 in-flight).
+        </li>
+        <li>
+          <b>Fix 2 · Swimlane filter tightened from <code>!!c.po</code> to <code>!!c.siteWH</code>.</b> Operator quote: <em>"I do think we excluded the last PO from this view that has not reached the WH... it is shown in the graph though."</em> v0.3's <code>CHAINS</code> array is curated to chains that reached Site WH; in-flight chains (PO raised, no GR yet) are deliberately excluded from the swimlane because phase C / D / E come back null and clutter the distribution stats. v0.3 comment: <em>"Re-evaluate after the next MB51 refresh — the chain has only Phase A+B data so including it with null C/D/E phases would clutter the distribution stats."</em> v0.4 now matches: in-flight chains drop out of the swimlane, stay visible on the Raw Data tab. Cancelled-with-PO chains also drop out (no Site WH means no full chain to render).
+        </li>
+        <li>
+          <b>Fix 3 · Diagnostic copy — "click Save" was wrong.</b> The APP-FIX-T-04b diagnostic told the operator to re-load the intake and "click Save" to pick up the new <code>purchaseOrder</code> alias. <strong>That was incorrect:</strong> the Save button persists the in-memory <code>state.parsed[mb51].canonical</code> rows; it doesn't re-run the parser. If the canonical rows in memory don't have the field, Save serialises them without the field. The correct migration is to <strong>re-drop the original <code>MB51_Opn.xlsx</code> file</strong> on the Intake page (which triggers a fresh parse with the new alias map) and then Save. Diagnostic chip rewritten to instruct the right action. Apology to the operator: the original APP-FIX-T-04b copy wasted a save cycle.
+        </li>
+        <li><b>What's NOT in this fix.</b> The math expectation is "v0.4 should match v0.3's 12-chain swimlane on material 2004641 after re-drop." If the chain count still doesn't match after the operator re-drops MB51, there's at least one more issue in the chain-compute logic that needs investigation. Open question for the next QA round.</li>
+        <li>No SCHEMA_VERSION bump, no Tune-pipeline change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>trace/trace.js</code> (cancellation OR → AND in <code>computeChainsForMaterial()</code>; swimlane filter tightened to <code>!!c.siteWH</code>; diagnostic copy for the stale-parse scenario rewritten to instruct re-drop instead of just Save), <code>record-of-change.html</code> (this APP-FIX-T-04c entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>trace/trace.js</code> from <code>_rollback/APP-FIX-T-04c-pre/</code>. Stage C — <code>git revert</code> the APP-FIX-T-04c commit. Rolling back re-introduces the OR cancellation logic (over-classifies cancelled), the looser swimlane filter (in-flight chains visible), and the misleading "click Save" diagnostic copy. <b>Rollback boundary is clean:</b> three small logic / copy changes in a single file.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->

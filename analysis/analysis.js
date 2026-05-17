@@ -137,10 +137,15 @@
       renderBucketTabs();
       if (state.result.buckets.length) selectBucket(state.result.buckets[0].key);
       renderExportActions();
-      // Auto-popup Inv Adj modal on first run when candidates exist
-      // and no prior confirmation has been recorded for this session
-      if (autoPopupIfCandidates !== false && iaCount > 0 && !state._invAdjSeen) {
-        state._invAdjSeen = true;
+      // APP-E25 (2026-05-17) — auto-popup the Inv Adj modal on first run when
+      // candidates exist AND the operator hasn't yet reviewed/dismissed it
+      // for THIS assessment. Gate flipped from a per-session JS flag
+      // (state._invAdjSeen, reset on every reload) to a persistent flag in
+      // the canonical JSON (parameters.invAdjReviewed, survives reload).
+      // Operator can re-open manually via the "N Inv-Adj candidate" link in
+      // the pipeline status header at any time.
+      const alreadyReviewed = !!(state.json && state.json.parameters && state.json.parameters.invAdjReviewed);
+      if (autoPopupIfCandidates !== false && iaCount > 0 && !alreadyReviewed) {
         // Slight delay so the analysis UI paints first
         setTimeout(() => openInvAdjModal(), 250);
       }
@@ -620,7 +625,10 @@
     host.innerHTML = `
       <div class="detail-head ${mat.trafficLight}">
         <div class="detail-head-id">
-          <div class="mat">${escapeHtml(mat.material)}</div>
+          <div class="mat-row">
+            <span class="mat">${escapeHtml(mat.material)}</span>
+            <button class="mat-copy" id="btnCopyMat" title="Copy material number to clipboard" aria-label="Copy material number">⧉</button>
+          </div>
           <div class="desc">${escapeHtml(mat.description || '')}</div>
         </div>
         <div class="detail-head-rec">
@@ -675,6 +683,45 @@
 
     // Bind LLM
     $('#btnLlm').addEventListener('click', () => runLlmReview(mat));
+
+    // APP-E26 (2026-05-17) — Bind material-number copy button. Tiny QoL
+    // ahead of the "Trace it!" cross-tool button (APP-T-07). Uses async
+    // Clipboard API with fallback for non-secure contexts (file:// in older
+    // browsers); brief glyph swap as visual confirm.
+    const copyBtn = $('#btnCopyMat');
+    if (copyBtn && !copyBtn._wired) {
+      copyBtn._wired = true;
+      copyBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const orig = copyBtn.textContent;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(mat.material);
+          } else {
+            // Fallback for non-secure contexts: temporary textarea + execCommand
+            const ta = document.createElement('textarea');
+            ta.value = mat.material;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'absolute'; ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          copyBtn.classList.add('copied');
+          copyBtn.textContent = '✓';
+        } catch (err) {
+          copyBtn.classList.add('failed');
+          copyBtn.textContent = '✕';
+          console.warn('Clipboard write failed:', err);
+        }
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          copyBtn.classList.remove('failed');
+          copyBtn.textContent = orig;
+        }, 1200);
+      });
+    }
   }
 
   /* ─── APP-E11 · Chart legend toggle wiring ──────────────────────────────
@@ -1396,11 +1443,20 @@
       backdrop._iaBound = true;
     }
   }
-  function closeInvAdjModal(){
+  async function closeInvAdjModal(){
     const modal = $('#invAdjModal');
     if (modal) {
       modal.classList.add('hidden');
       modal.setAttribute('aria-hidden', 'true');
+    }
+    // APP-E25 (2026-05-17) — ANY close of the Inv-Adj modal counts as
+    // "reviewed" for the current assessment so the auto-popup doesn't fire
+    // again on subsequent Analysis page loads. Skip / X / backdrop / Confirm
+    // all flow through here (Confirm has its own state update + persist
+    // before calling close; this guard is idempotent for that path).
+    if (state.json && state.json.parameters && !state.json.parameters.invAdjReviewed) {
+      state.json.parameters.invAdjReviewed = true;
+      try { await AppStorage.set('intake.current', state.json); } catch {}
     }
   }
 

@@ -30,6 +30,7 @@
     lumpyTopWoThreshold:    0.40,                   // 40% top-WO share
     invAdjSigmaThreshold:   5,                      // Inv-Adj day-spike detector: count ≥ mean + N·σ
     invAdjConfirmedDates:   [],                     // User-confirmed cycle-count dates (excluded from rate)
+    invAdjReviewed:         false,                  // APP-E25 (2026-05-17): operator has reviewed (Confirmed OR dismissed) the Inv-Adj modal for this assessment — gates the auto-popup so it doesn't fire again on every Analysis page load.
     wrSoftMonths:           6,                      // Stock-runway ≥ this AND mt ∈ wrMrpTypes → PURPLE soft (Possible WR)
     wrHardMonths:           9,                      // Stock-runway ≥ this → PURPLE hard (Likely WR). Lowered from 12 in v2.0.1.
     wrMrpTypes:             ['PD'],                 // MRP types that trigger the WR check at all. PD-only is the safe default (V1 self-corrects via draw-down).
