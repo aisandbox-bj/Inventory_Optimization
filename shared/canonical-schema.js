@@ -120,7 +120,13 @@
         inventoryMaster: [],
         userList:        [],
         materialVendor:  [],
-        leadTimes:       []
+        leadTimes:       [],
+        /* APP-T-02 (2026-05-16) — PR History as new optional intake source.
+           Trace bridge phase 1. Schema descriptor only — no validateShape
+           gate (optional). Saved canonical JSONs pre-dating T-02 simply
+           default to an empty array via the normaliser below. No
+           SCHEMA_VERSION bump (additive). */
+        prHistory:       []
       },
       validation: { passed: false, issues: [] }
     };

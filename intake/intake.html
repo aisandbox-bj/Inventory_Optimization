@@ -233,6 +233,16 @@
               <input type="file" accept=".xlsx,.xls,.csv" />
             </label>
           </div>
+          <!-- APP-T-02 (2026-05-16) — PR History: new optional source feeding
+               the Trace bridge. Visible (not .hidden) so the operator can
+               always drop a PR History file when they want Trace to have
+               real data. Required-for-Trace, optional-for-Tune. -->
+          <label class="drop drop-cond" data-source="prHistory">
+            <div class="name">PR History <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional — required for Trace)</em></div>
+            <div class="hint">Procurement requisition history. Adds <b>PR-to-PO chains</b>, cancellation flags, and creation-indicator (B = MRP-generated · R = manual) to the canonical JSON. Tune doesn't read it; Trace consumes this to render procurement-chain timelines.</div>
+            <span class="file">drag .xlsx / .csv here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv" />
+          </label>
         </div>
       </div>
     </section>

@@ -756,6 +756,47 @@ git -C /tmp/peek push --force-with-lease origin main
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>shared/config.js</code>, <code>settings/settings.html</code>, and <code>settings/settings.js</code> from <code>_rollback/APP-T-01d-pre/</code>. Stage C — <code>git revert</code> the APP-T-01d commit. Also wipe the now-unused localStorage key with <code>AppStorage.del('settings.multiPlant')</code> from the browser console, or run a factory reset from the Settings About section. <b>Rollback boundary is clean</b>: additive Settings UI + persistence. No analytical effect — no consumer reads the flag yet.
       </div>
+
+      <h4>APP-T-02 · PR History added to Tune's intake (Trace bridge — phase 1)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator pivot on 2026-05-16: <em>"lots of little tweaks eating time while we do not have a functional intake link for Trace, and the third tool is untouched."</em> Trace v0.3 is a 3,318-line single-file HTML with hard-coded data for ONE material (2004641). Trace's path to "real" comes through Tune's intake — it consumes Tune's existing inputs (MB51 / IW39 / Fleet / Inventory Master), and the one new source it needs is PR History. <strong>APP-T-02 is the functional intake link.</strong> Once shipped, any saved canonical JSON carries the PR-side data Trace will read in APP-T-03 (sibling-page bootstrap).</li>
+        <li><b>New optional intake source: PR History.</b> 21 columns aliased from the 30 in the SAP Fiori PR History export per the CoWork field-mapping audit (<code>_Hand-over docs/Fiori_Field_Audit_APP-T-01.md</code> §"PR History.xlsx"). The 9 audit-flagged low/no-value columns are deliberately skipped (Deliv. date category, Purchasing Info Rec, MPN:Material, No. of requisns, GR processing time, Goods Receipt boolean, Delivery Date in yyyymmdd-string form, Purch. Organization, Short Text). The 21 aliased fields:
+          <ul>
+            <li><b>Core / join keys:</b> <code>material</code>, <code>plant</code>, <code>uom</code>, <code>purchaseOrder</code>, <code>poDate</code>.</li>
+            <li><b>PR identity:</b> <code>pr</code>, <code>prItem</code>, <code>prDate</code>, <code>releaseDate</code>, <code>changedOn</code>.</li>
+            <li><b>PR state:</b> <code>processingStatus</code>, <code>deletionIndicator</code>, <code>creationIndicator</code> (B = MRP-generated · R = manual — critical for V2 Check F), <code>releaseIndicator</code>.</li>
+            <li><b>PR demand / routing:</b> <code>qtyRequested</code>, <code>shortText</code>, <code>requisitioner</code>, <code>acctAssignmentCat</code>, <code>purchasingGroup</code>, <code>itemCategory</code>.</li>
+            <li><b>Vendor side:</b> <code>desiredVendor</code>, <code>fixedVendor</code>.</li>
+          </ul>
+        </li>
+        <li><b>New canonical-JSON section</b> <code>data.prHistory[]</code>. Schema descriptor only — no <code>validateShape</code> gate (optional source). Saved canonical JSONs pre-dating T-02 hydrate cleanly via the existing <code>json.data[s] && json.data[s].length</code> guard in the reuse-modal loader; missing-prHistory rolls through silently. No SCHEMA_VERSION bump.</li>
+        <li><b>Intake UI surface:</b>
+          <ul>
+            <li>New drop zone in Step 1 (between Lead Times and the end of the row), labelled <i>"PR History (optional — required for Trace)"</i>. Tagline: <i>"procurement requisition history (Trace input)"</i>.</li>
+            <li>Per-file stats chips on the drop: <b>Lines</b> · <b>PRs</b> · <b>Materials</b> · plus the plant chip via the existing <code>computePlantBreakdown</code> from APP-T-01b. Cancellation breakdown (deletionIndicator + processingStatus='N') deferred to T-04's cancellation-diagnostic view.</li>
+            <li>Cross-file recon chips: <b>"in MB51"</b> + <b>"in Inv Master"</b> percentages — flags when PR History materials don't overlap with consumption / master data, which usually means a scope-of-export mismatch the operator should fix before Trace runs.</li>
+            <li>Step 2 schema-mapping panel auto-derives from <code>AppParsers.ALIASES.prHistory</code> — surfaces every alias matched / unmatched. 21 detailed <code>FIELD_HINTS</code> tooltips explain what each field is used for.</li>
+            <li>Reuse modal: PR History appears in the "Specifier / optional files (usually new per batch)" group, default unchecked — PR data ages fast and Trace wants current.</li>
+          </ul>
+        </li>
+        <li><b>What did NOT ship</b> (queued):
+          <ul>
+            <li><b>Trace itself.</b> The Trace sibling page (<code>trace/trace.html</code>) lands in APP-T-03 — it reads <code>data.prHistory[]</code> and renders the procurement-chain timeline. Until T-03, the new data sits on canonical-JSON rows with no consumer.</li>
+            <li><b>Supplier PO Reference + PR Acc Assignment intakes</b> — APP-T-05. Those drive the supplier scorecard + unit-cost views (and authoritative <code>primaryVendor</code> per audit §4 / D24).</li>
+            <li><b>Cancellation diagnostic + B/R breakdown chip</b> — APP-T-04 ports the v0.3 cancellation view onto the new sibling page and adds the breakdown chip as part of that.</li>
+            <li><b>Material-level <code>inventoryType</code> derivation</b> — MODE across recent PR lines per audit §F5. Lands when Trace consumes PR History for that purpose (T-04 / T-05 area).</li>
+          </ul>
+        </li>
+        <li>No analytical change. <code>pipeline.js</code> untouched. Tune's verdicts, rates, runway, Min/Max recommendations all identical to pre-T-02 runs — Tune doesn't read <code>data.prHistory</code>. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/parsers.js</code> (new <code>ALIASES.prHistory</code> + matching <code>FIELD_TYPES.prHistory</code> — 21 fields), <code>shared/canonical-schema.js</code> (added <code>data.prHistory: []</code> to <code>emptyJson()</code>), <code>intake/intake.html</code> (new <code>data-source="prHistory"</code> drop zone), <code>intake/intake.js</code> (<code>'prHistory'</code> added to <code>CONDITIONAL_SOURCES</code> + <code>SOURCE_LABEL</code> + <code>sourceTagline</code>; new <code>FIELD_NOTES.prHistory</code> with 21 tooltips; new <code>case 'prHistory'</code> in <code>computeSourceStats</code>; new <code>if (source === 'prHistory')</code> recon-chip block; <code>REUSE_LABELS.prHistory</code> + appended to specifier reuse-group), <code>record-of-change.html</code> (this APP-T-02 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>shared/parsers.js</code>, <code>shared/canonical-schema.js</code>, <code>intake/intake.js</code>, and <code>intake/intake.html</code> from <code>_rollback/APP-T-02-pre/</code>. Stage C — <code>git revert</code> the APP-T-02 commit. <b>Rollback boundary is clean</b>: additive aliases + schema slot + intake-UI plumbing. No analytical effect — no consumer reads <code>data.prHistory</code> yet. Saved intakes that were re-saved under T-02 carry the new <code>data.prHistory: []</code> field; older intakes silently default to it via the empty-canonical initialiser.
+      </div>
     </article>
 
     <!-- ───────── v2.1.2-dev ───────── -->

@@ -9,7 +9,8 @@
 
   /* ─── Sources required and conditional ──────────────────────────────────── */
   const REQUIRED_SOURCES   = ['mb51', 'iw39', 'fleetMaster', 'inventoryMaster'];
-  const CONDITIONAL_SOURCES= ['userList', 'materialVendor', 'leadTimes'];
+  /* APP-T-02 — prHistory added as conditional (optional for Tune, required for Trace). */
+  const CONDITIONAL_SOURCES= ['userList', 'materialVendor', 'leadTimes', 'prHistory'];
 
   const SOURCE_LABEL = {
     mb51:            'MB51 — Material Movements',
@@ -18,7 +19,8 @@
     inventoryMaster: 'Inventory Master',
     userList:        'User material list',
     materialVendor:  'Material — Vendor mapping',
-    leadTimes:       'Lead Times'
+    leadTimes:       'Lead Times',
+    prHistory:       'PR History'
   };
 
   /* ─── Per-field notes — what each canonical field is used for ───────────── */
@@ -72,6 +74,32 @@
       leadTimeDays: 'Time from re-order trigger to goods receipt. <b>Replaces minMonths</b> in the leadTimeBased Min/Max formula.',
       safetyStock:  'Buffer added on top of lead-time consumption to size the recommended Min.',
       source:       "How this lead-time was derived (e.g. 'SAP MARC', 'supplier-confirmed', 'measured')."
+    },
+    /* APP-T-02 — PR History hints. Tune doesn't read these fields today;
+       they're for Trace (T-03 onward). Hints frame the operator value. */
+    prHistory: {
+      material:           'Material number — <b>the join key</b> against MB51 + Inventory Master.',
+      plant:              'Plant code on the PR. Cross-checked against MB51 and Inventory Master plants.',
+      uom:                'Unit of measure on the PR line. Trace uses this for qty normalisation when pack sizes differ from base UoM.',
+      purchaseOrder:      'The PO this PR became (if it ever did). <b>Joins to Supplier PO Reference</b> for Phase C lead-time stats (T-05).',
+      poDate:             'When the PO was raised. Defines Phase B end-point.',
+      pr:                 'Purchase Requisition number. <b>Primary key</b> for PR-side rows.',
+      prItem:             'PR line item number. Multiple lines per PR possible.',
+      prDate:             'When the PR was raised. <b>Defines Phase A start-point</b> of the procurement chain.',
+      releaseDate:        'When the PR was released for sourcing. Phase A end-point.',
+      changedOn:          'Last-touched date. <b>Not reliable as a cancelled-on date</b> per CDHDR audit; use deletionIndicator + processingStatus for cancellation detection.',
+      processingStatus:   'PR processing state. <b>Status N + deletionIndicator true = cancelled.</b>',
+      deletionIndicator:  'Logical-delete flag. true/false (stored as string per SAP export).',
+      creationIndicator:  '<b>B = MRP-generated · R = manually created.</b> Critical for V2 Check F — manual PRs bypass MRP logic.',
+      releaseIndicator:   'Released vs pending release.',
+      qtyRequested:       'Quantity requested on the PR line. <b>Trace volume-tab input.</b>',
+      shortText:          'PR line description. Display only.',
+      requisitioner:      'Free-text requester name / group. Feeds F12 mapping for Compose.',
+      acctAssignmentCat:  'Account-assignment category: K = cost centre · A = asset · P = project · N = network · blank = stock.',
+      purchasingGroup:    'Buyer routing group code.',
+      itemCategory:       'Item category at PR line level. Material-level derivation (MODE across recent PRs) is deferred to T-05.',
+      desiredVendor:      'Vendor the requester wanted.',
+      fixedVendor:        'PR-intent vendor. <b>Cross-checked against Supplier PO Reference</b> (T-05) — flags VENDOR_DRIFT when they disagree (D24).'
     }
   };
 
@@ -82,7 +110,8 @@
       fleetMaster:     'equipment → model rollup',
       inventoryMaster: 'stock + MRP settings',
       materialVendor:  'material → vendor mapping',
-      leadTimes:       'per-material lead time + safety stock'
+      leadTimes:       'per-material lead time + safety stock',
+      prHistory:       'procurement requisition history (Trace input)'  /* APP-T-02 */
     };
     return map[source] || '';
   }
@@ -306,6 +335,15 @@
         ];
       case 'leadTimes':
         return [{ lab:'Materials', v:uniqOf('material').toLocaleString() }];
+      /* APP-T-02 — PR History chips. Cancellation breakdown deferred to T-04
+         when the cancellation-diagnostic view is built; for now the
+         foundation chunk just shows count of lines + PRs + materials. */
+      case 'prHistory':
+        return append([
+          { lab:'Lines',     v:rows.length.toLocaleString() },
+          { lab:'PRs',       v:uniqOf('pr').toLocaleString() },
+          { lab:'Materials', v:uniqOf('material').toLocaleString() }
+        ]);
       default:
         return [];
     }
@@ -407,6 +445,24 @@
         const im = setOfKey(p.inventoryMaster.canonical, 'material');
         const overlap = [...mv].filter(m => im.has(m)).length;
         out.push(reconChip('in Inv Master', overlap, mv.size));
+      }
+    }
+    /* APP-T-02 — PR History recon chips. Tells the operator how much of
+       the PR History data will actually pair with consumption (MB51) and
+       MRP settings (Inventory Master). Low overlap is a flag — likely
+       a scope-of-export mismatch the operator should fix before Trace
+       runs. */
+    if (source === 'prHistory') {
+      const prMats = setOfKey(p.prHistory.canonical, 'material');
+      if (p.mb51) {
+        const mb51M = setOfKey(p.mb51.canonical, 'material');
+        const overlap = [...prMats].filter(m => mb51M.has(m)).length;
+        out.push(reconChip('in MB51', overlap, prMats.size));
+      }
+      if (p.inventoryMaster) {
+        const imM = setOfKey(p.inventoryMaster.canonical, 'material');
+        const overlap = [...prMats].filter(m => imM.has(m)).length;
+        out.push(reconChip('in Inv Master', overlap, prMats.size));
       }
     }
     return out;
@@ -1822,7 +1878,9 @@
     inventoryMaster: { label:'Inventory Master',   desc:'Stock + MRP settings + classification + value' },
     materialVendor:  { label:'Material → Vendor',  desc:'Vendor mapping — only used for by-vendor scope' },
     leadTimes:       { label:'Lead Times',         desc:'Per-material lead-time + safety stock (rare)' },
-    userList:        { label:'User list',          desc:'Pre-loaded material list — usually you want to set a fresh one' }
+    userList:        { label:'User list',          desc:'Pre-loaded material list — usually you want to set a fresh one' },
+    /* APP-T-02 */
+    prHistory:       { label:'PR History',         desc:'Procurement requisition history — Trace input (Tune ignores)' }
   };
   // Datasets in the order we present them, separated into "heavy common" + "specifier"
   const REUSE_GROUPS = [
@@ -1830,7 +1888,9 @@
       sources: ['mb51', 'iw39', 'fleetMaster', 'inventoryMaster'],
       defaultChecked: true },
     { groupLabel: 'Specifier / optional files (usually new per batch — leave unchecked)',
-      sources: ['userList', 'materialVendor', 'leadTimes'],
+      /* APP-T-02 — prHistory in this group: optional, typically refreshed per
+         batch since PR data ages fast and Trace wants current. */
+      sources: ['userList', 'materialVendor', 'leadTimes', 'prHistory'],
       defaultChecked: false }
   ];
 

@@ -103,6 +103,40 @@
       leadTimeDays: ['Lead Time', 'Lead Time (Days)', 'Trigger to GR', 'LT'],
       safetyStock:  ['Safety Stock', 'SS', 'SS Qty'],
       source:       ['Source', 'Method', 'Lead Time Source']
+    },
+    /* APP-T-02 (2026-05-16) — PR History: new OPTIONAL source. The Trace
+       bridge starts here. 21 columns aliased from the 30 in the SAP Fiori
+       PR History export per the CoWork field-mapping audit; the 9 columns
+       skipped are the audit-flagged low/no-value ones (Deliv. date
+       category, Purchasing Info Rec, MPN:Material, No. of requisns, GR
+       processing time, Goods Receipt boolean, Delivery Date in yyyymmdd
+       string form, Purch. Organization, Short Text — kept for display
+       only, no canonical role). All values stay as strings unless
+       explicitly typed below — preserves SAP zero-padding on PR numbers,
+       PO numbers, and creation indicator flags. */
+    prHistory: {
+      material:           ['Material'],
+      plant:              ['Plant'],
+      uom:                ['Unit of Measure', 'Base UoM', 'BUn', 'UoM'],
+      purchaseOrder:      ['Purchase order', 'Purchasing Document'],
+      poDate:             ['Purchase Order Date', 'PO Date'],
+      pr:                 ['Purchase Requisition', 'PR Number', 'Requisition No.'],
+      prItem:             ['Item of requisition', 'Item', 'PR Item'],
+      prDate:             ['Requisition date', 'PR Date', 'Created on'],
+      releaseDate:        ['Release Date'],
+      changedOn:          ['Changed On'],
+      processingStatus:   ['Processing status', 'Status'],
+      deletionIndicator:  ['Deletion Indicator', 'Deletion ind.'],
+      creationIndicator:  ['Creation indicator', 'Creation Ind.', 'ESTKZ'],
+      releaseIndicator:   ['Release indicator', 'Release Ind.'],
+      qtyRequested:       ['Quantity requested', 'Quantity', 'Qty Requested'],
+      shortText:          ['Short Text', 'Description', 'Text'],
+      requisitioner:      ['Requisitioner'],
+      acctAssignmentCat:  ['Acct Assignment Cat.', 'Acc.Assgnmt Cat.', 'AAC'],
+      purchasingGroup:    ['Purchasing Group', 'Purch. Group', 'PGr'],
+      itemCategory:       ['Item Category', 'Item Cat'],
+      desiredVendor:      ['Desired Vendor'],
+      fixedVendor:        ['Fixed Vendor', 'Vendor']
     }
   };
 
@@ -291,6 +325,33 @@
       leadTimeDays: 'number',
       safetyStock:  'number',
       source:       'string'
+    },
+    /* APP-T-02 — PR History field types. Dates coerced via toIsoDate. Most
+       numeric-looking fields (PR / PO / item / vendor / plant) stay STRING
+       to preserve leading zeros. qtyRequested is the only true numeric. */
+    prHistory: {
+      material:           'string',
+      plant:              'string',
+      uom:                'string',
+      purchaseOrder:      'string',
+      poDate:             'date',
+      pr:                 'string',
+      prItem:             'string',
+      prDate:             'date',
+      releaseDate:        'date',
+      changedOn:          'date',
+      processingStatus:   'string',
+      deletionIndicator:  'string',
+      creationIndicator:  'string',
+      releaseIndicator:   'string',
+      qtyRequested:       'number',
+      shortText:          'string',
+      requisitioner:      'string',
+      acctAssignmentCat:  'string',
+      purchasingGroup:    'string',
+      itemCategory:       'string',
+      desiredVendor:      'string',
+      fixedVendor:        'string'
     }
   };
 
