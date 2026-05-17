@@ -329,6 +329,7 @@ main.shell { padding-top: 28px; }
     <a href="index.html">Dashboard</a>
     <a href="intake/intake.html">Intake</a>
     <a href="analysis/analysis.html">Analysis</a>
+    <a href="trace/trace.html">Trace</a>
     <a href="settings/settings.html">Settings</a>
     <a href="record-of-change.html" class="active">RoC</a>
     <a href="user-manual.html">Manual</a>
@@ -796,6 +797,91 @@ git -C /tmp/peek push --force-with-lease origin main
 
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>shared/parsers.js</code>, <code>shared/canonical-schema.js</code>, <code>intake/intake.js</code>, and <code>intake/intake.html</code> from <code>_rollback/APP-T-02-pre/</code>. Stage C — <code>git revert</code> the APP-T-02 commit. <b>Rollback boundary is clean</b>: additive aliases + schema slot + intake-UI plumbing. No analytical effect — no consumer reads <code>data.prHistory</code> yet. Saved intakes that were re-saved under T-02 carry the new <code>data.prHistory: []</code> field; older intakes silently default to it via the empty-canonical initialiser.
+      </div>
+
+      <h4>APP-T-03 · Calibre Trace lands as a sibling page in the app shell (Trace bridge — phase 2)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Trace v0.3 was a standalone HTML for one hard-coded material (2004641). T-02 made PR History data available on canonical JSON; T-03 is the chunk that lets Trace actually <em>consume</em> that data for any material in any assessment. <strong>First time Trace is usable in the suite.</strong></li>
+        <li><b>New page</b> at <code>trace/trace.html</code> + <code>trace.js</code> + <code>trace.css</code>. Mirrors the structure of <code>analysis/</code>. Reads canonical JSON from <code>AppStorage.get('intake.current')</code> — same source Analysis uses. Empty-state messages handle: (a) no intake loaded, (b) intake loaded but PR History missing, (c) PR History present but no materials parsed.</li>
+        <li><b>Nav link in all 6 existing pages</b> — Dashboard / Intake / Analysis / Settings / RoC / Manual all gained a <code>&lt;a href="trace/trace.html"&gt;Trace&lt;/a&gt;</code> link between Analysis and Settings. Trace page itself shows the link as <code>.active</code>. Pure HTML edits, no JS changes elsewhere.</li>
+        <li><b>Chain computation</b> (load-bearing logic — runs at runtime per selected material, no precomputed arrays):
+          <ul>
+            <li>Filter <code>data.prHistory</code> to rows for the selected material.</li>
+            <li>For each PR row, find first MB51 movement per <code>purchaseOrder</code> at MVT 107 (3PL GR) and 109 (Site WH receipt).</li>
+            <li>Find the first MVT 261 (consumption) for the same material at or after Site WH receipt — Phase E end-point.</li>
+            <li>Compute Phase A–E in calendar days: A = PR → release · B = release → PO · C = PO → 3PL GR · D = 3PL GR → Site WH · E = Site WH → first 261.</li>
+            <li>Classify each chain into one of five states: <code>COMPLETE</code> · <code>NOT_YET_CONSUMED</code> · <code>IN_FLIGHT</code> (PO exists, no Site WH yet) · <code>PR_ONLY</code> (no PO) · <code>CANCELLED</code> (deletionIndicator true OR processingStatus N).</li>
+            <li>Detect manual PRs via <code>creationIndicator === 'R'</code> (D26 / V2 Check F precursor — surfaced in the summary card and chart tooltip).</li>
+          </ul>
+        </li>
+        <li><b>Three rendered surfaces on the page:</b>
+          <ul>
+            <li><strong>Banner</strong> — assessment name, PR History line count, materials count, MB51 + Inventory Master counts.</li>
+            <li><strong>Material picker</strong> — searchable list of materials that have PR History rows, sorted by PR count descending. Click to load. Capped at 30 visible — refine search to access the rest.</li>
+            <li><strong>Material detail</strong> — six-cell summary (Complete chains · In-flight · PR only · Cancelled · Avg total LT · Manual PRs); Chart.js horizontal stacked bar (swimlane, ports v0.3's chart code but reads computed chains from canonical JSON); chain table with all phase durations and chain state per row.</li>
+          </ul>
+        </li>
+        <li><b>What did NOT ship (queued for follow-up chunks):</b>
+          <ul>
+            <li><strong>Other v0.3 views</strong> — supplier scorecard, YoY box plots, cancellation diagnostic, unit-cost sensitivity — APP-T-04.</li>
+            <li><strong>Supplier PO Reference + PR Acc Assignment intake</strong> needed for the supplier/cost views — APP-T-05.</li>
+            <li><strong>leadTimes.json export</strong> button — APP-T-06.</li>
+            <li><strong>Year filter / sigma outlier trim / right-click exclude</strong> from v0.3 — deferred to T-04 with the other filter UX.</li>
+            <li><strong>Persistent cross-page material selection</strong> (Trace remembering what Analysis last looked at) — small UX win, queued separately.</li>
+          </ul>
+        </li>
+        <li><b>No analytical effect on Tune.</b> Trace reads its own copy of canonical JSON; doesn't write back, doesn't touch pipeline.js, doesn't modify the analysis chart. Tune's verdicts, rates, Min/Max recommendations all identical. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. No SCHEMA_VERSION bump (the page reads <code>data.prHistory</code> + <code>data.mb51</code> already in the canonical shape).</li>
+        <li><b>Honest caveats surfaced on the page</b> (per the "never hide issues" principle):
+          <ul>
+            <li><strong>Phase E is computed to the first MVT 261 for the material after Site WH — not necessarily of THIS PO's units specifically.</strong> SAP doesn't track per-unit provenance from receipt to consumption without batch management. Caveat caption renders beneath the chart.</li>
+            <li>Cancelled PRs render with dimmed/strike-through styling so they're visible but de-emphasised.</li>
+            <li>Manual PRs (creationIndicator R) are surfaced in the summary card so the operator sees them — they bypass MRP logic and matter for analysis credibility.</li>
+            <li>Quantity column shows the MB51 109 receipt qty when available; falls back to PR-requested qty. <code>qtySource</code> string in tooltip names which.</li>
+          </ul>
+        </li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <b>NEW</b> <code>trace/trace.html</code>, <code>trace/trace.js</code>, <code>trace/trace.css</code>. <b>Nav link added</b> in <code>index.html</code>, <code>intake/intake.html</code>, <code>analysis/analysis.html</code>, <code>settings/settings.html</code>, <code>record-of-change.html</code>, <code>user-manual.html</code> (one line each). <code>record-of-change.html</code> (this APP-T-03 entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — delete the new <code>trace/</code> directory (<code>trace.html</code> + <code>trace.js</code> + <code>trace.css</code>) and restore the 6 nav-edited pages from <code>_rollback/APP-T-03-pre/</code>. Stage C — <code>git revert</code> the APP-T-03 commit. <b>Rollback boundary is clean</b>: a new page + 6 one-line nav-link edits. No shared module modified, no schema change, no analytical effect. The previous standalone Trace v0.3 file at <code>4 - Build Output/Procurement Chain Timeline/v0.3/</code> remains untouched for reference.
+      </div>
+
+      <h4>APP-FIX-T-03a · Two post-T-03 fixes — JSON-upload error + PR History always-offered</h4>
+      <ul>
+        <li><b>Operator findings on 2026-05-17 test of APP-T-03.</b> Three symptoms observed; two have root causes traced + fixed here, the third (Dashboard registration + proceed-without-name) is queued as a separate chunk.</li>
+        <li>
+          <b>Fix 1 · <code>ReferenceError: needed is not defined</code> on JSON upload.</b>
+          <div class="card cal-bar">
+            <div class="card-label">Root cause — pre-existing latent bug surfaced by the JSON-load path</div>
+            <div class="card-content"><code>intake.js</code> <code>applyAssessmentType(type)</code> referenced <code>needed</code> on the final status-text line without ever declaring it. The bug was dormant because the normal flow runs <code>applyAssessmentType</code> only from the radio-click handler, and the assessment-type radios were always wired AFTER the status-text element was hydrated by some other path. The <strong>JSON-upload path</strong> calls <code>applyAssessmentType</code> programmatically to restore the saved assessment type — that's the path that surfaced the throw. The throw aborted the load mid-flow, which is why the DQ gate didn't populate (operator's second symptom): the rest of the hydrate routine never ran. Fixed by computing <code>needed</code> from <code>CanonicalSchema.ASSESSMENT_TYPE_REQUIRES[type]</code> right before the status-text line. <strong>Same fix resolves both the toast error AND the empty DQ gate.</strong></div>
+          </div>
+        </li>
+        <li>
+          <b>Fix 2 · PR History drop zone blocked when assessment type = User List.</b>
+          <div class="card cal-bar">
+            <div class="card-label">Root cause — assessment-type grey-out logic missed prHistory in its skip-list</div>
+            <div class="card-content"><code>applyAssessmentType</code> greys out drop zones that aren't "offered" by the current assessment type, based on each drop's <code>data-needed-by</code> attribute. Two existing free-floating sources (<code>materialVendor</code> · <code>leadTimes</code>) are skipped from this filter because their visibility is managed elsewhere (scope/method toggles). <strong>APP-T-02 added PR History as a similar free-floating source but missed adding it to the skip-list</strong> — so the PR History drop greyed out whenever the assessment type was User List or Parameter Search (its <code>data-needed-by</code> attribute wasn't populated, so <code>neededBy.includes(type)</code> was always false). Fixed by adding <code>prHistory</code> to the skip-list alongside <code>materialVendor</code> and <code>leadTimes</code>. <strong>PR History is now always uploadable</strong> regardless of which Tune assessment type the operator picked — correct semantics, since Trace is a sibling tool on the same canonical JSON and the operator may want PR data on any assessment.</div>
+          </div>
+        </li>
+        <li><b>What did NOT ship in this fix chunk</b> (queued as a separate chunk — <code>APP-FIX-T-03b</code> or similar — once root-caused):
+          <ul>
+            <li><strong>"Proceed to Analysis" allowed without an assessment name</strong> — operator can land in Analysis with an unnamed assessment. The fix is a guard on the "Open in Analysis Engine" path that warns when <code>metadata.assessmentName</code> is empty.</li>
+            <li><strong>Analysis doesn't appear on Dashboard Recent Intakes</strong> — operator clicked "Open in Analysis Engine" without first clicking "Save to local storage". The existing copy on the "Open in Analysis Engine" button DOES say "Save first if you also want it in Recent Intakes" but the UX clearly isn't loud enough. Options: (a) auto-save before opening, (b) modal warn "this won't be visible on Dashboard — save first?", (c) merge the two buttons into one. Needs design call.</li>
+            <li><strong>Operator's bigger UX suggestion</strong> — replace the 3 Tune-flavoured assessment-type cards with a tool-selector showing which of the three suite tools (Tune / Trace / Compose) will run on this intake, with drop-zone availability driven from the tool selection. That's a meaningful design change worth its own chunk after the small UX fixes above land.</li>
+          </ul>
+        </li>
+        <li>No schema change, no analytical effect, no Trace-page change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. Operator can now (a) upload a saved JSON without an error toast, (b) see the DQ gate populate normally after the load, (c) drop PR History on any assessment type.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>intake/intake.js</code> (two surgical fixes inside <code>applyAssessmentType()</code> — defined the missing <code>needed</code> variable; added <code>'prHistory'</code> to the assessment-type skip-list), <code>record-of-change.html</code> (this APP-FIX-T-03a entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>intake/intake.js</code> from <code>_rollback/APP-FIX-T-03a-pre/</code>. Stage C — <code>git revert</code> the APP-FIX-T-03a commit. <b>Rollback boundary is clean</b>: two small clauses inside a single function. Rolling back re-introduces both bugs (JSON-load throws, PR History greys out on User List / Parameter Search assessments).
       </div>
     </article>
 

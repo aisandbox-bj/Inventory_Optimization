@@ -176,9 +176,12 @@
     // for the userList type even though it's not required for DQ pass.
     $$('.drop[data-source]').forEach(drop => {
       const source = drop.dataset.source;
-      // The conditional zones (materialVendor, leadTimes) are managed by scope/method toggles —
-      // don't override their hidden state from here.
-      if (source === 'materialVendor' || source === 'leadTimes') return;
+      // Free-floating optional sources — NOT gated by assessment type:
+      //   materialVendor / leadTimes — managed by scope / method toggles.
+      //   prHistory (APP-FIX-T-03a, 2026-05-17) — Trace input; operator may
+      //     want to upload it regardless of which Tune assessment type they
+      //     picked, since Trace is a sibling tool on the same canonical JSON.
+      if (source === 'materialVendor' || source === 'leadTimes' || source === 'prHistory') return;
       const neededBy = (drop.getAttribute('data-needed-by') || '').split(',').map(s => s.trim());
       const offered = neededBy.includes(type);
       drop.classList.toggle('atype-disabled', !offered);
@@ -208,7 +211,14 @@
 
     $('#step0Status').textContent = `${labelForType(type)} selected`;
     $('#step0Status').className = 'step-status done';
-    $('#step1Status').textContent = `awaiting ${[...needed].join(' · ')}`;
+    // APP-FIX-T-03a (2026-05-17) — pre-existing latent bug surfaced by the
+    // JSON-upload path firing applyAssessmentType(). 'needed' was referenced
+    // without ever being defined → ReferenceError, which cascaded into a
+    // mid-flow abort on load (DQ gate skipped, dashboard registration
+    // missed). Compute the list from the locked assessment-type → required-
+    // sources map.
+    const needed = CanonicalSchema.ASSESSMENT_TYPE_REQUIRES[type] || [];
+    $('#step1Status').textContent = `awaiting ${needed.join(' · ')}`;
 
     if (type === 'paramSearch') renderParamSearch();
     renderJsonPreview();
