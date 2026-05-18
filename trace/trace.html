@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Calibre Trace · v0.4-dev (sibling page bootstrap) · APP-T-03 · 2026-05-17
+     Calibre Trace · v0.4-dev (left rail + scope machinery) · APP-T-04
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      RoC  : ../record-of-change.html
      Reads canonical JSON from local storage (same source as Analysis).
-     Consumes data.prHistory[] + data.mb51[] to compute procurement chains.
+     Left rail hosts SCOPE selector + VIEW list.
 ═════════════════════════════════════════════════════════════════════════-->
 <html lang="en">
 <head>
@@ -33,73 +33,150 @@
   </div>
 </nav>
 
-<main class="shell">
-  <div id="root">
+<main class="trace-shell" id="traceShell">
 
-    <section id="banner" class="loaded-banner">
-      <div>
-        <span class="lab">Loading</span>
-        <h2>—</h2>
-        <div class="sub">awaiting canonical JSON from local storage…</div>
+  <!-- ═════════════════ EMPTY-STATE OVERLAY (no intake / no PR History) ═════════════════ -->
+  <section id="emptyState" class="empty-state hidden"></section>
+
+  <!-- ═════════════════ LEFT RAIL · scope + views ═════════════════ -->
+  <aside class="trace-rail" id="traceRail">
+
+    <div class="rail-brand">
+      <span class="rail-brand-dot"></span>
+      <span class="rail-brand-name">Calibre Trace</span>
+      <span class="rail-brand-ver">v0.4-dev</span>
+    </div>
+
+    <section class="rail-section rail-scope">
+      <div class="rail-section-label">Scope</div>
+
+      <div class="scope-mode" id="scopeMode">
+        <label class="scope-mode-opt"><input type="radio" name="scopeModeRadio" value="single" checked> Single material</label>
+        <label class="scope-mode-opt"><input type="radio" name="scopeModeRadio" value="multi"> Multi-material</label>
       </div>
-      <div class="row"></div>
-      <div class="row"></div>
-    </section>
 
-    <section id="materialPicker" class="material-picker hidden">
-      <div class="picker-head">
-        <span class="lab">Material</span>
+      <!-- ─── SINGLE MATERIAL ─── -->
+      <div class="scope-single" id="scopeSingle">
         <input type="text" id="matSearch" class="mat-search" placeholder="Search material or description…" autocomplete="off" />
-        <span class="picker-meta" id="pickerMeta"></span>
+        <div class="mat-list-compact" id="matListCompact"></div>
+        <div class="scope-meta" id="scopeSingleMeta"></div>
       </div>
-      <div id="matList" class="mat-list"></div>
-    </section>
 
-    <section id="materialDetail" class="material-detail hidden">
-      <div class="detail-head">
-        <div class="detail-head-id">
-          <div class="mat" id="dMat">—</div>
-          <div class="desc" id="dDesc">—</div>
+      <!-- ─── MULTI MATERIAL ─── -->
+      <div class="scope-multi hidden" id="scopeMulti">
+        <div class="multi-source">
+          <button class="rail-btn" id="btnUseTuneList" title="Pull the material list from this assessment's manual scope (User List assessments only)">Use Tune's list</button>
+          <button class="rail-btn" id="btnPasteList" title="Paste a material list, one per row">Paste list…</button>
+          <div class="paste-zone hidden" id="pasteZone">
+            <textarea id="pasteText" placeholder="One material per row — or comma / tab-delimited" rows="4" spellcheck="false"></textarea>
+            <div class="paste-actions">
+              <button class="rail-btn-sub" id="pasteApply">Apply</button>
+              <button class="rail-btn-sub" id="pasteCancel">Cancel</button>
+            </div>
+          </div>
         </div>
-        <div class="detail-head-summary" id="dSummary"></div>
-      </div>
 
-      <div class="chart-toolbar">
-        <span class="chart-toolbar-lab">View:</span>
-        <span class="chart-toolbar-lab" id="chainCount">—</span>
-      </div>
-      <div class="chart-host">
-        <canvas id="swimChart"></canvas>
-      </div>
-      <div class="chart-caveat" id="chartCaveat">Phases A–E computed from PR History + MB51 join on Purchase Order. Phase E (Time to First Use) measured to the first consumption transaction for this material after Site WH receipt — not necessarily of this PO's units specifically.</div>
+        <div class="multi-filter">
+          <div class="filter-label">Material group</div>
+          <div class="filter-search-wrap">
+            <input type="text" id="groupSearch" class="filter-search" placeholder="Filter groups…" autocomplete="off" />
+          </div>
+          <div class="filter-check-list" id="groupChecks"></div>
+        </div>
 
-      <div class="chain-table-wrap">
-        <table class="chain-table" id="chainTable">
-          <thead>
-            <tr>
-              <th>PR</th>
-              <th>PR date</th>
-              <th>PO</th>
-              <th>PO date</th>
-              <th>3PL GR</th>
-              <th>Site WH</th>
-              <th>First 261</th>
-              <th class="num">A</th>
-              <th class="num">B</th>
-              <th class="num">C</th>
-              <th class="num">D</th>
-              <th class="num">E</th>
-              <th class="num">Total</th>
-              <th class="num">Qty</th>
-              <th>State</th>
-            </tr>
-          </thead>
-          <tbody id="chainTableBody"></tbody>
-        </table>
+        <div class="multi-filter">
+          <div class="filter-label">Stock level</div>
+          <select id="stockFilter" class="filter-select">
+            <option value="any">Any</option>
+            <option value="oos">Out of stock (SOH ≤ 0)</option>
+            <option value="belowMin">Below MRP Min (V1)</option>
+            <option value="belowSS">Below Safety Stock (PD)</option>
+            <option value="aboveMax">Above MRP Max (V1)</option>
+          </select>
+        </div>
+
+        <div class="scope-summary" id="scopeMultiSummary">No multi-material scope set yet.</div>
       </div>
     </section>
 
-  </div>
+    <section class="rail-section rail-views">
+      <div class="rail-section-label">Views</div>
+
+      <!-- POST-T-04 PATCH (2026-05-17) — views no longer locked to a scope
+           mode. Operator can click any view in any scope; queued views render
+           the "not built yet" panel rather than refusing the click. -->
+      <div class="view-group">
+        <div class="view-group-label">Single material</div>
+        <button class="view-btn active" data-view="procurement-chain">
+          <span class="view-btn-marker">▶</span>
+          <span class="view-btn-label">Procurement Chain</span>
+        </button>
+        <!-- APP-FIX-T-04b (2026-05-17) — Raw Data lifted from the
+             Procurement Chain view into its own tab per operator request. -->
+        <button class="view-btn" data-view="raw-data">
+          <span class="view-btn-marker">▶</span>
+          <span class="view-btn-label">Raw Data</span>
+        </button>
+        <button class="view-btn queued" data-view="phase-distribution" title="Not built yet — click to learn more">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Phase Distribution</span>
+        </button>
+      </div>
+
+      <div class="view-group">
+        <div class="view-group-label">Multi-material</div>
+        <button class="view-btn queued" data-view="internal-mom" title="Not built yet — click to learn more">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Internal Process MoM</span>
+        </button>
+        <button class="view-btn queued" data-view="supplier-performance" title="Not built yet">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Supplier Performance</span>
+        </button>
+        <button class="view-btn queued" data-view="three-pl" title="Not built yet">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">3PL Performance</span>
+        </button>
+        <button class="view-btn queued" data-view="cancellation" title="Not built yet">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Cancellation Diagnostic</span>
+        </button>
+        <button class="view-btn queued" data-view="unit-cost" title="Not built yet">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Unit-Cost Sensitivity</span>
+        </button>
+        <button class="view-btn queued" data-view="year-on-year" title="Not built yet">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Year-on-Year</span>
+        </button>
+        <button class="view-btn queued" data-view="volume" title="Not built yet">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Volume cumulative</span>
+        </button>
+        <button class="view-btn queued" data-view="data-table" title="Not built yet">
+          <span class="view-btn-marker">◌</span>
+          <span class="view-btn-label">Data Table</span>
+        </button>
+      </div>
+    </section>
+
+    <div class="rail-foot">
+      <span>Trace bridge · phase 3</span>
+    </div>
+  </aside>
+
+  <!-- ═════════════════ CONTENT AREA · banner + active view ═════════════════ -->
+  <section class="trace-content" id="traceContent">
+
+    <header class="content-banner" id="contentBanner"></header>
+
+    <div class="content-view" id="contentView">
+      <!-- Renders the active view; defaults to Procurement Chain for the
+           selected single material. trace.js owns the swap. -->
+    </div>
+
+  </section>
+
 </main>
 
 <!-- ─── Libraries (CDN) ─── -->
