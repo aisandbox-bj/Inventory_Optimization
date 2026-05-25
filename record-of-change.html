@@ -379,6 +379,40 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-3 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-3 · Procurement Flow funnel — vertical cascade from the corrected state machine</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Analysis doc §9 P3. v0.3's vertical funnel (lines 803–850) was the headline summary surface — PR Generated → Cancelled → Progressed → Delivered, with units / percentages / connector glyphs that read end-to-end. v0.4 had a generic 6-cell stats grid which didn't communicate the flow. Operator framing: <em>"liven up the next function"</em> — so this isn't just a structural port, it's a deliberate visual upgrade.</li>
+        <li><b>The funnel arithmetic (computed dynamically from the active() set):</b><br>
+          <code>PR Generated</code> — total active chains (post year/sigma/manual filters)<br>
+          <code>Cancelled (no PO)</code> — <code>state === 'CANCELLED'</code> per the operator-locked PR/PO rule<br>
+          <code>PR raised · open</code> — <code>state === 'PR_ONLY'</code> (in-process, no PO yet; tier appears only when count &gt; 0)<br>
+          <code>Progressed to PO</code> — chains with a PO populated (everything not Cancelled and not PR-only). <code>adminCancel</code> count surfaces as a pill on this tier per the rule (post-PO deletion is admin-only, classifies by phase reached, lives inside Progressed not Cancelled).<br>
+          <code>Delivered to WH</code> — chains with <code>siteWH</code> populated (IN_FLIGHT post-site, NOT_YET_CONSUMED, COMPLETE). Percentage shown vs Progressed (the natural conversion question) AND vs ordered units; overship case (delivered &gt; ordered) labeled inline.</li>
+        <li><b>What "liven up" landed:</b><br>
+          (1) Top accent strip — three-stop linear gradient (cyan → copper-orange → green) at the panel's top edge, signalling the flow's progression.<br>
+          (2) Per-tier tinted left-border + radial gradient background — cancelled red, pr-only blue, progressed copper, delivered green.<br>
+          (3) Per-tier mini progress bar at the bottom of each tile, filled to the tier's percentage of its parent. Bars animate from 0 → target on first render via CSS keyframes.<br>
+          (4) Big-number count animates in with a pop on first render (cubic-bezier overshoot).<br>
+          (5) Connector glyphs (├─, └─) between tiers mirror v0.3's tree structure visually.<br>
+          (6) Hover on any tier subtly translates the card right + brightens the background — interactive feel without overdoing it.<br>
+          (7) Glyphs per tier (◯ ✕ ◐ ⇒ ✓) carry the meaning even when the text is small.</li>
+        <li><b>What I removed:</b> the old <code>.pchain-summary</code> 6-cell grid (Complete chains · In-flight · PR only · Cancelled · Avg LT · Manual PRs). Funnel now owns the headline counts. A new smaller <code>.pchain-stats</code> row below carries the secondary stats that didn't fit the funnel arc: Complete chains · In-flight · Avg LT · Manual PRs · Admin-cancel (when present). The redundant standalone "admin-cancelled" note from PORT-1 is also gone — admin-cancel surfaces as a pill on the Progressed funnel tier and a stats cell below, single source of truth in two visible spots.</li>
+        <li><b>What this does NOT change:</b> no logic change to the state machine, no parser change, no schema change, no canonical-JSON shape change. The funnel reads <code>act = active(state.chains, material)</code> from PORT-2 — filter machinery is the only data source. Toolbar count strip below the swimlane updated to match the funnel's vocabulary (delivered / progressed counts instead of complete / in-flight).</li>
+        <li><b>How to verify.</b> Open a Trace assessment in single-material mode. The Procurement Chain view now leads with the funnel panel — five tiers from PR Generated down through Delivered. Counts pop in. Progress bars sweep from left. Hover any tier — translates right slightly. Apply a year filter or sigma trim from the toolbar — funnel recomputes (counts re-pop, bars re-sweep). Right-click a chain in the swimlane to exclude → funnel recomputes; the count delta shows up on the right tier. If a material has admin-cancelled chains, the Progressed tier shows a blue pill. If a material has no cancelled or no PR-only chains, those tiers drop out (the panel only shows tiers that exist).</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (funnel arithmetic in renderProcurementChain + funnel HTML block + replaced .pchain-summary with .pchain-stats + toolbar count strip vocab) · <code>trace/trace.css</code> (~150 lines appended for funnel + tier tints + animations + stats row). Snapshot at <code>_rollback/APP-V03-PORT-3-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore <code>trace/trace.js</code> + <code>trace/trace.css</code> from snapshot. Clean rollback — no state-shape changes, no schema, no persistence keys.</li>
+        <li><b>Next on the Trace port queue (per analysis doc §9).</b> APP-V03-PORT-4 (Distribution / box plots — Tukey upper fence per phase across the active set).</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-2a ───────── -->
     <article class="roc-entry dev">
       <div class="head">

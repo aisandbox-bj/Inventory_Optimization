@@ -758,6 +758,86 @@
       : null;
     const manualPR = act.filter(c => c.creationIndicator === 'R').length;
 
+    // APP-V03-PORT-3 (2026-05-24) — Funnel arithmetic. v0.3 panel
+    // (lines 803–850) reborn dynamically from the corrected state machine.
+    //   PR Generated  = active total
+    //   Cancelled     = state === 'CANCELLED' (PR with no PO — operator-rule)
+    //   PR Only       = state === 'PR_ONLY' (still in process — no PO yet)
+    //   Progressed    = has PO (i.e. NOT cancelled and NOT pr-only)
+    //   Delivered     = has siteWH (i.e. IN_FLIGHT progressed past site,
+    //                   plus NOT_YET_CONSUMED + COMPLETE)
+    const progressed   = act.filter(c => !!c.po && c.state !== 'CANCELLED');
+    const delivered    = act.filter(c => !!c.siteWH);
+    const sumQty = (arr) => arr.reduce((s, c) => s + (c.qty || 0), 0);
+    const funnel = {
+      generated: { count: act.length,           units: sumQty(act),         label: 'PR Generated',          glyph: '◯' },
+      cancelled: { count: cancelled.length,     units: sumQty(cancelled),   label: 'Cancelled (no PO)',     glyph: '✕' },
+      prOnly:    { count: prOnly.length,        units: sumQty(prOnly),      label: 'PR raised · open',      glyph: '◐' },
+      progressed:{ count: progressed.length,    units: sumQty(progressed),  label: 'Progressed to PO',      glyph: '⇒' },
+      delivered: { count: delivered.length,     units: sumQty(delivered),   label: 'Delivered to WH',       glyph: '✓' }
+    };
+    const fmtN = n => n.toLocaleString();
+    const pct  = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+
+    // Build the funnel HTML — vertical cascade, tinted per tier, each tile
+    // animates a count-up the first render via CSS keyframes.
+    const funnelHtml = `
+      <div class="pchain-funnel" data-anim="1">
+        <div class="pf-hdr"><span class="pf-hdr-lab">Procurement Flow</span><span class="pf-hdr-sub">${fmtN(funnel.generated.count)} PRs · ${fmtN(funnel.generated.units)} units</span></div>
+        <div class="pf-tier pf-tier-root">
+          <div class="pf-glyph">${funnel.generated.glyph}</div>
+          <div class="pf-body">
+            <div class="pf-row1"><span class="pf-lab">${funnel.generated.label}</span><span class="pf-count">${fmtN(funnel.generated.count)}</span></div>
+            <div class="pf-row2"><span class="pf-units">${fmtN(funnel.generated.units)} units requested</span></div>
+          </div>
+        </div>
+        <div class="pf-branches">
+          ${funnel.cancelled.count > 0 ? `
+            <div class="pf-tier pf-tier-cancel">
+              <div class="pf-conn">├─</div>
+              <div class="pf-glyph">${funnel.cancelled.glyph}</div>
+              <div class="pf-body">
+                <div class="pf-row1"><span class="pf-lab">${funnel.cancelled.label}</span><span class="pf-count">${fmtN(funnel.cancelled.count)}</span><span class="pf-pct">${pct(funnel.cancelled.count, funnel.generated.count)}% of PRs</span></div>
+                <div class="pf-row2"><span class="pf-units">${fmtN(funnel.cancelled.units)} units</span><span class="pf-upct">${pct(funnel.cancelled.units, funnel.generated.units)}% of requested</span></div>
+                <div class="pf-bar"><div class="pf-bar-fill" style="width:${pct(funnel.cancelled.count, funnel.generated.count)}%"></div></div>
+              </div>
+            </div>
+          ` : ''}
+          ${funnel.prOnly.count > 0 ? `
+            <div class="pf-tier pf-tier-pronly">
+              <div class="pf-conn">├─</div>
+              <div class="pf-glyph">${funnel.prOnly.glyph}</div>
+              <div class="pf-body">
+                <div class="pf-row1"><span class="pf-lab">${funnel.prOnly.label}</span><span class="pf-count">${fmtN(funnel.prOnly.count)}</span><span class="pf-pct">${pct(funnel.prOnly.count, funnel.generated.count)}% of PRs</span></div>
+                <div class="pf-row2"><span class="pf-units">${fmtN(funnel.prOnly.units)} units</span><span class="pf-note" title="PR raised, deletion-flag not set, no PO yet. Per the operator PR/PO rule these are treated as in-process — they may or may not progress to PO.">in process</span></div>
+                <div class="pf-bar"><div class="pf-bar-fill" style="width:${pct(funnel.prOnly.count, funnel.generated.count)}%"></div></div>
+              </div>
+            </div>
+          ` : ''}
+          <div class="pf-tier pf-tier-po">
+            <div class="pf-conn">└─</div>
+            <div class="pf-glyph">${funnel.progressed.glyph}</div>
+            <div class="pf-body">
+              <div class="pf-row1"><span class="pf-lab">${funnel.progressed.label}</span><span class="pf-count">${fmtN(funnel.progressed.count)}</span><span class="pf-pct">${pct(funnel.progressed.count, funnel.generated.count)}% of PRs</span></div>
+              <div class="pf-row2"><span class="pf-units">${fmtN(funnel.progressed.units)} units</span><span class="pf-upct">${pct(funnel.progressed.units, funnel.generated.units)}% of requested</span>${adminCancel ? `<span class="pf-note pf-admin" title="PRs deletion-flagged AFTER PO raised — admin meaning only, classified by phase reached per the PR/PO rule.">+${adminCancel} admin-cancel</span>` : ''}</div>
+              <div class="pf-bar"><div class="pf-bar-fill" style="width:${pct(funnel.progressed.count, funnel.generated.count)}%"></div></div>
+            </div>
+          </div>
+          ${funnel.progressed.count > 0 ? `
+            <div class="pf-tier pf-tier-deliv pf-indent">
+              <div class="pf-conn">└─</div>
+              <div class="pf-glyph">${funnel.delivered.glyph}</div>
+              <div class="pf-body">
+                <div class="pf-row1"><span class="pf-lab">${funnel.delivered.label}</span><span class="pf-count">${fmtN(funnel.delivered.count)}</span><span class="pf-pct">${pct(funnel.delivered.count, funnel.progressed.count)}% of POs</span></div>
+                <div class="pf-row2"><span class="pf-units">${fmtN(funnel.delivered.units)} units${funnel.delivered.units > funnel.progressed.units ? ' (overship)' : ''}</span><span class="pf-upct">${pct(funnel.delivered.units, funnel.progressed.units)}% of ordered</span></div>
+                <div class="pf-bar"><div class="pf-bar-fill" style="width:${pct(funnel.delivered.count, funnel.progressed.count)}%"></div></div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
     // POST-T-04 PATCH (2026-05-17) — operator finding: chains all show "in-
     // flight" or "cancelled" on materials they're investigating. Surface the
     // honest data-source story instead of letting them guess. Only renders
@@ -805,21 +885,20 @@
     host.innerHTML = `
       ${filterToolbar}
 
-      <div class="pchain-summary">
-        <div class="sum-cell"><span class="lab">Complete chains</span><span class="v">${complete.length}</span></div>
-        <div class="sum-cell"><span class="lab">In-flight</span><span class="v">${inFlight.length}</span></div>
-        <div class="sum-cell"><span class="lab">PR only</span><span class="v">${prOnly.length}</span></div>
-        <div class="sum-cell"><span class="lab">Cancelled (no PO)</span><span class="v ${cancelled.length ? 'warn' : ''}">${cancelled.length}</span></div>
-        <div class="sum-cell"><span class="lab">Avg total LT</span><span class="v">${avgLT != null ? avgLT + 'd' : '—'}</span></div>
-        <div class="sum-cell"><span class="lab">Manual PRs</span><span class="v ${manualPR ? 'warn' : ''}">${manualPR}</span></div>
-      </div>
+      ${funnelHtml}
 
-      ${adminCancel ? `<div class="pchain-admin-note" title="PR's deletion-flag set after PO already raised — admin meaning only per the PR/PO classification rule; these chains classify by phase reached, not as cancelled."><b>${adminCancel}</b> admin-cancelled chain${adminCancel === 1 ? '' : 's'} (PR deletion-flagged post-PO) — see Raw Data view.</div>` : ''}
+      <div class="pchain-stats">
+        <div class="ps-cell"><span class="lab">Complete chains</span><span class="v">${complete.length}</span></div>
+        <div class="ps-cell"><span class="lab">In-flight</span><span class="v">${inFlight.length}</span></div>
+        <div class="ps-cell"><span class="lab">Avg total LT</span><span class="v">${avgLT != null ? avgLT + 'd' : '—'}</span></div>
+        <div class="ps-cell"><span class="lab">Manual PRs</span><span class="v ${manualPR ? 'warn' : ''}">${manualPR}</span></div>
+        ${adminCancel ? `<div class="ps-cell"><span class="lab">Admin-cancel</span><span class="v" title="Subset of Progressed: PR deletion-flagged AFTER the PO landed. Per the PR/PO rule, classified by phase reached, not as cancelled.">${adminCancel}</span></div>` : ''}
+      </div>
 
       ${diagnostic}
 
       <div class="chart-toolbar">
-        <span class="chart-toolbar-lab" id="chainCount">${act.length} of ${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${complete.length} complete · ${inFlight.length} in-flight · ${cancelled.length} cancelled (no PO)${adminCancel ? ` · ${adminCancel} admin-cancel` : ''}${totalExcl ? ` · ${totalExcl} excluded` : ''}</span>
+        <span class="chart-toolbar-lab" id="chainCount">${act.length} of ${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${delivered.length} delivered · ${progressed.length} progressed${totalExcl ? ` · ${totalExcl} excluded` : ''}</span>
       </div>
       <div class="chart-host">
         <canvas id="swimChart"></canvas>
