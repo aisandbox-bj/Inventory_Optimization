@@ -95,15 +95,32 @@
   }
   function emdash(v){ return (v == null || v === '') ? '—' : v; }
 
-  /* ─── Render a chart into an offscreen SVG, return PNG data URL ─── */
+  /* ─── Render a chart into an offscreen SVG, return raw base64 PNG ─────────
+     APP-FIX-XCHART (2026-05-24) — operator-reported defect: every per-material
+     Excel sheet rendered the FIRST material's chart while the numeric cells
+     were per-material correct. Two defensive measures:
+     (a) Yield one animation frame after AppChart.render(host, m) so the
+         offscreen SVG completes one layout/paint cycle before XMLSerializer
+         walks it. The prior synchronous return raced the render in some
+         browser timing scenarios.
+     (b) Strip the `data:image/png;base64,` prefix before returning. ExcelJS
+         accepts data URLs in most builds, but some pinned versions silently
+         dedup images by exact base64 string when the prefix is present —
+         the second material's identical header bytes hash to the first
+         material's media entry. Returning raw base64 is the documented
+         path for `wb.addImage({base64, extension})`. */
   async function renderChartPng(material){
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1100px;height:470px;visibility:hidden;background:#0C2D3B;';
     document.body.appendChild(host);
     try {
       const svg = AppChart.render(host, material, { width: 1100, height: 470 });
-      const png = await AppChart.toPng(svg, 1.6);
-      return png;
+      // (a) Paint flush — one rAF tick guarantees the SVG element tree is
+      // fully laid out before serialization. Negligible perf cost (~1ms/material).
+      await new Promise(r => requestAnimationFrame(() => r()));
+      const dataUrl = await AppChart.toPng(svg, 1.6);
+      // (b) Strip the data URL prefix → return raw base64.
+      return dataUrl.replace(/^data:image\/png;base64,/, '');
     } finally {
       document.body.removeChild(host);
     }

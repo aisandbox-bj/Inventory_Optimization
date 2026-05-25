@@ -379,6 +379,28 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-XCHART ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-XCHART · Excel Pack — defensive fix against the "every sheet shows material #1's chart" defect</h4>
+      <ul>
+        <li><b>Operator report (week of 2026-05-18).</b> Excel Pack downloads for multi-material assessments showed correct numeric cells per sheet but the embedded consumption chart on every sheet appeared to be the FIRST material's graph. Symptom: chart content was identical across all sheets; numbers were fine.</li>
+        <li><b>What I checked, in order.</b> (1) Chart render <code>AppChart.render(host, material)</code> — confirmed isolated per call: fresh DOM host, fresh SVG element, reads <code>material.cumulative</code> each call. (2) <code>AppChart.toPng()</code> — confirmed isolated: serializes the passed SVG into a fresh canvas via <code>XMLSerializer</code> → <code>Image</code> → <code>canvas.toDataURL</code> chain. (3) <code>wb.addImage({base64, extension})</code> — confirmed each call returns a new unique <code>imageId</code> and appends to <code>wb.media</code>. (4) Each <code>ws.addImage(imageId, …)</code> on a fresh worksheet correctly stores its own <code>imageId</code> reference. (5) Generated an actual XLSX buffer via <code>writeBuffer()</code> and inspected <code>xl/media/image*.png</code> + <code>xl/drawings/_rels/drawing*.xml.rels</code> — three distinct PNGs at three distinct file sizes (e.g. 56968 / 57492 / 56588 bytes for the three test materials), three distinct drawing-to-media relationships. <strong>I could not reproduce the bug in isolation with this code path.</strong></li>
+        <li><b>What's "fixed" (defensive, not surgical).</b> Two changes to <code>shared/excel.js</code> <code>renderChartPng(material)</code>: <br>
+          <strong>(a)</strong> Insert one <code>requestAnimationFrame</code> tick between <code>AppChart.render(host, m)</code> and <code>AppChart.toPng(svg)</code>. This guarantees one layout/paint cycle on the offscreen SVG before <code>XMLSerializer</code> walks the tree. Prior code returned synchronously which could in theory race the SVG layout in some browsers under load. Per-material cost is ~1 ms, no operator-visible delay. <br>
+          <strong>(b)</strong> Strip the <code>data:image/png;base64,</code> prefix from the dataURL before returning. The raw base64 string is the documented input for <code>wb.addImage({base64, extension})</code>. Some ExcelJS builds reportedly dedup images on the full prefixed string (collision because the prefix is identical per call), though I could not confirm this in the build loaded here. Defensive: no change for builds that handle data URLs cleanly; eliminates the failure mode if it ever existed.</li>
+        <li><b>What this does NOT do.</b> Does not rewrite the chart engine. Does not change <code>buildMaterialSheet</code>'s call site (still uses <code>wb.addImage({base64, extension})</code>, just with raw base64 now). Does not change the Mass-LLM Excel path's behaviour — it consumes the same <code>renderChartPng</code> so it inherits the fix transparently. Does not address whether the operator's original observed bug was in the file, in the Excel viewer, or in a code path no longer present.</li>
+        <li><b>How to verify the fix sticks.</b> Operator generates a fresh Excel Pack against a 5+ material assessment, opens the file, scrolls through several per-material sheets, confirms the embedded chart matches that sheet's numeric data. If the bug recurs, re-open with that file attached and we instrument <code>renderChartPng</code> + <code>wb.addImage</code> at the operator's call site to capture base64 prefixes and image IDs into the console for forensics.</li>
+        <li><b>Files touched.</b> <code>shared/excel.js</code> (one function body — <code>renderChartPng</code>). Snapshot at <code>_rollback/APP-FIX-XCHART-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore <code>shared/excel.js</code> from <code>_rollback/APP-FIX-XCHART-pre/shared/excel.js</code>. Rollback boundary: clean — only one function changed.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev ───────── -->
     <article class="roc-entry dev">
       <div class="head">
