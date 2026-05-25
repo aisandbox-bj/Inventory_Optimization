@@ -626,3 +626,64 @@
   font-weight: 600;
   letter-spacing: .03em;
 }
+
+/* ─── APP-V03-PORT-2a · Right-click context menu on swimlane bars ──────── */
+.tr-ctx-menu{
+  position: fixed;
+  z-index: 200;
+  min-width: 220px;
+  background: rgba(8, 12, 20, .97);
+  border: 1px solid rgba(31, 206, 216, .35);
+  border-radius: 6px;
+  padding: 6px 0;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  font-size: 11.5px;
+  color: var(--text-pri, #e8eef4);
+  font-family: inherit;
+}
+.tr-ctx-hdr{
+  padding: 5px 12px 2px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #1FCED8;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.tr-ctx-sub{
+  padding: 0 12px 6px 12px;
+  font-size: 10px;
+  color: var(--text-muted, #9BABA8);
+  letter-spacing: .02em;
+}
+.tr-ctx-sep{
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(255,255,255,.08);
+}
+.tr-ctx-item{
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--text-pri, #e8eef4);
+}
+.tr-ctx-item:hover{
+  background: rgba(229, 142, 45, .14);
+  color: #E58E2D;
+}
+.tr-ctx-item.ghost{
+  color: var(--text-sec, #c7d2dc);
+  font-size: 10.5px;
+}
+.tr-ctx-item.ghost:hover{ color: var(--text-pri, #e8eef4); background: rgba(255,255,255,.04); }
+.tr-ctx-note{
+  padding: 2px 12px 6px 12px;
+  font-size: 10px;
+  color: #f4c14a;
+  font-style: italic;
+}

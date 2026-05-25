@@ -379,6 +379,26 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-2a ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-2a · Right-click context menu on swimlane bars (exclude/include + jump to Raw Data)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding immediately after PORT-2 ship: the per-row exclude toggle in the Raw Data view was not the path they expected — they wanted to right-click the bar in the swimlane chart. That matches v0.3 line 1537–1539 (context-menu handler on swimlane labels) which I had skipped in PORT-2 on a mobile-UX hunch. The hunch was wrong — desktop right-click is the natural pattern; the Raw Data toggle stays as fallback / touch path.</li>
+        <li><b>What lands in <code>trace/trace.js</code>:</b> a <code>contextmenu</code> listener on the Chart.js canvas inside <code>renderSwimlane()</code>. On right-click, <code>chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false)</code> finds the bar under the cursor and maps the index to the chain via the closure-captured <code>drawn[]</code> array. If the cursor is over a bar, the browser's default menu is suppressed and a small custom menu pops at the click position with: <em>"Exclude this chain"</em> or <em>"Include this chain"</em> (depending on current manual state) + a ghost <em>"Show in Raw Data view…"</em> link for drill-down. Sigma-trimmed chains show a note pointing to the toolbar (sigma toggles globally, not per-chain). Menu dismisses on outside-click or Esc. Right-clicking empty space inside the chart still lets the browser's native menu through.</li>
+        <li><b>What lands in <code>trace/trace.css</code>:</b> <code>.tr-ctx-menu</code> + nested rules — fixed-position popup, dark Trace-palette panel, copper-orange hover, viewport-clamped position so the menu never overflows.</li>
+        <li><b>What this does NOT touch.</b> Raw Data per-row toggle stays as-is — both paths work (right-click on the chart for the visual operator; row toggle in Raw Data for full-population review or touch). No change to filter logic, persistence, or any other Trace view.</li>
+        <li><b>How to verify.</b> Open a Trace assessment, single-material mode, Procurement Chain view. Right-click anywhere on a bar in the swimlane. Menu appears at the cursor with header showing the PR / PO number and state. Click <em>"Exclude this chain"</em> → menu closes, counts and chart re-render filtered. Right-click the same chain again (if you can see it on screen — if not, switch to Raw Data) → menu now says <em>"Include this chain"</em>. Esc or click-elsewhere dismisses without action. Right-click on the chart area BETWEEN bars (empty whitespace) → browser's native menu appears as expected.</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (contextmenu listener at the end of renderSwimlane + showChainContextMenu/hideChainContextMenu/escDismiss helpers) · <code>trace/trace.css</code> (context menu styles appended). Snapshot at <code>_rollback/APP-V03-PORT-2a-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore <code>trace/trace.js</code> + <code>trace/trace.css</code> from snapshot. Clean rollback — no state-shape changes.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-2 ───────── -->
     <article class="roc-entry dev">
       <div class="head">

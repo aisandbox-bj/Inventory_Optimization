@@ -1129,6 +1129,77 @@
         }
       }
     });
+
+    // APP-V03-PORT-2a (2026-05-24) — right-click context menu on swimlane bars
+    // for direct exclude/include. v0.3 line 1537–1539 had the same pattern;
+    // mobile-friendly fallback stays in the Raw Data per-row toggle.
+    canvas.addEventListener('contextmenu', (e) => {
+      const points = state.chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
+      if (!points.length) return;   // empty space → let the browser show its menu
+      e.preventDefault();
+      const chain = drawn[points[0].index];
+      if (!chain) return;
+      showChainContextMenu(e.clientX, e.clientY, chain, mat);
+    });
+  }
+
+  // APP-V03-PORT-2a — context menu DOM + handlers
+  function showChainContextMenu(x, y, chain, material){
+    hideChainContextMenu();
+    const manual = getManualExcl(material);
+    const sigmaSet = sigmaExcl(state.chains);
+    const isManual = manual.has(chain.pr);
+    const isSigma  = sigmaSet.has(chain.pr);
+    const menu = document.createElement('div');
+    menu.id = 'traceChainMenu';
+    menu.className = 'tr-ctx-menu';
+    menu.innerHTML = `
+      <div class="tr-ctx-hdr">PR ${escapeHtml(chain.pr)}${chain.po ? ' · PO ' + escapeHtml(chain.po) : ''}</div>
+      <div class="tr-ctx-sub">${chain.state.replace(/_/g, ' ')}${chain.adminCancelled ? ' · admin-cancel' : ''} · ${chain.total || '—'}d total LT</div>
+      ${isManual
+        ? '<button class="tr-ctx-item" data-action="include">Include this chain</button>'
+        : '<button class="tr-ctx-item" data-action="exclude">Exclude this chain</button>'}
+      ${isSigma && !isManual ? '<div class="tr-ctx-note">Currently sigma-trimmed. Adjust via toolbar to keep / drop.</div>' : ''}
+      <div class="tr-ctx-sep"></div>
+      <button class="tr-ctx-item ghost" data-action="raw-data">Show in Raw Data view…</button>
+    `;
+    // Anchor at cursor, clamp to viewport so the menu never overflows
+    document.body.appendChild(menu);
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    const vx = Math.min(x, window.innerWidth  - w - 8);
+    const vy = Math.min(y, window.innerHeight - h - 8);
+    menu.style.left = vx + 'px';
+    menu.style.top  = vy + 'px';
+
+    menu.addEventListener('click', (ev) => {
+      const action = ev.target?.dataset?.action;
+      if (!action) return;
+      if (action === 'exclude' || action === 'include') {
+        toggleManualExcl(material, chain.pr);
+        persistState();
+        const host = $('#contentView');
+        if (host) renderProcurementChain(host, material);
+      } else if (action === 'raw-data') {
+        state.activeView = 'raw-data';
+        persistState();
+        renderRail();      // re-paint view list active state
+        renderActiveView();
+      }
+      hideChainContextMenu();
+    });
+    // Click-away + Esc dismissal
+    setTimeout(() => {
+      document.addEventListener('click', hideChainContextMenu, { once: true });
+      document.addEventListener('keydown', escDismiss);
+    }, 0);
+  }
+  function hideChainContextMenu(){
+    const m = document.getElementById('traceChainMenu');
+    if (m) m.remove();
+    document.removeEventListener('keydown', escDismiss);
+  }
+  function escDismiss(e){
+    if (e.key === 'Escape') hideChainContextMenu();
   }
 
   // POST-T-04 PATCH (2026-05-17) — diagnostic surface when 0 chains complete.
