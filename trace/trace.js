@@ -50,8 +50,16 @@
 
     activeView:       'procurement-chain',
     matSearch:        '',
-    chains:           [],          // computed per selected single material
-    chart:            null
+    chains:           [],          // computed per selected single material (raw, unfiltered)
+    chart:            null,
+
+    // APP-V03-PORT-2 (2026-05-24) — filter machinery ported from v0.3
+    // (lines 1221-1340). yearFilter + sigmaLimit are global preferences;
+    // manualExclByMat is per-material so excluding a chain in one material
+    // doesn't affect another.
+    yearFilter:       'All',       // 'All' | year-string (e.g. '2025')
+    sigmaLimit:       null,        // null = off; 3 / 2 / 1.5 = looser → tighter
+    manualExclByMat:  new Map()    // material → Set<pr-number>
   };
 
   const PHASE_KEYS   = ['A', 'B', 'C', 'D', 'E'];
@@ -215,11 +223,27 @@
         state.scopeMulti.stockFilter = saved.scopeMulti.stockFilter || 'any';
       }
       if (saved.activeView) state.activeView = saved.activeView;
+      // APP-V03-PORT-2 — filter machinery
+      if (typeof saved.yearFilter === 'string') state.yearFilter = saved.yearFilter;
+      if (saved.sigmaLimit === null || saved.sigmaLimit === 3 || saved.sigmaLimit === 2 || saved.sigmaLimit === 1.5) {
+        state.sigmaLimit = saved.sigmaLimit;
+      }
+      if (saved.manualExclByMat && typeof saved.manualExclByMat === 'object') {
+        state.manualExclByMat = new Map();
+        for (const [mat, prs] of Object.entries(saved.manualExclByMat)) {
+          if (Array.isArray(prs)) state.manualExclByMat.set(mat, new Set(prs.map(String)));
+        }
+      }
     } catch (e) { /* silently fall through */ }
   }
 
   async function persistState(){
     try {
+      // APP-V03-PORT-2 — serialise per-material exclude sets as plain object
+      const manualExclSerial = {};
+      for (const [mat, prSet] of state.manualExclByMat.entries()) {
+        if (prSet && prSet.size) manualExclSerial[mat] = [...prSet];
+      }
       await AppStorage.set(STORAGE_KEY, {
         scopeMode:    state.scopeMode,
         scopeSingle:  state.scopeSingle,
@@ -229,7 +253,10 @@
           groups:      [...state.scopeMulti.groups],
           stockFilter: state.scopeMulti.stockFilter
         },
-        activeView:   state.activeView
+        activeView:       state.activeView,
+        yearFilter:       state.yearFilter,
+        sigmaLimit:       state.sigmaLimit,
+        manualExclByMat:  manualExclSerial
       });
     } catch (e) { /* swallow */ }
   }
@@ -578,15 +605,23 @@
     // Compute chains fresh — same logic as Procurement Chain view. State
     // share means both views render the same set; differ only in presentation.
     state.chains = computeChainsForMaterial(material);
+    state._rawDataMaterial = material;
+    // APP-V03-PORT-2 — show all chains but flag excluded ones, and surface
+    // a small toggle in each row for manual exclude/include. Sigma-excluded
+    // rows are read-only (toggle is greyed); manual-excluded rows can be
+    // clicked back in.
+    const totalExcl = allExcl(state.chains, material).size;
+    const manualSet = getManualExcl(material);
     host.innerHTML = `
       <div class="raw-data-head">
         <span class="raw-data-lab">Raw Data · all PRs for material ${escapeHtml(material)}</span>
-        <span class="raw-data-meta">${state.chains.length} chain${state.chains.length === 1 ? '' : 's'}</span>
+        <span class="raw-data-meta">${state.chains.length} chain${state.chains.length === 1 ? '' : 's'}${totalExcl ? ` · <b>${totalExcl}</b> excluded` : ''}${manualSet.size ? ` · <button class="tr-fbtn tr-reset" id="rawResetManual" title="Clear manual excludes for this material">Reset manual</button>` : ''}</span>
       </div>
       <div class="chain-table-wrap">
         <table class="chain-table" id="chainTable">
           <thead>
             <tr>
+              <th></th>
               <th>PR</th>
               <th>PR date</th>
               <th>PO</th>
@@ -609,6 +644,32 @@
       </div>
     `;
     renderChainTable();
+    bindRawDataControls(material);
+  }
+
+  function bindRawDataControls(material){
+    // Per-row exclude/include toggle
+    $$('#chainTableBody [data-toggle-excl]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pr = btn.dataset.toggleExcl;
+        const isSigma = btn.dataset.sigma === '1';
+        if (isSigma) return;  // sigma-trimmed rows don't toggle from the table
+        toggleManualExcl(material, pr);
+        persistState();
+        // Recompute + re-render the Raw Data view in place
+        const host = $('#contentView');
+        if (host) renderRawData(host, material);
+      });
+    });
+    const reset = $('#rawResetManual');
+    if (reset) {
+      reset.addEventListener('click', () => {
+        clearManualExcl(material);
+        persistState();
+        const host = $('#contentView');
+        if (host) renderRawData(host, material);
+      });
+    }
   }
 
   function renderPCInMultiPanel(){
@@ -679,19 +740,23 @@
   function renderProcurementChain(host, material){
     state.chains = computeChainsForMaterial(material);
 
-    const complete = state.chains.filter(c => c.state === 'COMPLETE');
-    const inFlight = state.chains.filter(c => c.state === 'IN_FLIGHT' || c.state === 'NOT_YET_CONSUMED');
-    const prOnly   = state.chains.filter(c => c.state === 'PR_ONLY');
-    const cancelled= state.chains.filter(c => c.state === 'CANCELLED');
+    // APP-V03-PORT-2 — counts now reflect the active set (year filter +
+    // manual exclude + sigma trim applied). Raw count stays available
+    // for the toolbar "X of Y" readout below.
+    const act      = active(state.chains, material);
+    const complete = act.filter(c => c.state === 'COMPLETE');
+    const inFlight = act.filter(c => c.state === 'IN_FLIGHT' || c.state === 'NOT_YET_CONSUMED');
+    const prOnly   = act.filter(c => c.state === 'PR_ONLY');
+    const cancelled= act.filter(c => c.state === 'CANCELLED');
     // APP-V03-PORT-1 (2026-05-24) — reporting-only count of chains where the PR
     // was deletion-flagged AFTER a PO was raised. Per the operator PR/PO rule
     // these chains classify by the phase they actually reached (IN_FLIGHT /
     // NOT_YET_CONSUMED / COMPLETE) and the admin-cancel flag is informational.
-    const adminCancel = state.chains.filter(c => c.adminCancelled).length;
+    const adminCancel = act.filter(c => c.adminCancelled).length;
     const avgLT    = complete.length
       ? Math.round(complete.reduce((s, c) => s + c.total, 0) / complete.length)
       : null;
-    const manualPR = state.chains.filter(c => c.creationIndicator === 'R').length;
+    const manualPR = act.filter(c => c.creationIndicator === 'R').length;
 
     // POST-T-04 PATCH (2026-05-17) — operator finding: chains all show "in-
     // flight" or "cancelled" on materials they're investigating. Surface the
@@ -701,7 +766,45 @@
       ? renderZeroCompleteDiagnostic(material, inFlight.length, prOnly.length, cancelled.length)
       : '';
 
+    // APP-V03-PORT-2 — filter toolbar markup. Year buttons derived from
+    // the chain set's actual prDate years; sigma buttons fixed at v0.3's
+    // four levels; manual-exclude chip + reset visible only when there's
+    // something to clear.
+    const years = getYearsForChains(state.chains);
+    const manualSet = getManualExcl(material);
+    const sigmaSet  = sigmaExcl(state.chains);
+    const totalExcl = manualSet.size + sigmaSet.size;
+    const yearBtns = ['All'].concat(years).map(y =>
+      `<button class="tr-fbtn ${state.yearFilter === y ? 'active' : ''}" data-filter="year" data-val="${y}">${y === 'All' ? 'All years' : y}</button>`
+    ).join('');
+    const sigmaBtns = [
+      { v: 'null', lab: 'Off',          title: 'No sigma trim — show every chain' },
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of total LT' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of total LT' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+    ].map(s => {
+      const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
+      return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
+    }).join('');
+    const exclChipHtml = totalExcl
+      ? `<span class="tr-excl-chip" title="Manually excluded: ${manualSet.size}. Sigma-trimmed: ${sigmaSet.size}. Use Raw Data view to toggle manual excludes per chain.">${totalExcl} excluded</span>`
+      : '';
+    const resetBtnHtml = manualSet.size
+      ? `<button class="tr-fbtn tr-reset" data-filter="reset-manual" title="Clear manual excludes for this material">Reset manual</button>`
+      : '';
+    const filterToolbar = `
+      <div class="tr-filterbar" id="traceFilterBar">
+        <span class="tr-flbl">Year</span>${yearBtns}
+        <span class="tr-fsep"></span>
+        <span class="tr-flbl">Sigma trim</span>${sigmaBtns}
+        ${exclChipHtml}
+        ${resetBtnHtml}
+      </div>
+    `;
+
     host.innerHTML = `
+      ${filterToolbar}
+
       <div class="pchain-summary">
         <div class="sum-cell"><span class="lab">Complete chains</span><span class="v">${complete.length}</span></div>
         <div class="sum-cell"><span class="lab">In-flight</span><span class="v">${inFlight.length}</span></div>
@@ -716,7 +819,7 @@
       ${diagnostic}
 
       <div class="chart-toolbar">
-        <span class="chart-toolbar-lab" id="chainCount">${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${complete.length} complete · ${inFlight.length} in-flight · ${cancelled.length} cancelled (no PO)${adminCancel ? ` · ${adminCancel} admin-cancel` : ''}</span>
+        <span class="chart-toolbar-lab" id="chainCount">${act.length} of ${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${complete.length} complete · ${inFlight.length} in-flight · ${cancelled.length} cancelled (no PO)${adminCancel ? ` · ${adminCancel} admin-cancel` : ''}${totalExcl ? ` · ${totalExcl} excluded` : ''}</span>
       </div>
       <div class="chart-host">
         <canvas id="swimChart"></canvas>
@@ -724,7 +827,34 @@
       <div class="chart-caveat">Phases A–E computed from PR History + MB51 join on Purchase Order. Phase E (Time to First Use) measured to the first consumption transaction for this material after Site WH receipt — not necessarily of this PO's units specifically. <b>Cancelled-before-PO PRs are excluded from the swimlane</b> — see Raw Data view for the full list. Per the PR/PO classification rule, a PR cancelled <em>after</em> a PO landed renders in its actual phase colour, not red — the post-PO deletion has admin meaning only.</div>
     `;
 
-    renderSwimlane();
+    bindFilterBar(material);
+    renderSwimlane(material);
+  }
+
+  // APP-V03-PORT-2 — filter toolbar handlers. Each button dispatches a
+  // state mutation and re-renders the Procurement Chain view in place.
+  function bindFilterBar(material){
+    const bar = $('#traceFilterBar');
+    if (!bar) return;
+    bar.querySelectorAll('.tr-fbtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const f   = btn.dataset.filter;
+        const val = btn.dataset.val;
+        if (f === 'year') {
+          state.yearFilter = val;
+        } else if (f === 'sigma') {
+          state.sigmaLimit = (val === 'null') ? null : Number(val);
+        } else if (f === 'reset-manual') {
+          clearManualExcl(material);
+        }
+        persistState();
+        // Re-render in place — recompute counts + swimlane + toolbar.
+        // #contentView is the host renderActiveView writes into.
+        if (state.chart) { state.chart.destroy(); state.chart = null; }
+        const host = $('#contentView');
+        if (host) renderProcurementChain(host, material);
+      });
+    });
   }
 
   function computeChainsForMaterial(material){
@@ -828,7 +958,84 @@
     }).sort((a, b) => (b.prDate || '').localeCompare(a.prDate || ''));
   }
 
-  function renderSwimlane(){
+  /* ─── APP-V03-PORT-2 (2026-05-24) · Filter machinery ────────────────────
+     Ports v0.3's active() / allExcl() / sigmaExcl() triplet (v0.3:1325–1340)
+     to operate on v0.4's per-material chain set. Key differences from v0.3:
+       · v0.3 had a hardcoded CHAINS array with an `idx` field; v0.4 uses
+         the PR number as the chain identity (unique per material).
+       · v0.3 had `c.yr` pre-computed; v0.4 derives year from prDate string.
+       · v0.4's manualExcl is per-material (state.manualExclByMat) since one
+         material's noise chains don't apply to another. v0.3 was single-
+         material so the global set was fine.
+       · Sigma calculation only considers chains with a non-null `total`
+         (i.e. those rendered on the swimlane after the siteWH gate) —
+         "trim outliers on the chart" is the operator's mental model. */
+
+  function getChainYear(c){
+    return (c.prDate || '').substring(0, 4);   // ISO 'YYYY-MM-DD' → 'YYYY'
+  }
+
+  function getYearsForChains(chains){
+    const yrs = new Set();
+    for (const c of chains) { const y = getChainYear(c); if (y) yrs.add(y); }
+    return [...yrs].sort();
+  }
+
+  function getManualExcl(material){
+    if (!material) return new Set();
+    if (!state.manualExclByMat.has(material)) {
+      state.manualExclByMat.set(material, new Set());
+    }
+    return state.manualExclByMat.get(material);
+  }
+
+  function sigmaExcl(chains){
+    // Returns Set<pr> of chains classified as statistical outliers on
+    // `chain.total`. Pre-restricts to year-filtered chains AND chains with
+    // a non-null total (siteWH-gated) so the threshold reflects what the
+    // operator can see on the swimlane.
+    if (!state.sigmaLimit) return new Set();
+    const inYear = chains.filter(c => state.yearFilter === 'All' || getChainYear(c) === state.yearFilter);
+    const drawn  = inYear.filter(c => !!c.siteWH);
+    if (drawn.length < 2) return new Set();
+    const totals = drawn.map(c => c.total);
+    const n      = totals.length;
+    const mean   = totals.reduce((s, v) => s + v, 0) / n;
+    const sd     = Math.sqrt(totals.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(n - 1, 1));
+    const threshold = mean + state.sigmaLimit * sd;
+    const excl = new Set();
+    drawn.forEach(c => { if (c.total > threshold) excl.add(c.pr); });
+    return excl;
+  }
+
+  function allExcl(chains, material){
+    return new Set([...getManualExcl(material), ...sigmaExcl(chains)]);
+  }
+
+  function active(chains, material){
+    const ex = allExcl(chains, material);
+    return chains.filter(c =>
+      (state.yearFilter === 'All' || getChainYear(c) === state.yearFilter)
+      && !ex.has(c.pr)
+    );
+  }
+
+  function isExcluded(chain, material){
+    return allExcl(state.chains, material).has(chain.pr);
+  }
+
+  function clearManualExcl(material){
+    if (material && state.manualExclByMat.has(material)) {
+      state.manualExclByMat.get(material).clear();
+    }
+  }
+
+  function toggleManualExcl(material, pr){
+    const set = getManualExcl(material);
+    if (set.has(pr)) set.delete(pr); else set.add(pr);
+  }
+
+  function renderSwimlane(material){
     // APP-FIX-T-04c (2026-05-17) — tightened from `!!c.po` to `!!c.siteWH`
     // per operator review against v0.3. v0.3 deliberately excluded in-flight
     // chains (PO raised, Site WH not yet posted) from CHAINS: phase C/D/E
@@ -836,7 +1043,12 @@
     // still appear on Raw Data view + cancellation diagnostic / progression
     // panels in v0.3, but NOT on the swimlane itself. Chains with PO but no
     // Site WH drop out here; they stay visible in the Raw Data tab.
-    const drawn = state.chains.filter(c => !!c.siteWH);
+    // APP-V03-PORT-2 (2026-05-24) — runs over the ACTIVE set, not the raw
+    // chain set: respects yearFilter + manualExcl + sigmaExcl. Excluded
+    // chains drop out of the chart entirely (counts in the toolbar tell
+    // the operator how many were filtered).
+    const mat = material || state.scopeSingle;
+    const drawn = active(state.chains, mat).filter(c => !!c.siteWH);
     const labels = drawn.map(c => `${c.pr}${c.po ? ' → ' + c.po : ''}`);
 
     const datasets = PHASE_KEYS.map((ph, i) => ({
@@ -984,26 +1196,48 @@
     // APP-V03-PORT-1 (2026-05-24) — row tint follows STATE, not raw cancellation
     // flag. adminCancelled chains (PR cancel-flag set AFTER PO raised) keep
     // their phase state's tint and get a small annotation in the State column.
-    const rows = state.chains.map(c => `
-      <tr class="${c.state === 'CANCELLED' ? 'cancelled' : ''}">
-        <td class="mono">${escapeHtml(c.pr)}</td>
-        <td class="mono">${escapeHtml(c.prDate || '—')}</td>
-        <td class="mono">${escapeHtml(c.po || '—')}</td>
-        <td class="mono">${escapeHtml(c.poDate || '—')}</td>
-        <td class="mono">${escapeHtml(c.gr3pl || '—')}</td>
-        <td class="mono">${escapeHtml(c.siteWH || '—')}</td>
-        <td class="mono">${escapeHtml(c.c261  || '—')}</td>
-        <td class="num mono">${cellNum(c.A)}</td>
-        <td class="num mono">${cellNum(c.B)}</td>
-        <td class="num mono">${cellNum(c.C)}</td>
-        <td class="num mono">${cellNum(c.D)}</td>
-        <td class="num mono">${cellNum(c.E)}</td>
-        <td class="num mono"><b>${c.total || '—'}</b></td>
-        <td class="num mono">${c.qty != null ? c.qty.toLocaleString() : '—'}</td>
-        <td class="state state-${c.state.toLowerCase()}">${c.state.replace(/_/g, ' ')}${c.adminCancelled ? ' <span class="state-admin-cancel" title="PR deletion-flagged after PO raised — admin meaning only; does not affect classification">(admin cancel)</span>' : ''}</td>
-      </tr>
-    `).join('');
-    $('#chainTableBody').innerHTML = rows || `<tr><td colspan="15" class="empty">no chains for this material</td></tr>`;
+    // APP-V03-PORT-2 (2026-05-24) — per-row exclude/include toggle. Manual
+    // excludes click-toggle from the table; sigma-excluded rows display a
+    // greyed σ glyph (toggle via the sigma button in the toolbar).
+    const mat = state._rawDataMaterial || state.scopeSingle;
+    const manualSet = getManualExcl(mat);
+    const sigmaSet  = sigmaExcl(state.chains);
+    const rows = state.chains.map(c => {
+      const isManual = manualSet.has(c.pr);
+      const isSigma  = sigmaSet.has(c.pr);
+      const excluded = isManual || isSigma;
+      const trCls    = [
+        c.state === 'CANCELLED' ? 'cancelled' : '',
+        excluded ? 'excluded' : ''
+      ].filter(Boolean).join(' ');
+      const togBtn = isSigma
+        ? `<span class="tr-excl-tog sigma" title="Sigma-trimmed (mean + ${state.sigmaLimit}σ on total LT). Adjust via toolbar.">σ</span>`
+        : `<button class="tr-excl-tog ${isManual ? 'on' : ''}" data-toggle-excl="${escapeAttr(c.pr)}" data-sigma="0" title="${isManual ? 'Click to include this chain in stats / chart' : 'Click to exclude this chain from stats / chart'}">${isManual ? '✕' : '·'}</button>`;
+      const stateLabel = excluded
+        ? `<span class="state-excluded" title="Excluded: ${isSigma ? 'sigma-trim' : 'manual'}">EXCL · ${c.state.replace(/_/g, ' ')}</span>`
+        : c.state.replace(/_/g, ' ');
+      return `
+        <tr class="${trCls}">
+          <td class="tog-cell">${togBtn}</td>
+          <td class="mono">${escapeHtml(c.pr)}</td>
+          <td class="mono">${escapeHtml(c.prDate || '—')}</td>
+          <td class="mono">${escapeHtml(c.po || '—')}</td>
+          <td class="mono">${escapeHtml(c.poDate || '—')}</td>
+          <td class="mono">${escapeHtml(c.gr3pl || '—')}</td>
+          <td class="mono">${escapeHtml(c.siteWH || '—')}</td>
+          <td class="mono">${escapeHtml(c.c261  || '—')}</td>
+          <td class="num mono">${cellNum(c.A)}</td>
+          <td class="num mono">${cellNum(c.B)}</td>
+          <td class="num mono">${cellNum(c.C)}</td>
+          <td class="num mono">${cellNum(c.D)}</td>
+          <td class="num mono">${cellNum(c.E)}</td>
+          <td class="num mono"><b>${c.total || '—'}</b></td>
+          <td class="num mono">${c.qty != null ? c.qty.toLocaleString() : '—'}</td>
+          <td class="state state-${c.state.toLowerCase()}">${stateLabel}${c.adminCancelled ? ' <span class="state-admin-cancel" title="PR deletion-flagged after PO raised — admin meaning only; does not affect classification">(admin cancel)</span>' : ''}</td>
+        </tr>
+      `;
+    }).join('');
+    $('#chainTableBody').innerHTML = rows || `<tr><td colspan="16" class="empty">no chains for this material</td></tr>`;
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

@@ -379,6 +379,33 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-2 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-2 · Trace filter machinery — year filter + sigma-trim + manual exclude (ported from v0.3)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Per the v0.3 logic analysis §9 priority list, the filter machinery was the highest-priority Trace port after the precedence flip (PORT-1) because every downstream view (Distribution, YoY, Volume, etc) is going to consume <code>active()</code>. Without it, those views can't drop or trim chains for analysis-quality reasons.</li>
+        <li><b>v0.3 origin (line refs).</b> Ported from <code>2004641_Procurement_Timeline.html</code>:1221–1340 — state vars <code>yearFilter</code> / <code>sigmaLimit</code> / <code>manualExcl</code>, helper functions <code>sigmaExcl()</code> / <code>allExcl()</code> / <code>active()</code>, toolbar handlers <code>setYear()</code> / <code>setSigma()</code>.</li>
+        <li><b>What lands in <code>trace/trace.js</code>:</b><br>
+          <strong>(1) State machinery:</strong> three new fields on the trace state object — <code>yearFilter</code> (default 'All'), <code>sigmaLimit</code> (default null), <code>manualExclByMat</code> (Map keyed by material → Set of PR numbers). yearFilter + sigmaLimit are <strong>global</strong> preferences (operator's stance on "this year" / "trim outliers"); manualExcl is <strong>per-material</strong> since one material's noise chains don't apply to another. All three persist via <code>AppStorage</code> under <code>trace.viewState</code>. <br>
+          <strong>(2) Helpers</strong>: <code>getChainYear(c)</code> — derives year from prDate ISO. <code>getYearsForChains(chains)</code> — distinct years for filter buttons. <code>getManualExcl(material)</code> — lazily-init Set per material. <code>sigmaExcl(chains)</code> — outlier detection on <code>chain.total</code> within the year-filtered, siteWH-gated subset (matches v0.3's domain). <code>allExcl(chains, material)</code> — union of manual + sigma. <code>active(chains, material)</code> — applies year + exclusion to produce the analysis set. <code>toggleManualExcl</code> / <code>clearManualExcl</code> for the operator-driven toggle. <br>
+          <strong>(3) Filter toolbar</strong>: lives above the Procurement Chain summary. Year buttons derived from the actual prDate years in the chain set ("All years" + each year present). Sigma buttons fixed at v0.3's four levels — Off / Loose 3σ / Standard 2σ / Tight 1.5σ — with tooltips explaining each. Manual-exclude chip shows the live count and clarifies that the per-row toggles live in Raw Data view. Reset-manual button appears only when there's something to clear. <br>
+          <strong>(4) Procurement Chain re-wired</strong>: summary tile counts (Complete / In-flight / PR only / Cancelled (no PO) / Avg LT / Manual PRs) all reflect the <code>active()</code> set now, not the raw chain set. Toolbar count strip extended to "X of Y chains" so the operator sees what got filtered. <br>
+          <strong>(5) Swimlane re-wired</strong>: <code>renderSwimlane(material)</code> filters through <code>active()</code> before applying the siteWH gate. Excluded chains drop out of the chart entirely. <br>
+          <strong>(6) Raw Data table re-wired</strong>: shows ALL chains (no filtering — operator needs the full population to make exclude decisions) but marks excluded ones with an <code>EXCL · &lt;state&gt;</code> label, dims the row 55%, and shows a per-row toggle in the new first column. Manual excludes use a clickable <code>·</code> ↔ <code>✕</code> toggle; sigma-trimmed rows show a greyed <code>σ</code> glyph with a tooltip pointing back to the toolbar (sigma toggles only at toolbar level, not per-row).</li>
+        <li><b>What this does NOT do.</b> Does not add a context menu on swimlane bars (v0.3 had right-click; v0.4 routes manual excludes through Raw Data view instead — simpler UX, mobile-friendly). Does not port v0.3's "tinted but still rendered" excluded-chain swimlane treatment (excluded chains drop out entirely; the count chip tells the operator). Does not enable filters on the queued multi-material views (Distribution / YoY / Volume) — those will consume <code>active()</code> when each lands. Does not bump SCHEMA_VERSION (all state is intake-time UI preference, not canonical JSON).</li>
+        <li><b>How to verify.</b> Open a Trace assessment in single-material mode. Procurement Chain view should now show the filter toolbar above the summary tiles. Click a year button → summary counts and chart re-render filtered to that year (counts drop, chart shrinks). Click a sigma button → outlier chains (slowest-total) drop out of the chart; count chip shows the trimmed count. Switch to Raw Data view → all chains visible, sigma-trimmed rows show the <code>σ</code> glyph and EXCL state. Click the <code>·</code> toggle on a row → that PR's chain is now excluded; switch back to Procurement Chain → counts and chart reflect it. Reload the page → filter state survives. Switch to a different material → manualExcl is per-material so the other material starts clean.</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (state + helpers + bindFilterBar + bindRawDataControls + renderSwimlane signature + renderChainTable rewire + persistState/hydratePersistedState additions) · <code>trace/trace.css</code> (filter toolbar + exclude controls + excluded row styling — appended at end). Snapshot at <code>_rollback/APP-V03-PORT-2-pre/</code>.</li>
+        <li><b>Rollback.</b> Stage A — restore <code>trace/trace.js</code> + <code>trace/trace.css</code> from the snapshot. Stage C — <code>git revert</code> the commit. The persisted <code>yearFilter</code> / <code>sigmaLimit</code> / <code>manualExclByMat</code> keys remain in localStorage after rollback but are silently ignored by the pre-PORT-2 code; clear them via Settings → Clear session data if desired.</li>
+        <li><b>Next on the Trace port queue (per analysis doc §9).</b> APP-V03-PORT-3 — 4-tier funnel panel (PR Generated · Cancelled · Progressed · Delivered) computed from the corrected state machine, replacing the generic state-distribution grid.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-1 ───────── -->
     <article class="roc-entry dev">
       <div class="head">
