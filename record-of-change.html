@@ -379,6 +379,34 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-1 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-1 · Trace chain classifier — flip precedence per operator-locked PR/PO rule (Exhibit A fix)</h4>
+      <ul>
+        <li><b>Why it shipped.</b> The 2026-05-17 Trace v0.3 → v0.4 logic analysis identified a load-bearing precedence bug ("Exhibit A"): <code>computeChainsForMaterial()</code> placed <code>if (cancelled) state_ = 'CANCELLED'</code> at the top of the if-else chain, so a chain with both <code>purchaseOrder</code> populated AND <code>deletionIndicator='true' && processingStatus='N'</code> mis-classified as CANCELLED — masking the actual phase reached (IN_FLIGHT / NOT_YET_CONSUMED / COMPLETE). v0.3 honoured the operator-locked PR/PO rule via upstream data filtering (its <code>CANCELLED_PRS</code> ledger only contained PR-without-PO rows). v0.4 ingests raw PR History, so it must honour the rule at runtime.</li>
+        <li><b>The rule (auto-memory <code>project_pr_po_classification_rule.md</code>, locked 2026-05-17).</b> Verbatim: <em>"Simple logic — if there is a PO, ignore the final state of the PR. You can report, but should not affect processing. The sole purpose of a PR is to raise the need to which a PO is the action. If there is a PR without a PO, consider it cancelled as the user denied approval. If there is a PO, the user approved — and the post-PO cancellation has very little other than admin meaning."</em></li>
+        <li><b>What changed in <code>trace/trace.js</code>:</b><br>
+          <strong>(1)</strong> <code>computeChainsForMaterial()</code> precedence flipped. New order:<br>
+          <code>!po && cancelled → CANCELLED</code> · <code>!po → PR_ONLY</code> · <code>!siteWH → IN_FLIGHT</code> · <code>!c261 → NOT_YET_CONSUMED</code> · else <code>COMPLETE</code>. <br>
+          <strong>(2)</strong> Reporting-only flag <code>adminCancelled = !!po && cancelled</code> added to each chain object. Surfaces in the Raw Data state column with a small <code>(admin cancel)</code> chip on hover-explained tooltip but <strong>does NOT</strong> affect state, swimlane filtering, counts, or any deterministic downstream consumer. <br>
+          <strong>(3)</strong> Swimlane bar tinting now keyed off <code>state === 'CANCELLED'</code> instead of the raw <code>cancelled</code> flag — admin-cancelled chains render in their phase colour, not red. <br>
+          <strong>(4)</strong> Raw Data table row class now keyed off <code>state === 'CANCELLED'</code> for the same reason; the <code>(admin cancel)</code> chip appears alongside the state name. <br>
+          <strong>(5)</strong> Procurement Chain summary grid — "Cancelled" tile renamed to "Cancelled (no PO)" to disambiguate visually. New informational note appears above the chart when <code>adminCancelled</code> chains are present: "<em>N admin-cancelled chain(s) (PR deletion-flagged post-PO) — see Raw Data view.</em>" Chart toolbar's chain-count strip extended with the admin-cancel count when nonzero. <br>
+          <strong>(6)</strong> Chart caveat copy updated to make the rule visible to the operator inline: "<em>Per the PR/PO classification rule, a PR cancelled after a PO landed renders in its actual phase colour, not red — the post-PO deletion has admin meaning only.</em>"</li>
+        <li><b>What this does NOT touch.</b> No changes to <code>parsers.js</code>, the chain-compute math (phase day counts), the swimlane filter (<code>!!c.siteWH</code> still excludes in-flight chains without site receipt), <code>renderChainTable</code>'s column set, or the cancellation predicate itself (AND of <code>deletionIndicator</code> + <code>processingStatus</code>). Filter machinery from v0.3 (<code>manualExcl</code>, <code>sigmaExcl</code>, <code>yearFilter</code>) remains missing — queued as APP-V03-PORT-2 per the analysis doc §9. Distribution / YoY / Supplier / Unit-cost / Volume views remain unimplemented per the analysis doc §6.</li>
+        <li><b>Verification before commit.</b> Replicated the new precedence inline against 7 truth-table cases including Exhibit A (PO present + cancelled flag → IN_FLIGHT + adminCancelled=true, not CANCELLED). All 7 pass. Confirmed the deployed <code>trace.js</code> contains the new logic markers and not the old ones via <code>fetch('/trace/trace.js').text()</code> grep.</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (computeChainsForMaterial precedence + adminCancelled field + 4 downstream consumer fixes) · <code>trace/trace.css</code> (new <code>.pchain-admin-note</code> + <code>.state-admin-cancel</code> rules at end of file) · <code>record-of-change.html</code> (this APP-V03-PORT-1 entry). Snapshot at <code>_rollback/APP-V03-PORT-1-pre/</code>.</li>
+        <li><b>Rollback.</b> Stage A — restore <code>trace/trace.js</code> + <code>trace/trace.css</code> from <code>_rollback/APP-V03-PORT-1-pre/</code>. Stage C — <code>git revert</code> the APP-V03-PORT-1 commit. Rollback boundary: clean — no schema bump, no parser change, no canonical JSON shape change. Reverting restores the precedence bug but breaks no data.</li>
+        <li><b>Next on the Trace port queue (per analysis doc §9).</b> APP-V03-PORT-2 — port the v0.3 filter machinery (<code>manualExcl</code> / <code>sigmaExcl</code> / <code>yearFilter</code> + the <code>active()</code> / <code>allExcl()</code> / <code>sigmaExcl()</code> triplet). Unblocks every downstream Trace view because they all consume <code>active()</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-FIX-XCHART ───────── -->
     <article class="roc-entry dev">
       <div class="head">

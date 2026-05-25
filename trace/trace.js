@@ -683,6 +683,11 @@
     const inFlight = state.chains.filter(c => c.state === 'IN_FLIGHT' || c.state === 'NOT_YET_CONSUMED');
     const prOnly   = state.chains.filter(c => c.state === 'PR_ONLY');
     const cancelled= state.chains.filter(c => c.state === 'CANCELLED');
+    // APP-V03-PORT-1 (2026-05-24) — reporting-only count of chains where the PR
+    // was deletion-flagged AFTER a PO was raised. Per the operator PR/PO rule
+    // these chains classify by the phase they actually reached (IN_FLIGHT /
+    // NOT_YET_CONSUMED / COMPLETE) and the admin-cancel flag is informational.
+    const adminCancel = state.chains.filter(c => c.adminCancelled).length;
     const avgLT    = complete.length
       ? Math.round(complete.reduce((s, c) => s + c.total, 0) / complete.length)
       : null;
@@ -701,20 +706,22 @@
         <div class="sum-cell"><span class="lab">Complete chains</span><span class="v">${complete.length}</span></div>
         <div class="sum-cell"><span class="lab">In-flight</span><span class="v">${inFlight.length}</span></div>
         <div class="sum-cell"><span class="lab">PR only</span><span class="v">${prOnly.length}</span></div>
-        <div class="sum-cell"><span class="lab">Cancelled</span><span class="v ${cancelled.length ? 'warn' : ''}">${cancelled.length}</span></div>
+        <div class="sum-cell"><span class="lab">Cancelled (no PO)</span><span class="v ${cancelled.length ? 'warn' : ''}">${cancelled.length}</span></div>
         <div class="sum-cell"><span class="lab">Avg total LT</span><span class="v">${avgLT != null ? avgLT + 'd' : '—'}</span></div>
         <div class="sum-cell"><span class="lab">Manual PRs</span><span class="v ${manualPR ? 'warn' : ''}">${manualPR}</span></div>
       </div>
 
+      ${adminCancel ? `<div class="pchain-admin-note" title="PR's deletion-flag set after PO already raised — admin meaning only per the PR/PO classification rule; these chains classify by phase reached, not as cancelled."><b>${adminCancel}</b> admin-cancelled chain${adminCancel === 1 ? '' : 's'} (PR deletion-flagged post-PO) — see Raw Data view.</div>` : ''}
+
       ${diagnostic}
 
       <div class="chart-toolbar">
-        <span class="chart-toolbar-lab" id="chainCount">${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${complete.length} complete · ${inFlight.length} in-flight · ${cancelled.length} cancelled</span>
+        <span class="chart-toolbar-lab" id="chainCount">${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${complete.length} complete · ${inFlight.length} in-flight · ${cancelled.length} cancelled (no PO)${adminCancel ? ` · ${adminCancel} admin-cancel` : ''}</span>
       </div>
       <div class="chart-host">
         <canvas id="swimChart"></canvas>
       </div>
-      <div class="chart-caveat">Phases A–E computed from PR History + MB51 join on Purchase Order. Phase E (Time to First Use) measured to the first consumption transaction for this material after Site WH receipt — not necessarily of this PO's units specifically. Cancelled-before-PO PRs are excluded from the swimlane — see Raw Data view for the full list.</div>
+      <div class="chart-caveat">Phases A–E computed from PR History + MB51 join on Purchase Order. Phase E (Time to First Use) measured to the first consumption transaction for this material after Site WH receipt — not necessarily of this PO's units specifically. <b>Cancelled-before-PO PRs are excluded from the swimlane</b> — see Raw Data view for the full list. Per the PR/PO classification rule, a PR cancelled <em>after</em> a PO landed renders in its actual phase colour, not red — the post-PO deletion has admin meaning only.</div>
     `;
 
     renderSwimlane();
@@ -775,11 +782,32 @@
       const E = days(siteWH, c261);
       const total = [A, B, C, D, E].reduce((s, x) => s + (x || 0), 0);
 
+      // APP-V03-PORT-1 (2026-05-24) — precedence flip per operator-locked PR/PO rule
+      // (auto-memory project_pr_po_classification_rule.md):
+      //   "If there is a PO, ignore the final state of the PR. The PR's
+      //    sole purpose is to raise the need; a PO is the action. If there
+      //    is a PR without a PO, consider it cancelled — user denied
+      //    approval. If there is a PO, the user approved — and the post-PO
+      //    cancellation has very little other than admin meaning."
+      // Previously CANCELLED was highest-precedence (Exhibit A from the v0.3
+      // logic analysis): chains with both `purchaseOrder` and the
+      // deletion-flag AND processingStatus='N' misclassified as CANCELLED
+      // instead of by the phase they actually reached. v0.3 honoured the
+      // same rule via an upstream data filter (its CANCELLED_PRS ledger only
+      // included PR-without-PO rows). v0.4 must honour it at runtime since
+      // it ingests raw PR History.
+      //
+      // Reporting-only flag `adminCancelled` surfaces chains where the PR
+      // was deletion-flagged AFTER the PO landed. It appears in the Raw
+      // Data state column but does NOT affect classification, counts, or
+      // the swimlane filter.
       let state_ = 'COMPLETE';
-      if (cancelled)            state_ = 'CANCELLED';
-      else if (!po)             state_ = 'PR_ONLY';
-      else if (!siteWH)         state_ = 'IN_FLIGHT';
-      else if (!c261)           state_ = 'NOT_YET_CONSUMED';
+      if      (!po && cancelled)  state_ = 'CANCELLED';
+      else if (!po)               state_ = 'PR_ONLY';
+      else if (!siteWH)           state_ = 'IN_FLIGHT';
+      else if (!c261)             state_ = 'NOT_YET_CONSUMED';
+
+      const adminCancelled = !!po && cancelled;
 
       return {
         pr, po,
@@ -793,7 +821,8 @@
         qty:      qtyAtWH || numOr(r.qtyRequested, 0),
         qtySource: qtyAtWH ? 'MB51-109' : 'PR-requested',
         state:    state_,
-        cancelled,
+        cancelled,          // raw deletion+status flag (kept for diagnostics)
+        adminCancelled,     // !!po && cancelled — reporting-only, does NOT drive state
         creationIndicator: String(r.creationIndicator || '').trim() || 'B'
       };
     }).sort((a, b) => (b.prDate || '').localeCompare(a.prDate || ''));
@@ -813,8 +842,11 @@
     const datasets = PHASE_KEYS.map((ph, i) => ({
       label: PHASE_LABELS[ph],
       data:  drawn.map(c => c[ph] || 0),
-      backgroundColor: drawn.map(c => c.cancelled ? 'rgba(239,68,68,0.18)' : PHASE_COLORS[i] + 'CC'),
-      borderColor:     drawn.map(c => c.cancelled ? 'rgba(239,68,68,0.4)'  : PHASE_COLORS[i]),
+      // APP-V03-PORT-1 (2026-05-24) — red-tint only true CANCELLED (PR with no PO).
+      // adminCancelled (PR cancelled AFTER PO raised) renders in normal phase
+      // colour per the operator-locked PR/PO rule — admin meaning only.
+      backgroundColor: drawn.map(c => c.state === 'CANCELLED' ? 'rgba(239,68,68,0.18)' : PHASE_COLORS[i] + 'CC'),
+      borderColor:     drawn.map(c => c.state === 'CANCELLED' ? 'rgba(239,68,68,0.4)'  : PHASE_COLORS[i]),
       borderWidth: 1,
       borderRadius: 2
     }));
@@ -949,8 +981,11 @@
   }
 
   function renderChainTable(){
+    // APP-V03-PORT-1 (2026-05-24) — row tint follows STATE, not raw cancellation
+    // flag. adminCancelled chains (PR cancel-flag set AFTER PO raised) keep
+    // their phase state's tint and get a small annotation in the State column.
     const rows = state.chains.map(c => `
-      <tr class="${c.cancelled ? 'cancelled' : ''}">
+      <tr class="${c.state === 'CANCELLED' ? 'cancelled' : ''}">
         <td class="mono">${escapeHtml(c.pr)}</td>
         <td class="mono">${escapeHtml(c.prDate || '—')}</td>
         <td class="mono">${escapeHtml(c.po || '—')}</td>
@@ -965,7 +1000,7 @@
         <td class="num mono">${cellNum(c.E)}</td>
         <td class="num mono"><b>${c.total || '—'}</b></td>
         <td class="num mono">${c.qty != null ? c.qty.toLocaleString() : '—'}</td>
-        <td class="state state-${c.state.toLowerCase()}">${c.state.replace(/_/g, ' ')}</td>
+        <td class="state state-${c.state.toLowerCase()}">${c.state.replace(/_/g, ' ')}${c.adminCancelled ? ' <span class="state-admin-cancel" title="PR deletion-flagged after PO raised — admin meaning only; does not affect classification">(admin cancel)</span>' : ''}</td>
       </tr>
     `).join('');
     $('#chainTableBody').innerHTML = rows || `<tr><td colspan="15" class="empty">no chains for this material</td></tr>`;

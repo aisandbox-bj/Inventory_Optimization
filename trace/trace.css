@@ -494,3 +494,32 @@
   font-family:var(--font-body); font-size:12px;
 }
 .view-empty ul.view-candidates li b{ color:var(--cal); font-weight:600; }
+
+/* ─── APP-V03-PORT-1 · admin-cancel note + chip ─────────────────────────── */
+.pchain-admin-note{
+  margin: 4px 0 10px 0;
+  padding: 7px 11px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  background: rgba(100, 181, 246, .08);
+  border: 1px solid rgba(100, 181, 246, .30);
+  color: #82b8e8;
+  cursor: help;
+}
+.pchain-admin-note b{ color: #d6e5f4; font-weight: 600; }
+
+.state-admin-cancel{
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-size: 9.5px;
+  font-weight: 600;
+  background: rgba(100, 181, 246, .15);
+  color: #82b8e8;
+  border: 1px solid rgba(100, 181, 246, .35);
+  cursor: help;
+  letter-spacing: .02em;
+  text-transform: lowercase;
+}
