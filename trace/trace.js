@@ -578,6 +578,21 @@
       return;
     }
 
+    // APP-V03-PORT-4 (2026-05-24) — Phase Distribution view.
+    if (state.activeView === 'phase-distribution') {
+      if (state.scopeMode === 'single') {
+        const mat = state.matIndex.get(state.scopeSingle);
+        if (!mat) {
+          host.innerHTML = `<div class="view-empty">Pick a material from the rail to load the distribution.</div>`;
+          return;
+        }
+        renderPhaseDistribution(host, mat.material);
+      } else {
+        host.innerHTML = renderPDInMultiPanel();
+      }
+      return;
+    }
+
     // Any other view is queued — render the not-built state (regardless of
     // scope mode). Queued multi-material views get a richer panel with the
     // candidate list; queued single-material views get a shorter one.
@@ -588,8 +603,19 @@
     }
   }
 
-  function isSingleScopeView(v){
-    return v === 'phase-distribution';   // currently only Phase Distribution is the queued single-material view
+  function isSingleScopeView(_v){
+    // APP-V03-PORT-4 (2026-05-24) — no remaining queued single-scope views;
+    // every queued view in the rail's view list is multi-material.
+    return false;
+  }
+
+  function renderPDInMultiPanel(){
+    return `
+      <div class="view-empty">
+        <div class="view-empty-lab">Single material only</div>
+        <h3>Phase Distribution renders one material at a time</h3>
+        <p>Switch to <b>Single material</b> on the rail to load the box plots for a specific material.</p>
+      </div>`;
   }
 
   function renderRawDataInMultiPanel(){
@@ -670,6 +696,279 @@
         if (host) renderRawData(host, material);
       });
     }
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-V03-PORT-4 (2026-05-24) — PHASE DISTRIBUTION VIEW
+     Ported from v0.3 drawBoxPlots() + buildStatsTable() (lines 1567–1827).
+     Five box plots per phase A–E, Tukey upper fence (Q3 + 1.5·IQR) for
+     Y-clipping, outliers above the fence rendered as ↑ markers. Stats
+     table below shows N · Min · Mean · Median · Max per phase. Total
+     Lead Time chevron banner above shows the average phase decomposition
+     across the active chains.
+     Consumes PORT-2's active() set transparently — filter chips, sigma
+     trim, manual excludes from Procurement Chain view all carry through.
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  function quantile(sorted, q){
+    if (sorted.length === 0) return null;
+    const pos = (sorted.length - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    if (sorted[base + 1] !== undefined) {
+      return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+    }
+    return sorted[base];
+  }
+
+  function boxStats(values){
+    const xs = values.filter(v => v != null && Number.isFinite(v)).sort((a, b) => a - b);
+    if (xs.length === 0) return null;
+    const n = xs.length;
+    const min = xs[0];
+    const max = xs[n - 1];
+    const q1 = quantile(xs, 0.25);
+    const q2 = quantile(xs, 0.5);
+    const q3 = quantile(xs, 0.75);
+    const mean = xs.reduce((s, v) => s + v, 0) / n;
+    const iqr = q3 - q1;
+    const upperFence = q3 + 1.5 * iqr;
+    const outliers = xs.filter(v => v > upperFence);
+    // Whisker upper = max value not above the fence (so the box drawing stays bounded)
+    const inFence = xs.filter(v => v <= upperFence);
+    const whiskerUpper = inFence.length ? inFence[inFence.length - 1] : max;
+    return { n, min, max, q1, q2, q3, mean, iqr, upperFence, whiskerUpper, outliers };
+  }
+
+  function renderPhaseDistribution(host, material){
+    state.chains = computeChainsForMaterial(material);
+    const act    = active(state.chains, material);
+    // Phase distribution operates on chains with all five phases populated —
+    // i.e. those that reached site warehouse. v0.3 line 1568 used `active()`
+    // which by the data-curation rule was already siteWH-complete; v0.4 has
+    // to gate explicitly because IN_FLIGHT / PR_ONLY chains carry null
+    // phases that would otherwise pollute the stats.
+    const drawn  = act.filter(c => !!c.siteWH);
+
+    // Filter toolbar (same UX as Procurement Chain view — single source of truth)
+    const years = getYearsForChains(state.chains);
+    const manualSet = getManualExcl(material);
+    const sigmaSet  = sigmaExcl(state.chains);
+    const totalExcl = manualSet.size + sigmaSet.size;
+    const yearBtns = ['All'].concat(years).map(y =>
+      `<button class="tr-fbtn ${state.yearFilter === y ? 'active' : ''}" data-filter="year" data-val="${y}">${y === 'All' ? 'All years' : y}</button>`
+    ).join('');
+    const sigmaBtns = [
+      { v: 'null', lab: 'Off',          title: 'No sigma trim' },
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of total LT' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of total LT' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+    ].map(s => {
+      const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
+      return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
+    }).join('');
+    const exclChipHtml = totalExcl
+      ? `<span class="tr-excl-chip" title="Manually excluded: ${manualSet.size}. Sigma-trimmed: ${sigmaSet.size}.">${totalExcl} excluded</span>`
+      : '';
+    const resetBtnHtml = manualSet.size
+      ? `<button class="tr-fbtn tr-reset" data-filter="reset-manual" title="Clear manual excludes for this material">Reset manual</button>`
+      : '';
+    const filterToolbar = `
+      <div class="tr-filterbar" id="traceFilterBar">
+        <span class="tr-flbl">Year</span>${yearBtns}
+        <span class="tr-fsep"></span>
+        <span class="tr-flbl">Sigma trim</span>${sigmaBtns}
+        ${exclChipHtml}
+        ${resetBtnHtml}
+      </div>
+    `;
+
+    // ── Empty state — not enough complete chains to draw box plots ────────
+    if (drawn.length < 2) {
+      host.innerHTML = `
+        ${filterToolbar}
+        <div class="pd-empty">
+          <div class="pd-empty-lab">Need at least 2 complete chains</div>
+          <h3>Phase Distribution requires chains that reached Site WH</h3>
+          <p>Currently <b>${drawn.length}</b> chain${drawn.length === 1 ? '' : 's'} with full Phase A–E data for material <b>${escapeHtml(material)}</b>.</p>
+          <p>Box plots compute quartiles + Tukey fence per phase across the <em>active set</em> (post year / sigma / manual filters). PR-only and in-flight chains carry null phase values and are excluded from this view; they still appear in Raw Data.</p>
+          ${drawn.length === 0 && act.length > 0
+            ? `<p class="pd-hint">${act.length} chain${act.length === 1 ? '' : 's'} active but none have a Site WH receipt — see Procurement Chain view for the state breakdown.</p>`
+            : ''}
+        </div>
+      `;
+      bindFilterBar(material);
+      return;
+    }
+
+    // ── Per-phase stats ───────────────────────────────────────────────────
+    const phaseStats = PHASE_KEYS.map(ph => ({
+      key:   ph,
+      label: PHASE_LABELS[ph],
+      color: PHASE_COLORS[PHASE_KEYS.indexOf(ph)],
+      stats: boxStats(drawn.map(c => c[ph]))
+    }));
+
+    // Total LT chevron — average phase decomposition across all `drawn`
+    const phaseMeans = phaseStats.map(p => (p.stats ? p.stats.mean : 0));
+    const totalMean  = phaseMeans.reduce((s, v) => s + v, 0);
+    const pctMeans   = phaseMeans.map(v => (totalMean > 0 ? v / totalMean : 0));
+    const chevronHtml = `
+      <div class="pd-chevron">
+        <div class="pd-chevron-lab">Total Lead Time · phase decomposition · avg across ${drawn.length} chain${drawn.length === 1 ? '' : 's'}</div>
+        <div class="pd-chevron-bar">
+          ${phaseStats.map((p, i) => `
+            <div class="pd-chev-seg" style="flex: ${pctMeans[i] || 0.001}; background: ${p.color}; --pd-chev-fill: ${p.color};">
+              <div class="pd-chev-inner">
+                <span class="pd-chev-code">${p.key}</span>
+                <span class="pd-chev-name">${p.label}</span>
+                <span class="pd-chev-val">${p.stats ? p.stats.mean.toFixed(1) : '—'}d</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="pd-chevron-total"><span class="lab">Total avg</span><span class="v">${totalMean.toFixed(1)}d</span></div>
+      </div>
+    `;
+
+    // ── Build SVG box plots ───────────────────────────────────────────────
+    const plotHtml = `
+      <div class="pd-plots">
+        ${phaseStats.map(p => renderBoxPlotSvg(p)).join('')}
+      </div>
+    `;
+
+    // ── Stats table (Min / Mean / Median / Max / N per phase) ────────────
+    const tableHtml = `
+      <div class="pd-stats-wrap">
+        <table class="pd-stats">
+          <thead>
+            <tr>
+              <th class="num">Phase</th>
+              <th>Description</th>
+              <th class="num">N</th>
+              <th class="num">Min</th>
+              <th class="num">Q1</th>
+              <th class="num">Median</th>
+              <th class="num">Mean</th>
+              <th class="num">Q3</th>
+              <th class="num">Max</th>
+              <th class="num">Outliers</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${phaseStats.map(p => {
+              const s = p.stats;
+              if (!s) return `<tr><td class="num"><span class="pd-phase-dot" style="background:${p.color}"></span>${p.key}</td><td>${p.label}</td><td colspan="8" class="num empty">no data</td></tr>`;
+              return `
+                <tr>
+                  <td class="num"><span class="pd-phase-dot" style="background:${p.color}"></span>${p.key}</td>
+                  <td>${p.label}</td>
+                  <td class="num mono">${s.n}</td>
+                  <td class="num mono">${s.min.toFixed(1)}</td>
+                  <td class="num mono">${s.q1.toFixed(1)}</td>
+                  <td class="num mono">${s.q2.toFixed(1)}</td>
+                  <td class="num mono"><b>${s.mean.toFixed(1)}</b></td>
+                  <td class="num mono">${s.q3.toFixed(1)}</td>
+                  <td class="num mono">${s.max.toFixed(1)}</td>
+                  <td class="num mono ${s.outliers.length ? 'warn' : ''}">${s.outliers.length}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    host.innerHTML = `
+      ${filterToolbar}
+      ${chevronHtml}
+      ${plotHtml}
+      ${tableHtml}
+      <div class="chart-caveat">Box plots show Q1/Median/Q3 per phase. Whiskers extend to min and to the largest value below the <b>Tukey upper fence</b> (Q3 + 1.5·IQR). Outliers above the fence render as <span class="pd-mark">↑</span> markers above each plot. Mean shown as a hollow circle inside the box. N is the count of <em>complete</em> chains (those that reached Site WH) within the active filter set.</div>
+    `;
+
+    bindFilterBar(material);
+  }
+
+  // SVG box plot — vertical, scaled to the phase's own y-domain.
+  // The fence-clipped layout makes peer comparison easier (each phase's
+  // box reads against its own scale; outliers are flagged numerically).
+  function renderBoxPlotSvg(p){
+    const W = 168, H = 220, PAD_T = 14, PAD_B = 50, PAD_L = 36, PAD_R = 12;
+    const innerH = H - PAD_T - PAD_B;
+    const innerW = W - PAD_L - PAD_R;
+    if (!p.stats) {
+      return `<div class="pd-plot pd-plot-empty">
+        <div class="pd-plot-title" style="border-color:${p.color}">${p.key} · ${p.label}</div>
+        <div class="pd-plot-nodata">no data</div>
+      </div>`;
+    }
+    const s = p.stats;
+    // Y domain — 0 to fence (clip outliers visually; count them separately)
+    const yMax = Math.max(s.upperFence, s.q3 + 1, 1) * 1.06;
+    const yScale = (v) => PAD_T + innerH - (v / yMax) * innerH;
+    // Box geometry
+    const boxX = PAD_L + innerW / 2 - 18;
+    const boxW = 36;
+    const midX = PAD_L + innerW / 2;
+    const whiskerW = 18;
+
+    // Y-axis ticks (4-5 nice marks)
+    const ticks = niceTicks(0, yMax, 4);
+    const tickMarks = ticks.map(t => `
+      <line x1="${PAD_L}" x2="${W - PAD_R}" y1="${yScale(t)}" y2="${yScale(t)}" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+      <text x="${PAD_L - 4}" y="${yScale(t) + 3}" text-anchor="end" fill="#9BABA8" font-family="JetBrains Mono, monospace" font-size="9">${t}</text>
+    `).join('');
+
+    // Outlier markers — stacked at the top of the plot, with a count label
+    const outlierMarkers = s.outliers.length
+      ? `<g class="pd-outliers" transform="translate(${midX}, ${PAD_T - 4})">
+          <text x="0" y="0" text-anchor="middle" fill="#f4c14a" font-family="JetBrains Mono, monospace" font-size="13" font-weight="600">↑ ${s.outliers.length}</text>
+        </g>`
+      : '';
+
+    return `<div class="pd-plot" data-phase="${p.key}">
+      <div class="pd-plot-title" style="border-color:${p.color}"><span class="pd-plot-code">${p.key}</span><span class="pd-plot-name">${p.label}</span></div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" class="pd-plot-svg">
+        ${tickMarks}
+        <!-- Whiskers -->
+        <line x1="${midX}" x2="${midX}" y1="${yScale(s.whiskerUpper)}" y2="${yScale(s.q3)}" stroke="${p.color}" stroke-width="1.5"/>
+        <line x1="${midX}" x2="${midX}" y1="${yScale(s.q1)}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.5"/>
+        <line x1="${midX - whiskerW/2}" x2="${midX + whiskerW/2}" y1="${yScale(s.whiskerUpper)}" y2="${yScale(s.whiskerUpper)}" stroke="${p.color}" stroke-width="1.5"/>
+        <line x1="${midX - whiskerW/2}" x2="${midX + whiskerW/2}" y1="${yScale(s.min)}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.5"/>
+        <!-- Box -->
+        <rect x="${boxX}" y="${yScale(s.q3)}" width="${boxW}" height="${yScale(s.q1) - yScale(s.q3)}" fill="${p.color}" fill-opacity="0.22" stroke="${p.color}" stroke-width="1.5" rx="2"/>
+        <!-- Median line -->
+        <line x1="${boxX}" x2="${boxX + boxW}" y1="${yScale(s.q2)}" y2="${yScale(s.q2)}" stroke="${p.color}" stroke-width="2.5"/>
+        <!-- Mean marker (hollow circle) -->
+        <circle cx="${midX}" cy="${yScale(s.mean)}" r="3.5" fill="rgba(8,12,20,.96)" stroke="${p.color}" stroke-width="1.5"/>
+        ${outlierMarkers}
+      </svg>
+      <div class="pd-plot-foot">
+        <span class="pd-foot-lbl" title="Median">M</span><span class="pd-foot-val">${s.q2.toFixed(1)}d</span>
+        <span class="pd-foot-sep">·</span>
+        <span class="pd-foot-lbl" title="Mean">μ</span><span class="pd-foot-val">${s.mean.toFixed(1)}d</span>
+      </div>
+    </div>`;
+  }
+
+  // "Nice" axis tick generator — 1/2/5 × 10^n stepping for round numbers
+  function niceTicks(min, max, target){
+    if (max <= min) return [min];
+    const range = max - min;
+    const rough = range / Math.max(1, target);
+    const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+    const norm = rough / mag;
+    let step;
+    if      (norm < 1.5) step = 1   * mag;
+    else if (norm < 3)   step = 2   * mag;
+    else if (norm < 7)   step = 5   * mag;
+    else                 step = 10  * mag;
+    const ticks = [];
+    const start = Math.ceil(min / step) * step;
+    for (let v = start; v <= max; v += step) ticks.push(Math.round(v * 100) / 100);
+    return ticks;
   }
 
   function renderPCInMultiPanel(){
@@ -934,11 +1233,13 @@
           clearManualExcl(material);
         }
         persistState();
-        // Re-render in place — recompute counts + swimlane + toolbar.
-        // #contentView is the host renderActiveView writes into.
+        // Re-render whichever view is active. #contentView is the shared host.
         if (state.chart) { state.chart.destroy(); state.chart = null; }
         const host = $('#contentView');
-        if (host) renderProcurementChain(host, material);
+        if (!host) return;
+        if (state.activeView === 'phase-distribution')      renderPhaseDistribution(host, material);
+        else if (state.activeView === 'raw-data')           renderRawData(host, material);
+        else                                                renderProcurementChain(host, material);
       });
     });
   }

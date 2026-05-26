@@ -379,6 +379,36 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-4 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-4 · Phase Distribution view — box plots per phase A–E + Tukey fence + chevron banner + stats table</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Analysis doc §9 P4 — second view in the Trace single-material rail (next to Procurement Chain). Ports v0.3's <code>drawBoxPlots()</code> + <code>buildStatsTable()</code> (lines 1567–1827) with v0.4 data sourcing. Operator's framing: "excited to see this integrated."</li>
+        <li><b>What lands in <code>trace/trace.html</code>:</b> the <em>Phase Distribution</em> button in the single-material view list flips from <code>queued</code> to active. Marker glyph ◌ → ▶. Tooltip updated to describe what the view shows.</li>
+        <li><b>What lands in <code>trace/trace.js</code>:</b><br>
+          <strong>(1) Dispatch branch</strong> in <code>renderActiveView</code> — single-material mode renders the view; multi-material mode shows the "Switch to Single material" panel.<br>
+          <strong>(2) Math helpers</strong>: <code>quantile(sorted, q)</code> — linear-interpolated quantile (so Q1/Q3 are sensible on small n). <code>boxStats(values)</code> — returns <code>{n, min, max, q1, q2, q3, mean, iqr, upperFence, whiskerUpper, outliers}</code>. Tukey upper fence is <code>Q3 + 1.5·IQR</code>; whisker upper clips to the last value at or below the fence. <code>niceTicks(min, max, target)</code> — 1/2/5 × 10ⁿ stepping for round axis labels.<br>
+          <strong>(3) <code>renderPhaseDistribution(host, material)</code></strong> — wires the filter toolbar (shared UX with Procurement Chain), gates on <code>active().filter(c =&gt; !!c.siteWH)</code> (chains that reached site warehouse — the only ones with full Phase A–E data), shows an honest empty state when &lt;2 chains qualify, builds the chevron banner + box-plot grid + stats table.<br>
+          <strong>(4) Total Lead Time chevron banner</strong> — horizontal arrow-segments, one per phase, sized proportional to the phase's <em>average</em> across <code>drawn</code>. Each segment shows the phase code (A–E), plain-English label, and avg days. Total avg shown on the right.<br>
+          <strong>(5) SVG box plots</strong> in <code>renderBoxPlotSvg(p)</code>. Vertical orientation; each plot has its own Y-axis scale bounded by the upper fence (×1.06 padding). Whiskers down to min, up to <code>whiskerUpper</code>. Box from Q1 to Q3 with median as a thick line. Mean as a hollow circle. Outliers above the fence collapse to a single <code>↑ N</code> marker at the top of the plot (count rather than rendering each outlier point — keeps it scannable). Phase colour inherited from the existing PHASE_COLORS palette.<br>
+          <strong>(6) Stats table</strong>: Phase · Description · N · Min · Q1 · Median · Mean · Q3 · Max · Outliers. Outlier-count cell yellow-tinted when nonzero.<br>
+          <strong>(7) Filter toolbar shared with Procurement Chain</strong>: clicking a year chip or sigma button now re-renders the active view (Procurement Chain / Raw Data / Phase Distribution) — <code>bindFilterBar()</code> dispatches by <code>state.activeView</code>. Right-click excludes from Procurement Chain swimlane carry through to this view (they're the same chain set after <code>active()</code>).</li>
+        <li><b>What lands in <code>trace/trace.css</code>:</b> ~190 lines appended — chevron banner (gradient bar, arrow-pointed segments, hover translate), box-plot grid (5-column on desktop, collapses to 3 then 2 on narrow viewports), per-plot card (header with phase colour underline, SVG plot, foot with median + mean readout), stats table (header strip, hover stripe, phase colour dots), empty state.</li>
+        <li><b>What this does NOT change:</b> no schema bump, no parser change, no canonical-JSON shape change, no persistence-key change, no change to Procurement Chain or Raw Data views' core logic (only the filter-bar re-render dispatch updated to know about the new view). v0.4's existing per-phase math comes from <code>computeChainsForMaterial</code> unchanged.</li>
+        <li><b>Verification before commit.</b> Boxplot math unit-tested in-page against four known datasets: classic 1–11 (no outliers — q1=3.5, q2=6, q3=8.5 ✓), classic+outlier 1–11,100 (100 correctly flagged, whisker stays at 11 ✓), empty array (returns null ✓), Vendor-LT-style skewed data 3,6,7,7,11,16,16,103 (103 correctly flagged as the lone outlier, fence at ~29.9 ✓). Page boots clean with no console errors after rebuild.</li>
+        <li><b>How to verify.</b> Open a Trace assessment with a material that has multiple complete chains (e.g. 2004641's dataset). Single-material mode. Click <em>Phase Distribution</em> on the rail. Top: Total Lead Time chevron banner with five colour-coded segments. Middle: five box plots side by side, one per phase A–E. Outliers above the fence show <code>↑ N</code> in yellow above the box. Bottom: stats table with N / Min / Q1 / Median / Mean / Q3 / Max / Outliers per phase. Apply a year filter or sigma trim from the toolbar → chevron + plots + table all recompute. Right-click a chain in the Procurement Chain swimlane to exclude → switch to Phase Distribution → that chain is now out of the distribution math.</li>
+        <li><b>Files touched.</b> <code>trace/trace.html</code> (one button — flipped from queued to active), <code>trace/trace.js</code> (dispatch branch + 5 new functions + bindFilterBar dispatch update), <code>trace/trace.css</code> (~190 lines appended). Snapshot at <code>_rollback/APP-V03-PORT-4-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore all three files from snapshot. Clean — no state-shape change. The Phase Distribution view button reverts to queued ◌ marker.</li>
+        <li><b>Next on the Trace port queue (per analysis doc §9).</b> APP-V03-PORT-5 — Volume cumulative (PR / PO / Site / Cancel layered series over time). Bigger chunk — needs cancellation glyphs, custom Chart.js interaction mode, pack-size persistence (D3 plan locks UOM to inventoryMaster[i].uom).</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-3a ───────── -->
     <article class="roc-entry dev">
       <div class="head">
