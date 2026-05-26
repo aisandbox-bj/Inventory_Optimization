@@ -120,6 +120,16 @@
   ]));
 
   /* ─── Date helpers ──────────────────────────────────────────────────────── */
+  /* APP-FIX-BACKCALC-TZ (2026-05-25) — ALL date math is UTC.
+     MB51 posting dates are calendar dates ("2026-05-25"), not instants.
+     Date.parse() of a date-only ISO string yields UTC midnight; the prior
+     code then read it back with LOCAL getters, which in any timezone west
+     of UTC shifts the day-key one day earlier. Result: deltasByDay keys
+     ("2026-05-25" from raw posting date) didn't match the days[] keys
+     ("2026-05-24" from toIsoDay), so some receipts/issues were silently
+     dropped from the walk and the SOH cursor floated above zero — hiding
+     real stockouts. Using getUTC*/setUTC* keeps both sides in calendar-day
+     space regardless of browser locale. */
   function toMs(s) {
     if (s == null || s === '') return null;
     const t = Date.parse(s);
@@ -127,15 +137,15 @@
   }
   function toIsoDay(ms) {
     const d = new Date(ms);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
   function addDays(ms, n) { return ms + n * 86400000; }
   function addMonths(ms, n) {
     const d = new Date(ms);
-    d.setMonth(d.getMonth() + n);
+    d.setUTCMonth(d.getUTCMonth() + n);
     return d.getTime();
   }
 
