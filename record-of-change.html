@@ -379,6 +379,29 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-SWIM-GHOST ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-SWIM-GHOST · Excluded chains stay visible on the swimlane, rendered ghost-dulled instead of dropped</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding after PORT-4: <em>"when I exclude a chain, I still want to see it, but ghost-like... dulled."</em> PORT-2 dropped excluded chains from the swimlane entirely; the operator wanted v0.3's actual behaviour (lines 1454/1466 — excluded chains rendered with tinted colour, not dropped) so the visual context stays even when a chain is removed from analysis.</li>
+        <li><b>What changed in <code>trace/trace.js</code> renderSwimlane:</b><br>
+          (1) <strong>Drawn set</strong>: was <code>active(state.chains, mat).filter(c =&gt; !!c.siteWH)</code> — now <code>state.chains.filter(yearFilter).filter(!!c.siteWH)</code>. Year filter still drops out-of-scope chains; excluded chains (manual + sigma) stay in the drawn set.<br>
+          (2) <strong>Colour helpers</strong> <code>bgFor(c, i)</code> + <code>bdFor(c, i)</code>: precedence is CANCELLED → ghost (if excluded) → normal. Excluded chains use phase-colour at ~10% alpha (background) and ~25% alpha (border).<br>
+          (3) <strong>Y-axis tick colour</strong> per-row: dims the PR/PO label to <code>rgba(214,223,222,0.40)</code> when the chain is excluded — keeps the ghost effect consistent.<br>
+          (4) <strong>Tooltip</strong>: adds an <code>Excluded: manual</code> or <code>Excluded: sigma-trim (Nσ)</code> line at the bottom when the chain is excluded — so right-click → Include is discoverable from the bar itself.</li>
+        <li><b>What does NOT change.</b> The funnel arithmetic still runs on <code>active()</code> — excluded chains stay OUT of the counts and percentages (verified post-edit). The Phase Distribution box-plot math still runs on <code>active().filter(!!siteWH)</code> — excluded chains stay OUT of the stats. The Raw Data per-row toggle is unaffected. The right-click context menu still works (right-click a ghosted bar to Include it). The siteWH gate is preserved (PR-only / in-flight chains still drop out of the swimlane — they're visible in Raw Data).</li>
+        <li><b>How to verify.</b> Open a Trace assessment with a material that has multiple complete chains. Right-click any swimlane bar → <em>Exclude this chain</em>. The bar dims to ~10% alpha (you can still see its outline + phase decomposition); the PR/PO label dims to ~40%. The funnel count drops by 1. The Phase Distribution stats recompute without the chain. Right-click the now-ghosted bar → <em>Include this chain</em> brings it back to full opacity. Apply a sigma-trim → outlier chains ghost as well; their tooltip says "Excluded: sigma-trim (Nσ)".</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (renderSwimlane: drawn-set source + colour helpers + y-axis tick callback + tooltip afterBody). <code>trace/trace.css</code> unchanged. Snapshot at <code>_rollback/APP-FIX-SWIM-GHOST-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore <code>trace/trace.js</code> from snapshot. Excluded chains revert to dropping out of the chart entirely.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-4 ───────── -->
     <article class="roc-entry dev">
       <div class="head">

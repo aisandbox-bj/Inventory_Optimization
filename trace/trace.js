@@ -1430,13 +1430,37 @@
     // still appear on Raw Data view + cancellation diagnostic / progression
     // panels in v0.3, but NOT on the swimlane itself. Chains with PO but no
     // Site WH drop out here; they stay visible in the Raw Data tab.
-    // APP-V03-PORT-2 (2026-05-24) — runs over the ACTIVE set, not the raw
-    // chain set: respects yearFilter + manualExcl + sigmaExcl. Excluded
-    // chains drop out of the chart entirely (counts in the toolbar tell
-    // the operator how many were filtered).
+    //
+    // APP-FIX-SWIM-GHOST (2026-05-24) — operator finding: when I exclude a
+    // chain, I still want to see it, but ghost-dulled. So the swimlane
+    // renders ALL siteWH-gated chains in the year-filtered set; excluded
+    // chains (manual + sigma) stay visible but tinted very low alpha and
+    // their y-axis label dims. The funnel + stats + Phase Distribution math
+    // still respect active() — exclusion still removes the chain from
+    // counts and analytics, it just doesn't drop the bar visually.
+    // (Matches v0.3 lines 1454/1466 — excluded chains rendered with tinted
+    // colour, not dropped.)
     const mat = material || state.scopeSingle;
-    const drawn = active(state.chains, mat).filter(c => !!c.siteWH);
+    const yearFiltered = state.chains.filter(c =>
+      state.yearFilter === 'All' || getChainYear(c) === state.yearFilter
+    );
+    const drawn = yearFiltered.filter(c => !!c.siteWH);
+    const exclSet = allExcl(state.chains, mat);
+    const isExcl = (c) => exclSet.has(c.pr);
     const labels = drawn.map(c => `${c.pr}${c.po ? ' → ' + c.po : ''}`);
+
+    // Colour helpers — fold the cancelled / excluded / normal logic into
+    // one place so background and border stay in sync.
+    const bgFor = (c, i) => {
+      if (c.state === 'CANCELLED') return isExcl(c) ? 'rgba(239,68,68,0.06)' : 'rgba(239,68,68,0.18)';
+      if (isExcl(c))               return PHASE_COLORS[i] + '1A';   // ~10% alpha — ghost
+      return PHASE_COLORS[i] + 'CC';                                // ~80% — normal
+    };
+    const bdFor = (c, i) => {
+      if (c.state === 'CANCELLED') return isExcl(c) ? 'rgba(239,68,68,0.18)' : 'rgba(239,68,68,0.4)';
+      if (isExcl(c))               return PHASE_COLORS[i] + '40';   // ~25% — soft border
+      return PHASE_COLORS[i];
+    };
 
     const datasets = PHASE_KEYS.map((ph, i) => ({
       label: PHASE_LABELS[ph],
@@ -1444,8 +1468,9 @@
       // APP-V03-PORT-1 (2026-05-24) — red-tint only true CANCELLED (PR with no PO).
       // adminCancelled (PR cancelled AFTER PO raised) renders in normal phase
       // colour per the operator-locked PR/PO rule — admin meaning only.
-      backgroundColor: drawn.map(c => c.state === 'CANCELLED' ? 'rgba(239,68,68,0.18)' : PHASE_COLORS[i] + 'CC'),
-      borderColor:     drawn.map(c => c.state === 'CANCELLED' ? 'rgba(239,68,68,0.4)'  : PHASE_COLORS[i]),
+      // APP-FIX-SWIM-GHOST (2026-05-24) — excluded chains drop to ~10% alpha.
+      backgroundColor: drawn.map(c => bgFor(c, i)),
+      borderColor:     drawn.map(c => bdFor(c, i)),
       borderWidth: 1,
       borderRadius: 2
     }));
@@ -1477,7 +1502,16 @@
           // APP-FIX-T-04b — x-axis at TOP so the operator sees the calendar-
           // days scale immediately, not after scrolling through every chain.
           x: { stacked: true, position: 'top', grid: { color: 'rgba(31,206,216,.08)' }, ticks: { color: '#9BABA8', font: { family: 'JetBrains Mono', size: 10 } }, title: { display: true, text: 'Calendar Days', color: '#9BABA8', font: { size: 10 } } },
-          y: { stacked: true, grid: { display: false }, ticks: { color: '#D6DFDE', font: { family: 'JetBrains Mono', size: 10 } } }
+          y: { stacked: true, grid: { display: false }, ticks: {
+            // APP-FIX-SWIM-GHOST — dim the y-axis label for excluded chains
+            // so the ghost rendering reads consistently with the bar tint.
+            color: (ctx) => {
+              const c = drawn[ctx.index];
+              if (c && isExcl(c)) return 'rgba(214,223,222,0.40)';
+              return '#D6DFDE';
+            },
+            font: { family: 'JetBrains Mono', size: 10 }
+          } }
         },
         plugins: {
           legend: { display: true, position: 'top', labels: { color: '#D6DFDE', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 14 } },
@@ -1498,13 +1532,23 @@
               label(item) { return ` ${item.dataset.label}: ${item.raw}d`; },
               afterBody(items) {
                 const c = drawn[items[0].dataIndex];
-                return [
+                const lines = [
                   '─────────',
                   `Total LT: ${c.total}d`,
                   `Qty: ${c.qty} (${c.qtySource})`,
                   `Source: ${c.creationIndicator === 'R' ? 'MANUAL PR' : 'MRP-generated'}`,
                   `State: ${c.state}`
                 ];
+                // APP-FIX-SWIM-GHOST — surface exclusion status in the tooltip
+                if (isExcl(c)) {
+                  const manualSet = getManualExcl(mat);
+                  const sigSet    = sigmaExcl(state.chains);
+                  const how = manualSet.has(c.pr)
+                    ? 'manual'
+                    : sigSet.has(c.pr) ? `sigma-trim (${state.sigmaLimit}σ)` : 'excluded';
+                  lines.push(`Excluded: ${how}`);
+                }
+                return lines;
               }
             },
             backgroundColor: 'rgba(8,12,20,.96)',
