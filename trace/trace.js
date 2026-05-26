@@ -1087,6 +1087,42 @@
     return pts.map(p => { cum += p.q; return { x: p.ts, y: cum }; });
   }
 
+  // APP-FIX-VOL-CANCEL (2026-05-24) — Chart.js plugin that paints vertical
+  // red ticks at every cancelled-PR's x-position along the bottom of the
+  // chart area. The "Cancelled PR" scatter dataset stays in the chart but
+  // renders invisibly (pointRadius:0); its meta.data positions are what
+  // we read here so the tick lines stay in sync with year-filtering and
+  // other re-renders. Hover hit detection is still handled by Chart.js
+  // via pointHitRadius on the scatter dataset — operator hovers the tick,
+  // tooltip pops with PR + qty + creation-indicator origin.
+  const cancelTickPlugin = {
+    id: 'cancelTicks',
+    afterDatasetsDraw(chart) {
+      const idx = (chart.data.datasets || []).findIndex(d => d && d.label === 'Cancelled PR');
+      if (idx < 0) return;
+      const meta = chart.getDatasetMeta(idx);
+      if (!meta || meta.hidden) return;
+      const ctx = chart.ctx;
+      const yScale = chart.scales.y;
+      if (!yScale) return;
+      const yBottom = yScale.bottom;
+      const yTop    = yBottom - 14;   // tick height above the x-axis baseline
+      ctx.save();
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth   = 1.5;
+      ctx.lineCap     = 'square';
+      for (const pt of (meta.data || [])) {
+        if (!pt || !Number.isFinite(pt.x)) continue;
+        if (pt.x < chart.scales.x.left || pt.x > chart.scales.x.right) continue;
+        ctx.beginPath();
+        ctx.moveTo(pt.x, yBottom);
+        ctx.lineTo(pt.x, yTop);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  };
+
   function renderVolume(host, material){
     state.chains = computeChainsForMaterial(material);
     const act    = active(state.chains, material);
@@ -1123,9 +1159,15 @@
     `;
 
     // ── Cumulative series ─────────────────────────────────────────────────
-    // PR Raised: every active chain contributes at its prDate. Cancelled-no-PO
-    // chains DO count here per v0.3's logic — they ARE PRs that were raised.
-    const prSeries = buildCumulativeSeries(act, c => c.prDate, c => (c.qty || 0) * ps);
+    // PR Raised: only chains that converted to a PO contribute to this line —
+    // they're the "real" raised demand from a flow perspective. Cancelled-no-PO
+    // PRs surface as vertical red ticks along the x-axis (cancelTickPlugin
+    // below), not on this line. Operator framing 2026-05-24: "only REQ's that
+    // have been converted to PO's should show in the line charts; cancelled
+    // PRs should only flag by the little red lines along the X-axis." (v0.3
+    // lines 2589-2647 used the same shape — ticks for cancels, line for
+    // PR-with-PO.)
+    const prSeries = buildCumulativeSeries(act.filter(c => !!c.po), c => c.prDate, c => (c.qty || 0) * ps);
     // PO Raised: chains with a PO populated contribute at poDate
     const poSeries = buildCumulativeSeries(act.filter(c => !!c.po), c => c.poDate, c => (c.qty || 0) * ps);
     // Site Receipt: MB51 MVT 109 — independent of chain-level filters
@@ -1190,7 +1232,7 @@
         </div>
       </div>
       <div class="vol-chart-host"><canvas id="volChart"></canvas></div>
-      <div class="chart-caveat">Cumulative time series for material <b>${escapeHtml(material)}</b>. <b>PR Raised</b> totals every active PR by its PR date (includes cancelled-no-PO PRs — they were still raised). <b>PO Raised</b> totals chains that received a PO at the PO date. <b>Site Receipt</b> and <b>Consumed</b> sum MB51 movement types 109 and 261 by posting date (independent of chain-level filters — these are physical events). <b>Cancelled-PR ticks</b> drop at y=0 on each cancellation's PR date; MRP-generated and manual PRs render the same colour but the tooltip distinguishes them. Pack-size multiplies every unit value on the chart and in the KPI strip — leave at 1 if Inventory Master's UOM is "each".</div>
+      <div class="chart-caveat">Cumulative time series for material <b>${escapeHtml(material)}</b>. <b>PR Raised</b> + <b>PO Raised</b> count <em>only chains that converted to a PO</em> (a PR that never reached PO doesn't move either cumulative line — its volume isn't real demand from a flow perspective). <b>Site Receipt</b> and <b>Consumed</b> sum MB51 movement types 109 and 261 by posting date (independent of chain-level filters — these are physical events). <b>Cancelled-PR ticks</b> drop as short vertical red lines at the x-axis baseline on each cancelled PR's PR date; hover any tick to see the PR + qty + MRP-vs-manual origin in the tooltip. Pack-size multiplies every unit value on the chart and in the KPI strip — leave at 1 if Inventory Master's UOM is "each".</div>
     `;
 
     bindFilterBar(material);
@@ -1206,9 +1248,16 @@
           { label: 'PO Raised',    data: poSeries,   borderColor: '#5AB69D', backgroundColor: 'rgba(90,182,157,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
           { label: 'Site Receipt', data: siteSeries, borderColor: '#FBBF24', backgroundColor: 'rgba(251,191,36,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
           { label: 'Consumed',     data: consSeries, borderColor: '#A78BFA', backgroundColor: 'rgba(167,139,250,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
-          { label: 'Cancelled PR', data: cancelPoints, borderColor: '#EF4444', backgroundColor: '#EF4444', showLine: false, pointStyle: 'rectRot', pointRadius: 6, pointHoverRadius: 9, borderWidth: 1 }
+          // APP-FIX-VOL-CANCEL (2026-05-24) — cancelled-PR markers now render
+          // as vertical red ticks at the x-axis baseline via cancelTickPlugin
+          // (defined below). The scatter dataset is kept for Chart.js hover
+          // hit detection only: pointRadius:0 keeps it invisible, pointHover
+          // shows the diamond on hover so the operator can identify which
+          // PR they're inspecting. Matches v0.3's tick design (lines 2603-2647).
+          { label: 'Cancelled PR', data: cancelPoints, borderColor: '#EF4444', backgroundColor: '#EF4444', showLine: false, pointStyle: 'rectRot', pointRadius: 0, pointHoverRadius: 7, pointHitRadius: 14, borderWidth: 1 }
         ]
       },
+      plugins: [cancelTickPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,

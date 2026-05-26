@@ -379,6 +379,29 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-VOL-CANCEL ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-VOL-CANCEL · Volume cumulative — cancelled PRs out of the line, in as vertical red ticks along the x-axis</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator finding immediately after PORT-5: <em>"the Cancelled REQ are showing in the cumulative volume charts... they should not show. Only REQ's that have been converted to PO's should show in the line charts, while the cancelled PR's should only flag by the little red lines (vertical lines like in the V.03) along the X-axis."</em> PORT-5 counted cancelled-no-PO PRs in the PR-Raised cumulative line (v0.3 funnel comment said "PR Gen = cancelled + ordered" so I treated them as raised). Operator's mental model differs: only approved demand belongs on the cumulative line; cancelled PRs are noted but don't move it. Matches v0.3's actual chart shape (lines 2589–2647) which used ticks + a line for PR-with-PO.</li>
+        <li><b>What changed in <code>trace/trace.js</code>:</b><br>
+          (1) <strong>PR Raised cumulative</strong>: filter changed from <code>act</code> to <code>act.filter(c =&gt; !!c.po)</code>. Only chains that converted to a PO contribute to the line. Same filter as PO Raised, but plotted at <code>prDate</code> rather than <code>poDate</code> — so the operator can still see lag between PR creation and PO commitment. Cancelled-no-PO chains no longer move this line.<br>
+          (2) <strong>Cancelled-PR markers</strong>: scatter dataset still present for Chart.js hover hit detection, but rendered invisible — <code>pointRadius: 0</code>, <code>pointHoverRadius: 7</code>, <code>pointHitRadius: 14</code>. Hover any tick → red diamond appears + tooltip pops with PR + qty + MRP-vs-manual origin.<br>
+          (3) <strong>cancelTickPlugin</strong>: Chart.js plugin at module scope; reads the "Cancelled PR" dataset's <code>meta.data</code> positions after datasets draw, paints a short vertical red line (14px tall, 1.5px wide) at each x-position along the bottom of the chart area. Lines stay in sync with year-filter / pack-size / manual-exclude re-renders because positions come from Chart.js's own layout pass.<br>
+          (4) <strong>Caveat copy</strong> below the chart updated to reflect the new semantics — explicitly states the cumulative line is "only chains that converted to a PO" so the operator never has to wonder where the cancelled units went.</li>
+        <li><b>What does NOT change.</b> KPI strip math unchanged — Cancelled PR count, Cancelled units, Cancellation rate still come from the full <code>state === 'CANCELLED'</code> chain set, so the operator still sees "this material lost N units to cancellation, X% of requested" even though those units no longer appear on the cumulative line. Funnel + Phase Distribution + filter machinery untouched. The right-click context menu and per-row Raw Data exclude still apply to the same chain set; the volume line just reflects them through the new filter.</li>
+        <li><b>How to verify.</b> Open Trace, single-material, click <em>Volume cumulative</em>. The PR Raised line now matches the count of PRs that got POs (e.g. 9 instead of 13 if your dataset has 4 cancelled-no-PO chains). Cancelled PRs render as short vertical red ticks at the bottom of the chart, one per cancellation date. Hover any tick → red diamond + tooltip with PR / qty / MRP-or-manual origin. Apply year filter → both the cumulative line AND the ticks re-render together.</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (renderVolume + module-level cancelTickPlugin). Snapshot at <code>_rollback/APP-FIX-VOL-CANCEL-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore <code>trace/trace.js</code> from snapshot. Cancelled PRs revert to red diamond points + the cumulative line includes their qty again.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-5 ───────── -->
     <article class="roc-entry dev">
       <div class="head">
@@ -1307,6 +1330,46 @@ git -C /tmp/peek push --force-with-lease origin main
 
       <div class="commit rollback">
         <b>Rollback:</b> Stage A — restore <code>trace/trace.js</code> from <code>_rollback/APP-FIX-T-04c-pre/</code>. Stage C — <code>git revert</code> the APP-FIX-T-04c commit. Rolling back re-introduces the OR cancellation logic (over-classifies cancelled), the looser swimlane filter (in-flight chains visible), and the misleading "click Save" diagnostic copy. <b>Rollback boundary is clean:</b> three small logic / copy changes in a single file.
+      </div>
+
+      <h4>APP-FIX-BACKCALC-TZ · Back-calc date helpers — switch to UTC so day-keys match the raw posting-date strings (hidden stockouts surfaced)</h4>
+      <ul>
+        <li><b>Operator finding 2026-05-25.</b> Material 1000632 (FILTER, FUEL, AS): the back-calc SOH line on the analysis chart never visibly bottomed at zero — lows sat around 50 — and the KPI tile read <em>"Stockouts in window: none"</em>. Yet the operator knew the warehouse had hit zero (Inv Master totQtyOh moved 0 → 102 over the prior week behind two large 109 releases). Last week's chart (2026-05-16 snapshot) had correctly flagged <em>"2 windows · 15d"</em>; this week's didn't. Side-by-side reproduction against the canonical JSON for this material confirmed the back-calc <em>should</em> find 2 stockout windows (24 Feb–7 Mar / 12d, 14–15 May / 2d, total 14 days) but was emitting an empty <code>stockoutWindows</code> array — hence the green "none" KPI and the visually inflated SOH line.</li>
+        <li><b>Root cause — JavaScript date helpers running in local time, not UTC.</b> The four date helpers in <code>shared/inventory-back-calc.js</code> (<code>toMs</code> / <code>toIsoDay</code> / <code>addDays</code> / <code>addMonths</code>) were a mix of UTC and local-time interpretations:
+          <ul>
+            <li><code>Date.parse('2026-05-25')</code> returns <strong>UTC midnight</strong> per ECMAScript spec for date-only ISO strings.</li>
+            <li><code>toIsoDay()</code> then read that timestamp back via <strong>local</strong> <code>getFullYear / getMonth / getDate</code>. In any timezone west of UTC (operator runs Windows in a UTC-7 locale), UTC midnight of 2026-05-25 = 2026-05-24 17:00 local — so <code>toIsoDay()</code> returned <code>"2026-05-24"</code> for what was meant to be <code>"2026-05-25"</code>.</li>
+            <li>Net effect inside <code>backCalcSOH()</code>: the per-day deltas map was keyed on raw posting-date strings (<code>"2026-05-25"</code> straight from the MB51 row), but the <code>days[]</code> array built by walking <code>toIsoDay(addDays(startMs, n))</code> produced shifted keys (<code>"2026-05-24"</code>, …). The lookup <code>deltasByDay.get(isoDay)</code> silently missed every receipt and issue. The cursor walked back from <code>currentSOH</code> through a sea of zero deltas → the SOH line floated near its anchor, the math never dipped to the real stockout dates, no entries cleared the <code>EPS</code> stockout-detection test, <code>stockoutWindows</code> came out empty.</li>
+            <li><code>addMonths()</code> additionally used local <code>setMonth/getMonth</code> — same drift class, same outcome on the window-start computation.</li>
+          </ul>
+        </li>
+        <li><b>Why APP-E16's verification didn't catch this.</b> The APP-E16 audit (CoWork review 2026-05-16) reconciled MVT scope — broadened to <code>201/221/291/543</code> issues + reversal pairs, added the <code>DIRECTIONAL_MVTS</code> set for 309/310/411/412 — using a 57-material variance sample. The audit measured <em>aggregate</em> reconciliation against a snapshot, not per-day key alignment. With most movements clustered on a small number of days, an off-by-one day shift can sum to roughly the right total over a 6-month window even while losing individual receipts that would have driven the cursor through zero on specific dates. The audit tool was running in the same timezone, so it shared the bug. Self-checking math against itself.</li>
+        <li><b>Fix.</b> All four date helpers now operate in <strong>UTC</strong> exclusively:
+          <ul>
+            <li><code>toMs()</code> — unchanged. <code>Date.parse('YYYY-MM-DD')</code> already yields UTC midnight per spec.</li>
+            <li><code>toIsoDay()</code> — <code>getFullYear/Month/Date</code> → <code>getUTCFullYear/Month/Date</code>.</li>
+            <li><code>addDays()</code> — unchanged. Adding 86 400 000 ms to a UTC midnight yields the next UTC midnight; no local-time interaction.</li>
+            <li><code>addMonths()</code> — <code>setMonth/getMonth</code> → <code>setUTCMonth/getUTCMonth</code>.</li>
+          </ul>
+          MB51 posting dates are calendar-day labels (<em>"this row posted on 25 May"</em>), not instants. Treating them as UTC throughout keeps the day-key on both sides of the lookup in calendar-day space regardless of browser locale.
+        </li>
+        <li><b>Reproduction — material 1000632 (canonical JSON of 2026-05-25, 374 MB51 rows for this material, 6-month window, runDate 2026-05-25, lastConsDate 2026-05-25):</b>
+          <ul>
+            <li>Pre-fix (local-time): SOH at windowEnd = 102 ✓, Min SOH = -2.0 (spurious), stockoutWindows = <code>[]</code>, KPI = "none". Chart's SOH line floats above zero everywhere except a thin dip at the right edge.</li>
+            <li>Post-fix (UTC): SOH at windowEnd = 102 ✓, Min SOH = 0.0, stockoutWindows = <code>[{24 Feb→7 Mar / 12d}, {14 May→15 May / 2d}]</code>, KPI = "2 windows · 14d". Chart's SOH line touches zero on the actual stockout dates; +53 receipt on 16 May (109 release) and +55 receipt on 24 May (109 release) are now correctly stepped through by the back-walk.</li>
+          </ul>
+        </li>
+        <li><b>What this changes downstream.</b> Per-material <code>stockoutWindows</code>, the <code>isTailInOngoingStockout</code> check, <code>countStockoutsInRange</code>, <code>chooseP2Window</code>'s re-anchoring decision, <code>stockoutDominated</code> classification, and <code>rateDropCause</code> are all functions of the day-keyed series — every one of them silently degraded under the bug. Re-running any prior assessment will produce different (correct) stockout flags for materials where the timezone drift hid them. The numeric P1/P2 rates themselves are unaffected (those use raw posting-date strings + month-window arithmetic that bypass <code>toIsoDay</code> entirely).</li>
+        <li><b>Why the visual "line never goes to zero" symptom maps to this bug.</b> The chart renders the back-walked series; with deltas dropped, the cursor stayed near its anchor (currentSOH = 102) and only the small subset of deltas that <em>happened</em> to land on a day-key the walk also visited registered. That subset was enough to make the line wiggle realistically — ups and downs in roughly the right places, but bounded well above zero — which made the bug visually plausible. The operator's framing in this session ("only down to 50, never zero") is the visual signature of the missing deltas.</li>
+        <li>No SCHEMA_VERSION bump, no analytical-contract change. <code>APP_VERSION</code> stays at <code>2.1.3-dev</code>. Pipeline / rates / Min/Max calculation logic untouched — only the day-key alignment inside the back-calc walks.</li>
+      </ul>
+
+      <div class="commit">
+        Files touched: <code>shared/inventory-back-calc.js</code> (<code>toIsoDay</code> uses <code>getUTC*</code>; <code>addMonths</code> uses <code>setUTCMonth/getUTCMonth</code>; explanatory header comment block added above the four helpers documenting why UTC), <code>record-of-change.html</code> (this APP-FIX-BACKCALC-TZ entry).
+      </div>
+
+      <div class="commit rollback">
+        <b>Rollback:</b> Stage A — restore <code>shared/inventory-back-calc.js</code> from <code>_rollback/APP-FIX-BACKCALC-TZ-pre/shared/</code>. Stage C — <code>git revert</code> the APP-FIX-BACKCALC-TZ commit. <b>Rollback boundary is clean</b>: only four helper functions in one shared module change. No public API change — the exported <code>InventoryBackCalc.*</code> surface (function names, argument shapes, return shapes) is identical. Reverting re-introduces the silent stockout-hiding bug for any operator running in a non-UTC browser locale.
       </div>
     </article>
 
