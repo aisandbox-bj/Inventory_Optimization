@@ -1189,3 +1189,92 @@
 .pd-empty h3{ margin: 0 0 10px 0; color: var(--text-pri, #e8eef4); font-size: 16px; }
 .pd-empty p{ color: var(--text-sec, #c7d2dc); font-size: 12px; max-width: 600px; margin: 6px auto; }
 .pd-empty .pd-hint{ color: var(--text-muted, #9BABA8); font-size: 11px; font-style: italic; }
+
+/* ─── APP-V03-PORT-5 · Volume cumulative view ──────────────────────────── */
+.vol-kpi-strip{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) 180px;
+  gap: 10px;
+  margin: 10px 0 14px 0;
+  align-items: stretch;
+}
+@media (max-width: 900px){
+  .vol-kpi-strip{ grid-template-columns: repeat(2, 1fr); }
+}
+.vk-cell{
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 6px;
+  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.vk-cell .lab{
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #9BABA8);
+}
+.vk-cell .v{
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-pri, #e8eef4);
+  letter-spacing: .02em;
+  line-height: 1;
+}
+.vk-cell .v.warn{ color: #f4c14a; }
+.vk-cell .sub{
+  font-size: 9.5px;
+  color: var(--text-faint, #6a7f9a);
+  letter-spacing: .03em;
+  margin-top: 1px;
+}
+.vk-pack{
+  background: rgba(229, 142, 45, .08);
+  border: 1px solid rgba(229, 142, 45, .25);
+  border-radius: 6px;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+}
+.vk-pack-lab{
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #E58E2D;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  cursor: help;
+}
+.vk-pack-lab > span{ font-weight: 600; }
+.vk-pack-lab input{
+  background: rgba(0,0,0,.25);
+  border: 1px solid rgba(229, 142, 45, .35);
+  color: var(--text-pri, #e8eef4);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+  letter-spacing: .02em;
+}
+.vk-pack-lab input:focus{
+  outline: none;
+  border-color: #E58E2D;
+  background: rgba(0,0,0,.4);
+}
+
+.vol-chart-host{
+  position: relative;
+  height: 420px;
+  background: rgba(0,0,0,.18);
+  border: 1px solid rgba(255,255,255,.04);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 10px;
+}

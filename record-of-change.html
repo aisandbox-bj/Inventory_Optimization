@@ -379,6 +379,45 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-5 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-5 · Volume cumulative view — 5 layered series + cancelled-PR ticks + pack-size per-material</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Analysis doc §9 P5 — third single-material view in the Trace rail. Ports v0.3's <code>buildVolume()</code> (lines 2510–2958) with v0.4 data sourcing. Shows the cumulative-units-over-time picture: where the PR raised stack, where the POs landed, when 3PL→Site receipts happened, when consumption fired, and where cancellations sit.</li>
+        <li><b>What lands in <code>trace/trace.html</code>.</b> Volume button moved from the Multi-material group (where it was queued ◌) to the Single-material group (active ▶) and the duplicate Multi entry deleted. Single-material rail now: Procurement Chain · Raw Data · Phase Distribution · <strong>Volume cumulative</strong>.</li>
+        <li><b>What lands in <code>trace/trace.js</code>:</b><br>
+          (1) <strong>New state field</strong>: <code>state.packSizeByMat</code> (Map keyed by material → integer ≥1). Per-material because UOM varies; defaults to 1; serialised to <code>trace.viewState</code> alongside the existing filter state. Once D3 lands (UOM from <code>inventoryMaster[i].uom</code>) this will pre-populate from there; the manual override input stays available.<br>
+          (2) <strong>Pack-size helpers</strong>: <code>getPackSize</code> / <code>setPackSize</code> / <code>bindVolumePackSize</code>. The input fires on <code>change</code> + <code>blur</code> so both Enter-commit and click-away apply the change; re-renders the view + persists.<br>
+          (3) <strong>Math helpers</strong>: <code>tsOf(dateStr)</code> — ISO date string → millisecond timestamp with NaN guard. <code>fmtVolDate</code> — month + year for x-axis ticks. <code>fmtVolDateFull</code> — full date for tooltip titles. <code>buildCumulativeSeries(rows, dateGet, qtyGet)</code> — sorts ascending by timestamp, filters invalid dates + zero qty, returns <code>[{x: ms, y: cum}]</code> for direct feed into Chart.js linear-x line series.<br>
+          (4) <strong>renderVolume(host, material)</strong> — pulls <code>active(state.chains, material)</code> from PORT-2, filters MB51 to the material, builds five datasets:
+          <ul>
+            <li><b>PR Raised</b> — every active chain at its prDate (includes cancelled-no-PO PRs; v0.3's funnel logic counts them as raised).</li>
+            <li><b>PO Raised</b> — chains with a populated <code>po</code> field at poDate.</li>
+            <li><b>Site Receipt</b> — MB51 MVT 109 rows by postingDate. <em>Independent of chain-level filters</em> — these are physical events.</li>
+            <li><b>Consumed</b> — MB51 MVT 261 rows. Same independence rationale.</li>
+            <li><b>Cancelled-PR ticks</b> — chains with <code>state === 'CANCELLED'</code> (PR without PO per the operator rule). Renders as scatter at y=0 with rectRot point style; tooltip distinguishes <code>MRP-generated</code> from <code>MANUAL PR</code> via the creation indicator.</li>
+          </ul>
+          (5) <strong>KPI strip</strong> above the chart: Cancelled PRs (count + "of N total") · Cancelled units · Cancellation rate (units cancelled ÷ units requested; yellow-warn above 30%) · Delivered units · Pack-size input (copper-orange-bordered to match the Calibre accent).<br>
+          (6) <strong>Chart</strong>: Chart.js v4 line chart, <strong>linear x-axis with timestamps</strong> + tick callback formatting (so we don't have to load a date adapter dependency). Stepped: 'before' on the four cumulative series so step changes land at the event time. Cancelled-PR series uses <code>showLine: false</code> with diamond markers. <code>interaction.mode: 'nearest'</code> handles cross-dataset hover correctly — v0.3 needed a custom xNearestPerDataset because its category-x scale mis-resolved indices across heterogeneous datasets; v0.4's per-point {x, y} structure makes that custom mode unnecessary.<br>
+          (7) <strong>Empty state</strong> when no events of any kind exist — points the operator at Raw Data or the year filter.<br>
+          (8) <strong>Honest caveat</strong> below the chart explains each series' source, the cancelled-PR semantics, the pack-size scope.<br>
+          (9) <strong>Filter toolbar shared</strong> with other views (<code>bindFilterBar</code> dispatch extended to also route to <code>renderVolume</code> when the active view is volume) — year + sigma + manual excludes carry through.</li>
+        <li><b>What lands in <code>trace/trace.css</code>:</b> ~90 lines appended for the KPI strip (auto-fit grid with a 180px fixed last column for the pack-size input · copper-orange accent on the pack box · warn-yellow text for elevated cancellation rate), and the chart host (fixed 420px height, dark inset panel).</li>
+        <li><b>What this does NOT change:</b> no schema bump, no parser change, no canonical-JSON shape change. v0.3's pack-size persistence used localStorage directly; v0.4 routes through <code>AppStorage</code> via the existing <code>trace.viewState</code> key. v0.3's separate "cancelled volume by year" small bar chart is NOT ported in this chunk — the funnel panel (PORT-3) already shows cancellation volumes + percentages, so a second small chart would be redundant.</li>
+        <li><b>Verification before commit.</b> <code>buildCumulativeSeries</code> unit-tested in-page against four datasets: ascending dates with growing qty (cumulative 10/30/35 ✓), out-of-order rows (sorts then accumulates to 10/60/160 ✓), invalid dates + zero qty filtered correctly (cumulative 10/15 from 4 input rows ✓), empty input (returns [] ✓). Page boots clean with no console errors.</li>
+        <li><b>How to verify.</b> Open a Trace assessment with a material that has PR History + MB51 109/261 rows. Single-material mode. Click <em>Volume cumulative</em> on the rail. Top: KPI strip with cancelled count + units + rate + delivered units + pack-size input. Middle: line chart with four stepped series + scatter of red diamonds at y=0 for cancellations. Apply year filter → cumulative series recompute (cancelled ticks also filter). Change pack size to e.g. 6 → all four cumulative lines + KPIs multiply by 6; y-axis title updates to "Cumulative units (pack size 6× applied)". Right-click a chain in Procurement Chain to manually exclude → switch back to Volume → that chain drops from the PR / PO cumulative series. Filter values persist across reloads.</li>
+        <li><b>Files touched.</b> <code>trace/trace.html</code> (Volume button single-mat group + delete dup), <code>trace/trace.js</code> (state field + persistence + dispatch branch + 6 new functions + bindFilterBar dispatch update), <code>trace/trace.css</code> (~90 lines appended), <code>record-of-change.html</code>. Snapshot at <code>_rollback/APP-V03-PORT-5-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore all three files from snapshot. The <code>packSizeByMat</code> localStorage key is silently ignored by pre-PORT-5 code; clear via Settings if desired.</li>
+        <li><b>Next on the Trace port queue (per analysis doc §9).</b> APP-V03-PORT-6 — YoY annual progression (per-phase split by year with delta markers).</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-FIX-SWIM-GHOST ───────── -->
     <article class="roc-entry dev">
       <div class="head">

@@ -59,7 +59,12 @@
     // doesn't affect another.
     yearFilter:       'All',       // 'All' | year-string (e.g. '2025')
     sigmaLimit:       null,        // null = off; 3 / 2 / 1.5 = looser → tighter
-    manualExclByMat:  new Map()    // material → Set<pr-number>
+    manualExclByMat:  new Map(),   // material → Set<pr-number>
+
+    // APP-V03-PORT-5 (2026-05-24) — Volume view pack-size override.
+    // Per-material because UOM varies; defaults to 1 if unset. Once D3
+    // lands (UOM from inventoryMaster[i].uom) this falls back to that.
+    packSizeByMat:    new Map()    // material → integer pack size (>= 1)
   };
 
   const PHASE_KEYS   = ['A', 'B', 'C', 'D', 'E'];
@@ -234,6 +239,14 @@
           if (Array.isArray(prs)) state.manualExclByMat.set(mat, new Set(prs.map(String)));
         }
       }
+      // APP-V03-PORT-5 — pack-size per material
+      if (saved.packSizeByMat && typeof saved.packSizeByMat === 'object') {
+        state.packSizeByMat = new Map();
+        for (const [mat, n] of Object.entries(saved.packSizeByMat)) {
+          const v = parseInt(n, 10);
+          if (Number.isFinite(v) && v >= 1) state.packSizeByMat.set(mat, v);
+        }
+      }
     } catch (e) { /* silently fall through */ }
   }
 
@@ -243,6 +256,11 @@
       const manualExclSerial = {};
       for (const [mat, prSet] of state.manualExclByMat.entries()) {
         if (prSet && prSet.size) manualExclSerial[mat] = [...prSet];
+      }
+      // APP-V03-PORT-5 — serialise per-material pack-size
+      const packSizeSerial = {};
+      for (const [mat, n] of state.packSizeByMat.entries()) {
+        if (n > 1) packSizeSerial[mat] = n;   // skip default 1 to keep storage tidy
       }
       await AppStorage.set(STORAGE_KEY, {
         scopeMode:    state.scopeMode,
@@ -256,7 +274,8 @@
         activeView:       state.activeView,
         yearFilter:       state.yearFilter,
         sigmaLimit:       state.sigmaLimit,
-        manualExclByMat:  manualExclSerial
+        manualExclByMat:  manualExclSerial,
+        packSizeByMat:    packSizeSerial
       });
     } catch (e) { /* swallow */ }
   }
@@ -593,6 +612,21 @@
       return;
     }
 
+    // APP-V03-PORT-5 (2026-05-24) — Volume cumulative view.
+    if (state.activeView === 'volume') {
+      if (state.scopeMode === 'single') {
+        const mat = state.matIndex.get(state.scopeSingle);
+        if (!mat) {
+          host.innerHTML = `<div class="view-empty">Pick a material from the rail to load the volume chart.</div>`;
+          return;
+        }
+        renderVolume(host, mat.material);
+      } else {
+        host.innerHTML = renderVolumeInMultiPanel();
+      }
+      return;
+    }
+
     // Any other view is queued — render the not-built state (regardless of
     // scope mode). Queued multi-material views get a richer panel with the
     // candidate list; queued single-material views get a shorter one.
@@ -616,6 +650,38 @@
         <h3>Phase Distribution renders one material at a time</h3>
         <p>Switch to <b>Single material</b> on the rail to load the box plots for a specific material.</p>
       </div>`;
+  }
+
+  function renderVolumeInMultiPanel(){
+    return `
+      <div class="view-empty">
+        <div class="view-empty-lab">Single material only</div>
+        <h3>Volume cumulative renders one material at a time</h3>
+        <p>Switch to <b>Single material</b> on the rail to load the cumulative chart for a specific material.</p>
+      </div>`;
+  }
+
+  /* ─── APP-V03-PORT-5 (2026-05-24) · Pack-size helpers ────────────────── */
+  function getPackSize(material){
+    const v = state.packSizeByMat.get(material);
+    return (v && v >= 1) ? v : 1;
+  }
+  function setPackSize(material, raw){
+    const v = parseInt(raw, 10);
+    if (Number.isFinite(v) && v >= 1) state.packSizeByMat.set(material, v);
+    else state.packSizeByMat.delete(material);
+  }
+  function bindVolumePackSize(material){
+    const input = $('#volPackSize');
+    if (!input) return;
+    const fire = () => {
+      setPackSize(material, input.value);
+      persistState();
+      const host = $('#contentView');
+      if (host) renderVolume(host, material);
+    };
+    input.addEventListener('change', fire);
+    input.addEventListener('blur', fire);
   }
 
   function renderRawDataInMultiPanel(){
@@ -971,6 +1037,226 @@
     return ticks;
   }
 
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-V03-PORT-5 (2026-05-24) — VOLUME CUMULATIVE VIEW
+     Ported from v0.3 buildVolume() (lines 2510–2958). Five layered series
+     over time: PR Raised / PO Raised / Site Receipt (MVT 109) / Consumed
+     (MVT 261), plus cancelled-PR ticks at y=0 for hit detection.
+     Consumes PORT-2's active() set so filter + manual excludes carry.
+     Pack-size multiplier is per-material (state.packSizeByMat) — once D3
+     locks UOM to inventoryMaster[i].uom, that pulls in via getPackSize.
+     Custom Chart.js xNearestPerDataset interaction mode (v0.3:1228–1269)
+     not needed here: Chart.js v4's 'nearest' mode with intersect:false
+     handles the cross-dataset hover correctly because each series has
+     its own {x, y} point set (not a shared-index array as in v0.3).
+  ═════════════════════════════════════════════════════════════════════════ */
+
+  function tsOf(dateStr){
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  function fmtVolDate(ts){
+    if (ts == null) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
+  function fmtVolDateFull(ts){
+    if (ts == null) return '—';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '—';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()} ${d.getFullYear()}`;
+  }
+
+  function buildCumulativeSeries(rows, dateGet, qtyGet){
+    const pts = [];
+    for (const r of rows) {
+      const ts = tsOf(dateGet(r));
+      if (ts == null) continue;
+      const q = qtyGet(r);
+      if (!Number.isFinite(q) || q === 0) continue;
+      pts.push({ ts, q });
+    }
+    pts.sort((a, b) => a.ts - b.ts);
+    let cum = 0;
+    return pts.map(p => { cum += p.q; return { x: p.ts, y: cum }; });
+  }
+
+  function renderVolume(host, material){
+    state.chains = computeChainsForMaterial(material);
+    const act    = active(state.chains, material);
+    const ps     = getPackSize(material);
+    const mb51   = (state.json.data.mb51 || []).filter(r => String(r.material || '').trim() === material);
+
+    // ── Filter toolbar (shared with other views) ──────────────────────────
+    const years = getYearsForChains(state.chains);
+    const manualSet = getManualExcl(material);
+    const sigmaSetV = sigmaExcl(state.chains);
+    const totalExcl = manualSet.size + sigmaSetV.size;
+    const yearBtns = ['All'].concat(years).map(y =>
+      `<button class="tr-fbtn ${state.yearFilter === y ? 'active' : ''}" data-filter="year" data-val="${y}">${y === 'All' ? 'All years' : y}</button>`
+    ).join('');
+    const sigmaBtns = [
+      { v: 'null', lab: 'Off',          title: 'No sigma trim' },
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of total LT' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of total LT' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+    ].map(s => {
+      const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
+      return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
+    }).join('');
+    const exclChipHtml = totalExcl ? `<span class="tr-excl-chip" title="Manually excluded: ${manualSet.size}. Sigma-trimmed: ${sigmaSetV.size}.">${totalExcl} excluded</span>` : '';
+    const resetBtnHtml = manualSet.size ? `<button class="tr-fbtn tr-reset" data-filter="reset-manual" title="Clear manual excludes for this material">Reset manual</button>` : '';
+    const filterToolbar = `
+      <div class="tr-filterbar" id="traceFilterBar">
+        <span class="tr-flbl">Year</span>${yearBtns}
+        <span class="tr-fsep"></span>
+        <span class="tr-flbl">Sigma trim</span>${sigmaBtns}
+        ${exclChipHtml}
+        ${resetBtnHtml}
+      </div>
+    `;
+
+    // ── Cumulative series ─────────────────────────────────────────────────
+    // PR Raised: every active chain contributes at its prDate. Cancelled-no-PO
+    // chains DO count here per v0.3's logic — they ARE PRs that were raised.
+    const prSeries = buildCumulativeSeries(act, c => c.prDate, c => (c.qty || 0) * ps);
+    // PO Raised: chains with a PO populated contribute at poDate
+    const poSeries = buildCumulativeSeries(act.filter(c => !!c.po), c => c.poDate, c => (c.qty || 0) * ps);
+    // Site Receipt: MB51 MVT 109 — independent of chain-level filters
+    // (it's the physical receipt event regardless of how the chain classifies)
+    const siteSeries = buildCumulativeSeries(
+      mb51.filter(r => String(r.movementType || '').trim() === '109'),
+      r => r.postingDate,
+      r => Math.abs(parseFloat(r.quantity) || 0) * ps
+    );
+    // Consumed: MB51 MVT 261 — same independence rationale
+    const consSeries = buildCumulativeSeries(
+      mb51.filter(r => String(r.movementType || '').trim() === '261'),
+      r => r.postingDate,
+      r => Math.abs(parseFloat(r.quantity) || 0) * ps
+    );
+
+    // Cancelled-PR ticks: chains with state === 'CANCELLED' (per the PR/PO rule).
+    // Render as a scatter at y=0; tooltip shows PR + qty + MRP-vs-manual.
+    const cancelChains = act.filter(c => c.state === 'CANCELLED');
+    const cancelPoints = cancelChains
+      .map(c => ({ x: tsOf(c.prDate), y: 0, pr: c.pr, qty: (c.qty || 0) * ps, creationIndicator: c.creationIndicator, prDate: c.prDate }))
+      .filter(p => p.x != null);
+
+    // ── KPI strip values ─────────────────────────────────────────────────
+    const fmt = n => n.toLocaleString();
+    const sumQty = arr => arr.reduce((s, c) => s + (c.qty || 0), 0) * ps;
+    const cancelledUnits = sumQty(cancelChains);
+    const totalPRunits   = sumQty(act);
+    const deliveredUnits = sumQty(act.filter(c => !!c.siteWH));
+    const cancelRatePct  = totalPRunits > 0 ? (cancelledUnits / totalPRunits * 100) : 0;
+    const totalChains    = act.length;
+    const cancelCount    = cancelChains.length;
+
+    // ── Empty state — no data of any kind ────────────────────────────────
+    const totalEvents = prSeries.length + poSeries.length + siteSeries.length + consSeries.length + cancelPoints.length;
+    if (totalEvents === 0) {
+      host.innerHTML = `
+        ${filterToolbar}
+        <div class="pd-empty">
+          <div class="pd-empty-lab">No volume data</div>
+          <h3>Nothing to plot for material ${escapeHtml(material)}</h3>
+          <p>The active set has no PR / PO / Site / Consume events. Check the year filter or switch to Raw Data to inspect what's there.</p>
+        </div>
+      `;
+      bindFilterBar(material);
+      return;
+    }
+
+    // ── HTML ──────────────────────────────────────────────────────────────
+    const unitLabel = ps > 1 ? `units (pack size ${ps}× applied)` : 'units';
+    host.innerHTML = `
+      ${filterToolbar}
+      <div class="vol-kpi-strip">
+        <div class="vk-cell"><span class="lab">Cancelled PRs</span><span class="v ${cancelCount ? 'warn' : ''}">${cancelCount}</span><span class="sub">of ${totalChains}</span></div>
+        <div class="vk-cell"><span class="lab">Cancelled units</span><span class="v ${cancelledUnits ? 'warn' : ''}">${fmt(cancelledUnits)}</span><span class="sub">${ps > 1 ? `× ${ps} pack` : ''}</span></div>
+        <div class="vk-cell"><span class="lab">Cancellation rate</span><span class="v ${cancelRatePct > 30 ? 'warn' : ''}">${cancelRatePct.toFixed(1)}%</span><span class="sub">cancelled ÷ requested</span></div>
+        <div class="vk-cell"><span class="lab">Delivered units</span><span class="v">${fmt(deliveredUnits)}</span><span class="sub">${ps > 1 ? `× ${ps} pack` : ''}</span></div>
+        <div class="vk-pack">
+          <label class="vk-pack-lab" title="Multiplier applied to all volumes. Per-material. Once D3 locks UOM from Inventory Master, this will pre-populate from inventoryMaster[i].uom; manual override stays available."><span>Pack size</span>
+            <input id="volPackSize" type="number" min="1" step="1" value="${ps}" />
+          </label>
+        </div>
+      </div>
+      <div class="vol-chart-host"><canvas id="volChart"></canvas></div>
+      <div class="chart-caveat">Cumulative time series for material <b>${escapeHtml(material)}</b>. <b>PR Raised</b> totals every active PR by its PR date (includes cancelled-no-PO PRs — they were still raised). <b>PO Raised</b> totals chains that received a PO at the PO date. <b>Site Receipt</b> and <b>Consumed</b> sum MB51 movement types 109 and 261 by posting date (independent of chain-level filters — these are physical events). <b>Cancelled-PR ticks</b> drop at y=0 on each cancellation's PR date; MRP-generated and manual PRs render the same colour but the tooltip distinguishes them. Pack-size multiplies every unit value on the chart and in the KPI strip — leave at 1 if Inventory Master's UOM is "each".</div>
+    `;
+
+    bindFilterBar(material);
+    bindVolumePackSize(material);
+
+    // ── Build Chart.js chart ─────────────────────────────────────────────
+    if (state.chart) state.chart.destroy();
+    state.chart = new Chart($('#volChart'), {
+      type: 'line',
+      data: {
+        datasets: [
+          { label: 'PR Raised',    data: prSeries,   borderColor: '#1FCED8', backgroundColor: 'rgba(31,206,216,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
+          { label: 'PO Raised',    data: poSeries,   borderColor: '#5AB69D', backgroundColor: 'rgba(90,182,157,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
+          { label: 'Site Receipt', data: siteSeries, borderColor: '#FBBF24', backgroundColor: 'rgba(251,191,36,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
+          { label: 'Consumed',     data: consSeries, borderColor: '#A78BFA', backgroundColor: 'rgba(167,139,250,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
+          { label: 'Cancelled PR', data: cancelPoints, borderColor: '#EF4444', backgroundColor: '#EF4444', showLine: false, pointStyle: 'rectRot', pointRadius: 6, pointHoverRadius: 9, borderWidth: 1 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'nearest', intersect: false },
+        scales: {
+          x: {
+            type: 'linear',
+            ticks: {
+              callback: (ms) => fmtVolDate(ms),
+              color: '#9BABA8',
+              maxTicksLimit: 8,
+              font: { family: 'JetBrains Mono', size: 10 }
+            },
+            grid: { color: 'rgba(31,206,216,.06)' },
+            title: { display: false }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#9BABA8', font: { family: 'JetBrains Mono', size: 10 } },
+            grid: { color: 'rgba(31,206,216,.06)' },
+            title: { display: true, text: `Cumulative ${unitLabel}`, color: '#9BABA8', font: { size: 10 } }
+          }
+        },
+        plugins: {
+          legend: { display: true, position: 'top', labels: { color: '#D6DFDE', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 14, usePointStyle: true } },
+          tooltip: {
+            callbacks: {
+              title: (items) => fmtVolDateFull(items[0].parsed.x),
+              label: (item) => {
+                if (item.dataset.label === 'Cancelled PR') {
+                  const p = item.raw;
+                  const src = p.creationIndicator === 'R' ? 'MANUAL PR' : 'MRP-generated';
+                  return ` Cancelled PR ${p.pr} · ${p.qty.toLocaleString()} units · ${src}`;
+                }
+                return ` ${item.dataset.label}: ${item.parsed.y.toLocaleString()} units`;
+              }
+            },
+            backgroundColor: 'rgba(8,12,20,.96)',
+            borderColor: 'rgba(31,206,216,.3)', borderWidth: 1,
+            titleColor: '#1FCED8', bodyColor: '#D6DFDE', padding: 10,
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont:  { family: 'JetBrains Mono', size: 10 }
+          }
+        }
+      }
+    });
+  }
+
   function renderPCInMultiPanel(){
     return `
       <div class="view-empty">
@@ -1237,7 +1523,8 @@
         if (state.chart) { state.chart.destroy(); state.chart = null; }
         const host = $('#contentView');
         if (!host) return;
-        if (state.activeView === 'phase-distribution')      renderPhaseDistribution(host, material);
+        if      (state.activeView === 'phase-distribution') renderPhaseDistribution(host, material);
+        else if (state.activeView === 'volume')             renderVolume(host, material);
         else if (state.activeView === 'raw-data')           renderRawData(host, material);
         else                                                renderProcurementChain(host, material);
       });
