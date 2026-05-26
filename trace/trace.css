@@ -901,3 +901,43 @@
   font-family: 'JetBrains Mono', monospace;
 }
 .ps-cell .v.warn{ color: #f4c14a; }
+
+/* ─── APP-V03-PORT-3a · Two-column layout — chains main, funnel side panel ─ */
+.pchain-layout{
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+.pc-main{
+  min-width: 0;            /* let the chart shrink instead of overflowing */
+}
+.pc-side{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pc-side .pchain-funnel{ margin: 0; }
+.pc-side .pchain-stats{
+  margin: 0;
+  /* Two-column in the narrow side panel */
+  grid-template-columns: repeat(2, 1fr);
+}
+.pc-side .pchain-diagnostic,
+.pc-side .pchain-admin-note{ margin: 0; }
+
+/* Funnel tightens up a touch in the narrow side panel */
+.pc-side .pf-count{ font-size: 20px; }
+.pc-side .pf-tier{ padding: 8px 9px; }
+.pc-side .pf-glyph{ font-size: 19px; flex: 0 0 22px; }
+
+/* Stack the layout on narrow viewports — funnel under the chart */
+@media (max-width: 1100px){
+  .pchain-layout{
+    grid-template-columns: 1fr;
+  }
+  .pc-side .pchain-stats{
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}

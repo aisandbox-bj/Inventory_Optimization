@@ -885,24 +885,31 @@
     host.innerHTML = `
       ${filterToolbar}
 
-      ${funnelHtml}
+      <div class="pchain-layout">
+        <div class="pc-main">
+          <div class="chart-toolbar">
+            <span class="chart-toolbar-lab" id="chainCount">${act.length} of ${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${delivered.length} delivered · ${progressed.length} progressed${totalExcl ? ` · ${totalExcl} excluded` : ''}</span>
+          </div>
+          <div class="chart-host">
+            <canvas id="swimChart"></canvas>
+          </div>
+        </div>
 
-      <div class="pchain-stats">
-        <div class="ps-cell"><span class="lab">Complete chains</span><span class="v">${complete.length}</span></div>
-        <div class="ps-cell"><span class="lab">In-flight</span><span class="v">${inFlight.length}</span></div>
-        <div class="ps-cell"><span class="lab">Avg total LT</span><span class="v">${avgLT != null ? avgLT + 'd' : '—'}</span></div>
-        <div class="ps-cell"><span class="lab">Manual PRs</span><span class="v ${manualPR ? 'warn' : ''}">${manualPR}</span></div>
-        ${adminCancel ? `<div class="ps-cell"><span class="lab">Admin-cancel</span><span class="v" title="Subset of Progressed: PR deletion-flagged AFTER the PO landed. Per the PR/PO rule, classified by phase reached, not as cancelled.">${adminCancel}</span></div>` : ''}
+        <aside class="pc-side">
+          ${funnelHtml}
+
+          <div class="pchain-stats">
+            <div class="ps-cell"><span class="lab">Complete chains</span><span class="v">${complete.length}</span></div>
+            <div class="ps-cell"><span class="lab">In-flight</span><span class="v">${inFlight.length}</span></div>
+            <div class="ps-cell"><span class="lab">Avg total LT</span><span class="v">${avgLT != null ? avgLT + 'd' : '—'}</span></div>
+            <div class="ps-cell"><span class="lab">Manual PRs</span><span class="v ${manualPR ? 'warn' : ''}">${manualPR}</span></div>
+            ${adminCancel ? `<div class="ps-cell"><span class="lab">Admin-cancel</span><span class="v" title="Subset of Progressed: PR deletion-flagged AFTER the PO landed. Per the PR/PO rule, classified by phase reached, not as cancelled.">${adminCancel}</span></div>` : ''}
+          </div>
+
+          ${diagnostic}
+        </aside>
       </div>
 
-      ${diagnostic}
-
-      <div class="chart-toolbar">
-        <span class="chart-toolbar-lab" id="chainCount">${act.length} of ${state.chains.length} chain${state.chains.length === 1 ? '' : 's'} · ${delivered.length} delivered · ${progressed.length} progressed${totalExcl ? ` · ${totalExcl} excluded` : ''}</span>
-      </div>
-      <div class="chart-host">
-        <canvas id="swimChart"></canvas>
-      </div>
       <div class="chart-caveat">Phases A–E computed from PR History + MB51 join on Purchase Order. Phase E (Time to First Use) measured to the first consumption transaction for this material after Site WH receipt — not necessarily of this PO's units specifically. <b>Cancelled-before-PO PRs are excluded from the swimlane</b> — see Raw Data view for the full list. Per the PR/PO classification rule, a PR cancelled <em>after</em> a PO landed renders in its actual phase colour, not red — the post-PO deletion has admin meaning only.</div>
     `;
 

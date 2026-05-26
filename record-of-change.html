@@ -379,6 +379,27 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-3a ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-05-24</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-3a · Procurement Chain layout — chains main, funnel + stats side panel</h4>
+      <ul>
+        <li><b>Why it shipped.</b> Operator screenshot review of PORT-3: <em>"I like the data, but it needs to move down and show right of the chains."</em> Arrow markup pointed the funnel + stats panel down and to the right of the swimlane. Matches v0.3's <code>tl-right</code> side-panel pattern (lines 794–855) where the funnel sat alongside the chains, not above.</li>
+        <li><b>What lands.</b> Two-column grid below the filter toolbar: <code>.pc-main</code> (left, flex-1) holds the chart toolbar + swimlane canvas; <code>.pc-side</code> (right, 380px fixed) holds the Procurement Flow funnel + secondary stats row + zero-complete-chains diagnostic when applicable. Chart caveat spans the full width below the grid as before.</li>
+        <li><b>Responsive fallback.</b> At &lt;1100px viewport width the layout stacks single-column — funnel drops below the chart so narrow screens / split-screens stay usable. Stats row in the side panel switches from auto-fit to a fixed 2-column grid to better fit the narrower side column.</li>
+        <li><b>Tightening for the narrow column.</b> Funnel count font drops from 22px → 20px in the side panel. Tier padding tightens from 9px → 8px. Tier glyphs from 22px → 19px. Everything still reads cleanly at the 380px column width; on wider viewports the chart claims the extra horizontal space.</li>
+        <li><b>What does NOT change.</b> No data / arithmetic / persistence changes — purely a markup + CSS reorganisation. Funnel still respects <code>active()</code>, animations still fire on first render and on filter change, hover behaviour preserved, tier colours preserved.</li>
+        <li><b>How to verify.</b> Open a Trace assessment, single-material mode, Procurement Chain view. Funnel + stats now sit in a side panel to the right of the swimlane (or stack below if your viewport is &lt;1100px wide). Swimlane fills the remaining horizontal space — long PR labels and the calendar-days x-axis read cleaner. Apply a filter → funnel and chart still update together. Right-click a chain → menu still works.</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (restructured the Procurement Chain view's innerHTML — wrapped chart bits in <code>.pc-main</code>, funnel + stats + diagnostic in <code>.pc-side</code>, both inside <code>.pchain-layout</code> grid). <code>trace/trace.css</code> (~30 lines appended for the grid + narrow-column tweaks + responsive fallback). Snapshot at <code>_rollback/APP-V03-PORT-3a-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore both files from snapshot. Clean — no state, schema, or persistence change.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-3 ───────── -->
     <article class="roc-entry dev">
       <div class="head">
