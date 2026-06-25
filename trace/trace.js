@@ -875,25 +875,46 @@
       stats: boxStats(drawn.map(c => c[ph]))
     }));
 
-    // Total LT chevron — average phase decomposition across all `drawn`
+    // Total LT chevron — APP-FIX-PD-CHEVRON: the flowing timeline covers only
+    // the phases up to site availability (A–D). Phase E (Time to First Use) is
+    // the shelf time AFTER the material is available, so it is pulled OUT of the
+    // flow and shown as a separate purple block — the bar total now reads "time
+    // until available on site", and the block reads "then time on shelf before
+    // first consumption". (totalMean below still spans A–E and drives the
+    // box-plot shared y-scale, which is intentionally left unchanged.)
     const phaseMeans = phaseStats.map(p => (p.stats ? p.stats.mean : 0));
     const totalMean  = phaseMeans.reduce((s, v) => s + v, 0);
-    const pctMeans   = phaseMeans.map(v => (totalMean > 0 ? v / totalMean : 0));
+    const flowPhases = phaseStats.filter(p => p.key !== 'E');           // A–D: up to site availability
+    const ePhase     = phaseStats.find(p => p.key === 'E');             // E: shelf time, shown separately
+    const flowMean   = flowPhases.reduce((s, p) => s + (p.stats ? p.stats.mean : 0), 0);
+    const eMean      = (ePhase && ePhase.stats) ? ePhase.stats.mean : 0;
+    const flowPct    = flowPhases.map(p => (flowMean > 0 ? (p.stats ? p.stats.mean : 0) / flowMean : 0));
     const chevronHtml = `
       <div class="pd-chevron">
-        <div class="pd-chevron-lab">Total Lead Time · phase decomposition · avg across ${drawn.length} chain${drawn.length === 1 ? '' : 's'}</div>
-        <div class="pd-chevron-bar">
-          ${phaseStats.map((p, i) => `
-            <div class="pd-chev-seg" style="flex: ${pctMeans[i] || 0.001}; background: ${p.color}; --pd-chev-fill: ${p.color};">
-              <div class="pd-chev-inner">
-                <span class="pd-chev-code">${p.key}</span>
-                <span class="pd-chev-name">${p.label}</span>
-                <span class="pd-chev-val">${p.stats ? p.stats.mean.toFixed(1) : '—'}d</span>
+        <div class="pd-chevron-lab">Total Lead Time to site availability · phase decomposition · avg across ${drawn.length} chain${drawn.length === 1 ? '' : 's'}</div>
+        <div class="pd-chevron-row">
+          <div class="pd-chevron-bar">
+            ${flowPhases.map((p, i) => `
+              <div class="pd-chev-seg" style="flex: ${flowPct[i] || 0.001}; background: ${p.color}; --pd-chev-fill: ${p.color};">
+                <div class="pd-chev-inner">
+                  <span class="pd-chev-code">${p.key}</span>
+                  <span class="pd-chev-name">${p.label}</span>
+                  <span class="pd-chev-val">${p.stats ? p.stats.mean.toFixed(1) : '—'}d</span>
+                </div>
               </div>
-            </div>
-          `).join('')}
+            `).join('')}
+          </div>
+          <div class="pd-chev-total-site" title="Average total processing time until the material is received at site (phases A–D). Excludes shelf time before first use.">
+            <span class="lab">Total to site</span>
+            <span class="v">${flowMean.toFixed(1)}d</span>
+          </div>
+          ${ePhase ? `
+          <div class="pd-chev-shelf" style="border-color:${ePhase.color}; background:${ePhase.color}1f;" title="Average time the material sits on the shelf after arriving at site, before its first consumption (phase E). Not part of the lead-time-to-availability total.">
+            <span class="pd-chev-shelf-lab">then on shelf</span>
+            <span class="pd-chev-shelf-name">${ePhase.key} · ${ePhase.label}</span>
+            <span class="pd-chev-shelf-val" style="color:${ePhase.color};">${ePhase.stats ? eMean.toFixed(1) : '—'}d</span>
+          </div>` : ''}
         </div>
-        <div class="pd-chevron-total"><span class="lab">Total avg</span><span class="v">${totalMean.toFixed(1)}d</span></div>
       </div>
     `;
 

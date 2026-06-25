@@ -379,6 +379,24 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-PD-CHEVRON ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-PD-CHEVRON · Total-lead-time chevron — split "Time to First Use" out of the timeline total</h4>
+      <ul>
+        <li><b>Why.</b> Operator (annotated screenshot 2026-06-25): the consolidated Phase-Distribution chevron summed all five phases (A–E) into one "Total avg", but phase E (Time to First Use) is <em>shelf time after the material is available</em>, not part of the lead time to get it on site. Lumping it in overstated the procurement lead time.</li>
+        <li><b>What changed.</b> In <code>trace/trace.js</code> (<code>renderPhaseDistribution</code> chevron) + <code>trace/trace.css</code>: the flowing bar now covers phases <b>A–D only</b>; the running total (A+B+C+D) is shown at the end of the D "Transfer to Site" bar as <b>"Total to site"</b> = time until the material is available on site. Phase E is pulled out of the flow into a separate detached <b>purple block</b> ("then on shelf · E · Time to First Use · Nd"). The operator now reads (a) total processing time to availability and (b) how long it then sits before first consumption, separately.</li>
+        <li><b>Left unchanged (per operator).</b> The five box-and-whisker plots (incl. E) and the stats table below; the box-plot shared y-scale still spans the full A–E total (APP-FIX-PD-POLISH).</li>
+        <li><b>Verified.</b> Synthetic 3-chain material in the live Trace page: chevron renders 4 segments (A–D), <code>Total to site = 50.3d</code> (= A+B+C+D, excludes E), separate purple block "E · Time to First Use · 10.0d" (border = phase purple); 5 box plots still present; zero console errors. Snapshot at <code>_rollback/APP-FIX-PD-CHEVRON-pre/</code>.</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code>, <code>trace/trace.css</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-E9 ───────── -->
     <article class="roc-entry dev">
       <div class="head">

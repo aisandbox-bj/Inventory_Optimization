@@ -1041,6 +1041,40 @@
   color: var(--text-pri, #e8eef4);
 }
 
+/* APP-FIX-PD-CHEVRON — A–D flow bar + total-to-site + detached shelf block */
+.pd-chevron-row{ display: flex; align-items: stretch; gap: 12px; }
+.pd-chevron-row .pd-chevron-bar{ flex: 1 1 auto; }
+.pd-chev-total-site{
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  padding: 0 12px 0 12px;
+  border-left: 1px dashed rgba(255,255,255,.18);
+}
+.pd-chev-total-site .lab{
+  font-size: 9px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-muted, #9BABA8);
+}
+.pd-chev-total-site .v{
+  font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-pri, #e8eef4);
+}
+.pd-chev-shelf{
+  flex: 0 0 auto; min-width: 150px;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  padding: 8px 16px; border-radius: 8px; border: 1.5px solid;
+}
+.pd-chev-shelf-lab{
+  font-size: 9px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--text-muted, #9BABA8);
+}
+.pd-chev-shelf-name{ font-size: 10px; font-weight: 600; color: var(--text-sec, #c7d2dc); }
+.pd-chev-shelf-val{ font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+@media (max-width: 760px){
+  .pd-chevron-row{ flex-wrap: wrap; }
+  .pd-chev-shelf{ min-width: 0; }
+  .pd-chev-total-site{ border-left: none; }
+}
+
 /* Box plot grid */
 .pd-plots{
   display: grid;
