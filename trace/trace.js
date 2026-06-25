@@ -898,49 +898,52 @@
     `;
 
     // ── Build SVG box plots ───────────────────────────────────────────────
+    // APP-FIX-PD-POLISH (A) — uniform y-scale across all five plots so phase
+    // durations compare visually. Base scale = avg total LT + 20%, rounded up
+    // to a clean 10 (e.g. 29.4d avg → 40d). Floored to fit the tallest
+    // box/whisker so nothing clips off the top.
+    const pdFenceMax = Math.max(0, ...phaseStats.map(p => p.stats ? Math.max(p.stats.whiskerUpper, p.stats.q3) : 0));
+    let pdYMax = Math.ceil((totalMean * 1.2) / 10) * 10;
+    pdYMax = Math.max(pdYMax, Math.ceil(pdFenceMax / 10) * 10, 10);
     const plotHtml = `
       <div class="pd-plots">
-        ${phaseStats.map(p => renderBoxPlotSvg(p)).join('')}
+        ${phaseStats.map(p => renderBoxPlotSvg(p, pdYMax)).join('')}
       </div>
     `;
 
-    // ── Stats table (Min / Mean / Median / Max / N per phase) ────────────
+    // ── Stats table — APP-FIX-PD-POLISH (B): transposed so columns = phases
+    // A–E (aligned under the box plots above) and rows = stat names. ────────
+    const PD_STAT_ROWS = [
+      { lab:'N',        fmt: s => String(s.n) },
+      { lab:'Min',      fmt: s => s.min.toFixed(1) },
+      { lab:'Q1',       fmt: s => s.q1.toFixed(1) },
+      { lab:'Median',   fmt: s => s.q2.toFixed(1) },
+      { lab:'Mean',     fmt: s => s.mean.toFixed(1), bold:true },
+      { lab:'Q3',       fmt: s => s.q3.toFixed(1) },
+      { lab:'Max',      fmt: s => s.max.toFixed(1) },
+      { lab:'Outliers', fmt: s => String(s.outliers.length), warn: s => s.outliers.length > 0 }
+    ];
     const tableHtml = `
       <div class="pd-stats-wrap">
-        <table class="pd-stats">
+        <table class="pd-stats pd-stats-t">
           <thead>
             <tr>
-              <th class="num">Phase</th>
-              <th>Description</th>
-              <th class="num">N</th>
-              <th class="num">Min</th>
-              <th class="num">Q1</th>
-              <th class="num">Median</th>
-              <th class="num">Mean</th>
-              <th class="num">Q3</th>
-              <th class="num">Max</th>
-              <th class="num">Outliers</th>
+              <th class="rowlab"></th>
+              ${phaseStats.map(p => `<th class="num"><span class="pd-phase-dot" style="background:${p.color}"></span>${p.key}<span class="pd-th-name">${p.label}</span></th>`).join('')}
             </tr>
           </thead>
           <tbody>
-            ${phaseStats.map(p => {
-              const s = p.stats;
-              if (!s) return `<tr><td class="num"><span class="pd-phase-dot" style="background:${p.color}"></span>${p.key}</td><td>${p.label}</td><td colspan="8" class="num empty">no data</td></tr>`;
-              return `
-                <tr>
-                  <td class="num"><span class="pd-phase-dot" style="background:${p.color}"></span>${p.key}</td>
-                  <td>${p.label}</td>
-                  <td class="num mono">${s.n}</td>
-                  <td class="num mono">${s.min.toFixed(1)}</td>
-                  <td class="num mono">${s.q1.toFixed(1)}</td>
-                  <td class="num mono">${s.q2.toFixed(1)}</td>
-                  <td class="num mono"><b>${s.mean.toFixed(1)}</b></td>
-                  <td class="num mono">${s.q3.toFixed(1)}</td>
-                  <td class="num mono">${s.max.toFixed(1)}</td>
-                  <td class="num mono ${s.outliers.length ? 'warn' : ''}">${s.outliers.length}</td>
-                </tr>
-              `;
-            }).join('')}
+            ${PD_STAT_ROWS.map(row => `
+              <tr>
+                <td class="rowlab">${row.lab}</td>
+                ${phaseStats.map(p => {
+                  if (!p.stats) return `<td class="num mono empty">—</td>`;
+                  const warn = row.warn && row.warn(p.stats) ? ' warn' : '';
+                  const val  = row.fmt(p.stats);
+                  return `<td class="num mono${warn}">${row.bold ? `<b>${val}</b>` : val}</td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>
@@ -951,16 +954,16 @@
       ${chevronHtml}
       ${plotHtml}
       ${tableHtml}
-      <div class="chart-caveat">Box plots show Q1/Median/Q3 per phase. Whiskers extend to min and to the largest value below the <b>Tukey upper fence</b> (Q3 + 1.5·IQR). Outliers above the fence render as <span class="pd-mark">↑</span> markers above each plot. Mean shown as a hollow circle inside the box. N is the count of <em>complete</em> chains (those that reached Site WH) within the active filter set.</div>
+      <div class="chart-caveat">All five plots share one y-axis (scaled to avg total LT + 20%) so phase durations compare directly. Box plots show Q1/Median/Q3 per phase. Whiskers extend to min and to the largest value below the <b>Tukey upper fence</b> (Q3 + 1.5·IQR). Outliers above the fence render as <span class="pd-mark">↑</span> markers above each plot. Mean is a hollow circle with its value labelled on the plot. N is the count of <em>complete</em> chains (those that reached Site WH) within the active filter set.</div>
     `;
 
     bindFilterBar(material);
   }
 
-  // SVG box plot — vertical, scaled to the phase's own y-domain.
-  // The fence-clipped layout makes peer comparison easier (each phase's
-  // box reads against its own scale; outliers are flagged numerically).
-  function renderBoxPlotSvg(p){
+  // SVG box plot — vertical. APP-FIX-PD-POLISH (A): all five plots share one
+  // y-domain (yMaxShared) so phase durations compare visually; outliers above
+  // the Tukey fence are clipped and flagged numerically as before.
+  function renderBoxPlotSvg(p, yMaxShared){
     const W = 168, H = 220, PAD_T = 14, PAD_B = 50, PAD_L = 36, PAD_R = 12;
     const innerH = H - PAD_T - PAD_B;
     const innerW = W - PAD_L - PAD_R;
@@ -971,8 +974,9 @@
       </div>`;
     }
     const s = p.stats;
-    // Y domain — 0 to fence (clip outliers visually; count them separately)
-    const yMax = Math.max(s.upperFence, s.q3 + 1, 1) * 1.06;
+    // Y domain — shared across all plots (APP-FIX-PD-POLISH A); fall back to
+    // the per-plot fence scale if no shared max was passed.
+    const yMax = yMaxShared || (Math.max(s.upperFence, s.q3 + 1, 1) * 1.06);
     const yScale = (v) => PAD_T + innerH - (v / yMax) * innerH;
     // Box geometry
     const boxX = PAD_L + innerW / 2 - 18;
@@ -1007,14 +1011,15 @@
         <rect x="${boxX}" y="${yScale(s.q3)}" width="${boxW}" height="${yScale(s.q1) - yScale(s.q3)}" fill="${p.color}" fill-opacity="0.22" stroke="${p.color}" stroke-width="1.5" rx="2"/>
         <!-- Median line -->
         <line x1="${boxX}" x2="${boxX + boxW}" y1="${yScale(s.q2)}" y2="${yScale(s.q2)}" stroke="${p.color}" stroke-width="2.5"/>
-        <!-- Mean marker (hollow circle) -->
+        <!-- Mean marker (hollow circle) + APP-FIX-PD-POLISH (C): value label on the plot -->
         <circle cx="${midX}" cy="${yScale(s.mean)}" r="3.5" fill="rgba(8,12,20,.96)" stroke="${p.color}" stroke-width="1.5"/>
+        <text x="${boxX + boxW + 4}" y="${yScale(s.mean) + 3}" text-anchor="start" fill="${p.color}" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600">${s.mean.toFixed(1)}</text>
         ${outlierMarkers}
       </svg>
       <div class="pd-plot-foot">
         <span class="pd-foot-lbl" title="Median">M</span><span class="pd-foot-val">${s.q2.toFixed(1)}d</span>
         <span class="pd-foot-sep">·</span>
-        <span class="pd-foot-lbl" title="Mean">μ</span><span class="pd-foot-val">${s.mean.toFixed(1)}d</span>
+        <span class="pd-foot-lbl" title="Mean (○)">μ</span><span class="pd-foot-val">on plot</span>
       </div>
     </div>`;
   }

@@ -1159,6 +1159,20 @@
 }
 .pd-stats tr:last-child td{ border-bottom: none; }
 .pd-stats tr:hover td{ background: rgba(255,255,255,.025); }
+/* APP-FIX-PD-POLISH (B) — transposed stats table: rows = stats, columns = phases A–E (under the box plots) */
+.pd-stats-t{ table-layout: fixed; }
+.pd-stats-t th, .pd-stats-t td{ text-align: center; }
+.pd-stats-t th.num, .pd-stats-t td.num{ text-align: center; }
+.pd-stats-t .rowlab{
+  width: 84px; text-align: left;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted, #9BABA8);
+}
+.pd-stats-t .pd-th-name{
+  display: block; margin-top: 2px; font-size: 9px; font-weight: 400;
+  text-transform: none; letter-spacing: 0; color: var(--text-muted, #9BABA8);
+}
 .pd-stats td.mono{ font-family: 'JetBrains Mono', monospace; }
 .pd-stats td.warn{ color: #f4c14a; font-weight: 600; }
 .pd-stats td.empty{ color: var(--text-faint, #6a7f9a); font-style: italic; }

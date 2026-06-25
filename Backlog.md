@@ -3,6 +3,12 @@
 **Updated:** 2026-06-25 (after APP-E8 · MRP type vs Min/Max applicability)
 **Status:** APP-E8 built + self-verified (synthetic pipeline run + live UI render). **Pending operator validation** and a decision to push. The user manual (`user-manual.html`) was also rebuilt to the full v2.1.3-dev surface (APP-DOC-MANUAL) — adds Settings reference + Calibre Trace sections, stock-on-hand methodology, APP-E8 reclass.
 
+**Update 2026-06-25 (batch 2):** APP-E8 (#21), APP-DOC-MANUAL + APP-FIX-VER pushed (origin `579cf99`). Then: **APP-FIX-PD-POLISH (#1)** built + verified (Trace Phase Distribution: uniform scale + transposed stats table + on-plot mean) — unpushed. **APP-E21 (#15)** investigation complete (findings + ranked reduction plan in RoC); reduction implementation queued as **APP-E21b** (deferred). **APP-E9 (#22)** not yet built — see below.
+
+## Deferred / queued (new)
+- **APP-E21b** — implement the memory-bloat reduction per the APP-E21 findings: drop the unused `cumulative` field (safe); MB51 column-prune at parse (needs field-usage audit); lazy `stockOnHandSeries` (medium). NOT safe: blanking `data.*` from the handoff (breaks the analysis re-run + Inv-Adj σ math).
+- **APP-E9 (#22)** — events-vs-qty screening + consolidated pre-run warnings panel. Sizable multi-file build (new `minEventsThreshold` param + ignore toggles + warnings panel + pipeline screening). Design decisions to confirm before building (see session notes).
+
 ## Needs an operator decision
 - **APP-E8 PURPLE-PD nuance** — A Working-Redundant (PURPLE) PD item that carries a recommended Min/Max now also gets the "reclassify to V1" flag/note, on top of its "review for destocking" action. Confirm this is wanted, or scope the reclass flag to RED rule-6 only.
 - **Stale version label** — `index.html`, `intake.html`, `analysis.html` still show `v2.0.0-dev` (HTML comment + `<meta app-version>` + visible nav label); `trace.html` + RoC read `v2.1.3-dev`. Trivial 3-page tweak; held pending go-ahead (not bundled into APP-E8).

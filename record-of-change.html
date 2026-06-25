@@ -379,6 +379,49 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-E21 (investigation) ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-E21 · Intake → Analysis memory-bloat investigation (read-only — findings + reduction plan)</h4>
+      <ul>
+        <li><b>Method.</b> Traced the handoff + analysis state with file:line evidence. No code changed this chunk (per scope — diagnosis first, reduction follows).</li>
+        <li><b>Primary culprit.</b> The full raw canonical JSON — the entire <code>data.mb51</code> (100k–300k+ rows), <code>data.iw39</code>, <code>data.inventoryMaster</code> — is written to the <code>intake.current</code> handoff slot (<code>intake/intake.js</code>) and held in analysis <code>state.json</code> (<code>analysis/analysis.js</code>) regardless of how few materials are in scope. A 6-month MB51 dominates the footprint (the operator's ~15 MB; larger for big extracts).</li>
+        <li><b>Important correction.</b> This raw MB51 <em>cannot</em> simply be stripped from the handoff. Analysis <b>re-runs the pipeline from raw</b> (<code>analysis.js</code> → <code>runPipeline(state.json)</code> reads <code>json.data.mb51</code>), and Inventory-Adjustment detection computes its σ distribution across the <b>full</b> set of MB51 dates — filtering or blanking MB51 would change which dates flag as Inv-Adj and therefore change the recommendations. So the dominant cost is largely intrinsic to the deterministic re-run design.</li>
+        <li><b>Secondary culprits (safer to reduce).</b> Per-material <code>stockOnHandSeries</code> (~180-point daily series ≈ 6.5 KB/material) + <code>stockoutWindows</code> retained for <em>every</em> qualifying material (~80 KB at 10 materials, ~800 KB at 100); plus a <code>cumulative</code> series stored on each material that <code>analysis.js</code> never reads.</li>
+        <li><b>Reduction plan (queued as APP-E21b), ranked by safety:</b>
+          <br>1. <b>Safe:</b> drop the unused <code>cumulative</code> field from the per-material result (verify no refs in <code>chart.js</code>/<code>excel.js</code> first). Small, free.
+          <br>2. <b>Safe-ish:</b> MB51 column-prune at parse time — keep only fields the pipeline + chart + Trace consume; drop dead carry-through columns (~30–50% per-row shrink). Needs a field-usage audit.
+          <br>3. <b>Medium:</b> compute <code>stockOnHandSeries</code> lazily (only for selected/exported materials). The chart, LLM prompt, Excel and PDF all consume it, so it must be available when those run — needs a per-material MB51 slice + cache.
+          <br>4. <b>Rejected as unsafe:</b> blanking <code>data.*</code> in the handoff — breaks the analysis re-run + the Inv-Adj σ math.
+          <br>5. <b>Architectural (defer):</b> hand the computed result from intake → analysis instead of re-running from raw, or store raw MB51 once and reference it — removes the double-hold but is a larger change.</li>
+        <li><b>Status.</b> Investigation only; no code changed. Reduction work queued as <b>APP-E21b</b>.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-FIX-PD-POLISH ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-PD-POLISH · Trace Phase Distribution — uniform scale + transposed stats table + mean labels on plots</h4>
+      <ul>
+        <li><b>Why.</b> Operator feedback PPT 2026-05-26 (slide 1, A/B/C). The five box plots each used their own y-domain (hard to compare phases); the stats table was oriented phases-as-rows; the mean value sat in a foot strip rather than on the plot.</li>
+        <li><b>(A) Uniform scale.</b> All five plots now share one y-axis = ceil((avg total LT × 1.2) / 10) × 10 (e.g. 29.4d avg → 40d), floored to fit the tallest box/whisker so nothing clips. <code>renderPhaseDistribution</code> computes <code>pdYMax</code> and passes it to <code>renderBoxPlotSvg(p, yMaxShared)</code>.</li>
+        <li><b>(B) Transposed table.</b> Columns are now phases A–E (aligned under the plots), rows are the stats (N / Min / Q1 / Median / Mean / Q3 / Max / Outliers). New <code>.pd-stats-t</code> styling (fixed layout, centered phase columns, styled row labels).</li>
+        <li><b>(C) Mean on plot.</b> The mean value is labelled next to the hollow-circle mean marker on each plot; the foot strip keeps the median and points to the on-plot mean.</li>
+        <li><b>Verified.</b> Synthetic 3-complete-chain material in the live Trace page: all five plots share top-tick 80; transposed header = phase columns, rows = stats; per-phase mean row [5.0 / 10.0 / 30.7 / 4.7 / 10.0] matches. Zero console errors. Snapshot at <code>_rollback/APP-FIX-PD-POLISH-pre/</code>.</li>
+        <li><b>Files touched.</b> <code>trace/trace.js</code> (renderPhaseDistribution + renderBoxPlotSvg + caveat), <code>trace/trace.css</code> (.pd-stats-t). No change to chain-compute or any other view.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-FIX-VER ───────── -->
     <article class="roc-entry dev">
       <div class="head">
