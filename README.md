@@ -1,112 +1,97 @@
-# Inventory Optimization App
+# Calibre Tune — Inventory Optimization App
 
-Browser-based, single-file-per-page app for mining MRO inventory optimization. Replaces a Python-script + Excel-handoff workflow with a self-contained tool: drop SAP exports, validate, scope, parameterize, build a canonical JSON, run analysis, review, export.
+Browser-only, single-file-per-page app for mining MRO inventory optimization. Replaces a Python-script + Excel-handoff workflow with a self-contained tool: drop SAP exports → validate → scope → parameterise → build a canonical JSON → run the deterministic analysis → review per-material → export (Excel / PDF / JSON). An optional LLM second opinion **annotates only** — it never changes the math.
 
-Architecture follows the NumaCore Lens shape — front-end shell loading modular engine HTMLs as needed. This is a separate service offering, not part of the Lens suite. Brand language is consistent.
+Calibre Tune is one of three tools in the **Calibre Suite** (Tune · Trace · Compose). Trace now ships as a sibling page inside this app; Compose is paused.
 
 ## Status
 
-**v1.1.0-dev — Assessment Type selector + Parameter Search filter panel on top of the v1.0.0 baseline.**
+**v2.1.3-dev** — current dev tip. origin/main `834fff8`; last released tag `v2.1.1` (roll back with a clone + `git checkout v2.1.1`). Canonical `SCHEMA_VERSION` = `1.0.0`. Full history + rollback steps in [`record-of-change.html`](record-of-change.html); operator manual in [`user-manual.html`](user-manual.html).
 
-Releases & rollback live in [`record-of-change.html`](record-of-change.html). Roll back any release with a clone + `git checkout v1.x.x`.
+Highlights since v1.x:
+- **Stockout-aware drop detection** (APP-E1) — stock-on-hand back-calc from MB51, violet SOH line + red stockout wash bands on the chart, and a stockout-driven-vs-genuine-demand-drop classifier.
+- **Inventory Master → standard SAP Material Master (Fiori)** (APP-T-01) + multi-plant detection/consistency infra; **PR History intake** (APP-T-02).
+- **Calibre Trace** ported in as the `trace/` sibling page (APP-T-03/T-04 + APP-V03-PORT-1→5) — procurement-chain swimlane + funnel, phase-distribution box plots + lead-time chevron, volume cumulative, raw data.
+- **MRP type vs Min/Max** (APP-E8) — recommend PD→V1 when a Min/Max is warranted (PD can't hold Min/Max); filterable "Reclass" column.
+- **Min-consumption-events screen** (APP-E9) — `minEventsThreshold` beside the qty threshold (a WO 261 or cost-centre 201 issue counts as an event).
 
-| Phase / Release | What's in it | Status |
-|---|---|---|
-| Phase 1 — Foundations (`shared/*`) | brand tokens, schema, storage, parsers, config | ✓ in v1.0.0 |
-| Phase 2 — Intake engine | 6-step workflow, DQ gate, scope selector | ✓ in v1.0.0 |
-| Phase 3 — Settings + shell | parameter defaults, LLM keys, alias overrides | ✓ in v1.0.0 |
-| Phase 4 — Analysis engine | pipeline, chart, LLM review, Excel export | ✓ in v1.0.0 |
-| v1.1.0 — Assessment Type selector | Step 0: UNIT/FLOC · User list · Parameter search, non-applicable upload zones greyed | ✓ dev |
-| v1.1.0 — Parameter Search panel | PBI-style drag-drop filter builder, Simple/Advanced modes, live preview | ✓ dev |
-| v1.1.0 — Record of Change | rollback-safe versioning, HTML changelog linked from every page | ✓ dev |
-
-## Structure
+## Pages
 
 ```
-App/v1/
-├── index.html                  Dashboard / launchpad
-├── shared/
-│   ├── brand-tokens.css        NumaCore-aligned palette, typography, panel grammar
-│   ├── canonical-schema.js     v1.0.0 schema, factory defaults, validators
-│   ├── storage.js              localStorage + IndexedDB transparent fallback
-│   ├── parsers.js              XLSX/CSV → canonical with column-alias auto-mapping
-│   └── config.js               Settings read/write helpers
-├── intake/
-│   ├── intake.html             Six-step workflow (upload → schema → DQ → scope → params → export)
-│   ├── intake.js               All steps wired, DQ gate ports the existing Python data-quality logic
-│   └── intake.css
-├── settings/
-│   ├── settings.html
-│   ├── settings.js             Parameter defaults, dynamic LLM model fetch, alias overrides
-│   └── settings.css
-└── analysis/
-    ├── analysis.html           Pipeline runner + bucket nav + material detail + LLM review + Excel export
-    ├── analysis.js
-    └── analysis.css
+index.html              Dashboard (recent intakes, per-row delete, clear-session)
+intake/                 Upload → schema-map → DQ gate → scope → parameters → review → export
+analysis/               Pipeline runner + material list + detail panel (chart + MRP/reclass) + Excel/PDF/JSON + Mass LLM
+trace/                  Calibre Trace — procurement-chain timeline (reads PR History + MB51)
+settings/               Parameter defaults, LLM providers/keys, Operational Context, prompt template, alias overrides, multi-plant toggle, maintenance
+record-of-change.html   Full changelog + rollback steps
+user-manual.html        Operator + engineering manual
 ```
 
-Additional `shared/` modules added in Phase 4:
+## Shared engine (`shared/`)
 
 ```
-shared/
-  pipeline.js   Port of scripts 02/03/04 — net consumption, multi-model detection,
-                period rates, HCE detection, lumpy/smooth, traffic-light decision tree
-  chart.js      Inline SVG cumulative chart with P1/P2 trend lines + WO annotations.
-                PNG capture for LLM image input
-  llm.js        Provider-agnostic review surface (Anthropic + OpenAI). Sends chart
-                image + structured prompt, parses verdict + notes + suggested edits
-  excel.js      ExcelJS workbook builder — Index sheet + per-material sheets with
-                embedded chart images, HCE tables, traffic-light fills
+canonical-schema.js   Schema, FACTORY_DEFAULTS, PARAMETER_DESCRIPTIONS (SCHEMA_VERSION 1.0.0, APP_VERSION 2.1.3-dev)
+storage.js            localStorage + IndexedDB transparent fallback
+locale.js             Local-time display helpers + CAD currency
+parsers.js            XLSX/CSV parsers + column-alias map (MB51 / IW39 / Fleet / Inventory Master Fiori / PR History)
+config.js             Settings read/write + prompt template + clearSessionData()
+inventory-back-calc.js  Stock-on-hand back-calc from MB51 (UTC day-keys) → SOH series + stockout windows (APP-E1)
+pipeline.js           Deterministic analytical engine — period rates, HCE, lumpy/smooth, Inv-Adj detection, 10-rule traffic-light tree, Min/Max + MRP reclass, screens
+chart.js              Inline SVG chart (cumulative + SOH line + stockout bands + markers), PNG capture for LLM
+llm.js / mass-llm.js  Provider-agnostic single + batch review (Anthropic / OpenAI); in-memory only
+client-context.js     Operational Context library (fixed-pick + capped 300-char custom slot, privacy-linted)
+excel.js              ExcelJS workbook builder (per-bucket / combined / mass-review)
+brand-tokens.css      Palette, typography, panel grammar
 ```
 
 ## Canonical JSON contract (v1.0.0)
 
-The intake engine writes a canonical JSON; the analysis engine consumes it. Schema lives in [`shared/canonical-schema.js`](shared/canonical-schema.js).
+Intake writes it; Analysis + Trace consume it. Schema in [`shared/canonical-schema.js`](shared/canonical-schema.js).
 
 ```json
 {
-  "schemaVersion": "1.0.0",
-  "metadata":   { "assessmentName", "createdAt", "createdBy", "appVersion" },
-  "scope":      { "mode": "fleet|manual|byClassification|byVendor", … },
+  "metadata":   { "assessmentName", "createdAt", "uploadedAt", "createdBy", "appVersion" },
+  "scope":      { "mode": "fleet|manual|byClassification|byVendor|parameterSearch", … },
   "parameters": { "minMaxMethod", "p1Start", "p1End", "p2Months", "minMonths", "maxMonths",
-                  "threshold", "hcePctThreshold", "hceMultThreshold",
-                  "lumpyCvThreshold", "lumpyTopWoThreshold" },
-  "data":       { "mb51", "iw39", "fleetMaster", "inventoryMaster",
-                  "materialVendor"?, "leadTimes"? },
+                  "threshold", "minEventsThreshold", "hcePctThreshold", "hceMultThreshold",
+                  "lumpyCvThreshold", "lumpyTopWoThreshold", "invAdjSigmaThreshold",
+                  "invAdjConfirmedDates", "wrSoftMonths", "wrHardMonths", "wrMrpTypes",
+                  "socBackCalcMonths" },
+  "data":       { "mb51", "inventoryMaster", "iw39"?, "fleetMaster"?,
+                  "materialVendor"?, "leadTimes"?, "prHistory"? },
   "validation": { "passed", "issues" }
 }
 ```
 
 ## Scope modes
 
-Four exclusive modes in v1 (composition is a roadmap item):
+- **fleet** — multi-select fleet models; MB51 filtered through IW39 work orders to fleet-relevant transactions (one bucket per model + a MULTI bucket).
+- **manual** — paste material numbers OR work orders (auto-detect + override; APP-E22).
+- **byClassification** — Inventory Type ∈ {…} AND MRP classifier ∈ {…} AND movement amount in range (logical AND).
+- **byVendor** — multi-select vendors (requires a Material → Vendor mapping); one bucket per vendor + MULTI.
+- **parameterSearch** — PowerBI-style filter builder over Inventory Master attributes + MB51 movement.
 
-- **fleet** — multi-select fleet models. Filters MB51 through IW39 work orders to fleet-relevant transactions only.
-- **manual** — paste a list of material numbers.
-- **byClassification** — filter Inventory Master by Inventory Type, MRP classifier, and movement-amount range. Logical AND.
-- **byVendor** — multi-select vendors. Requires a Material → Vendor mapping file (uploaded in Step 1 when this mode is active).
+## Screening
+
+A material qualifies for analysis only if net consumption ≥ `threshold` (default 10) **AND** distinct consumption events ≥ `minEventsThreshold` (default 3; APP-E9). Both are editable in Settings and per-run in intake Step 5.
 
 ## Running it
 
-Open `index.html` in Chrome or Edge. Drag SAP exports into the intake page. CDN-loaded SheetJS + PapaParse parse XLSX/CSV; the rest is vanilla JS.
-
-For features that hit external APIs (LLM model-list fetch in Settings), serve over HTTP rather than `file://`:
+Serve over HTTP (CORS for LLM model-list fetch + multi-page features):
 
 ```bash
-cd App/v1
+cd "4 - Build Output/Inventory Optimization App/v2.1.3-dev"
 python -m http.server 8000
+# open http://localhost:8000/intake/intake.html
 ```
+
+CDN-loaded SheetJS + PapaParse parse XLSX/CSV; jsPDF + autoTable for the PDF Pack; ExcelJS for workbooks; the rest is vanilla JS.
+
+## Repo / rollback
+
+Pushes to GitHub `aisandbox-bj/Inventory_Optimization` (this repo root mirrors `v2.1.3-dev/`, excluding `_rollback/`). Per-change rollback snapshots live in `_rollback/`; the last released tag is `v2.1.1`. Push protocol (clone-to-tmp, identity flags) is documented in `HANDOVER.md`.
 
 ## Design references
 
-- **NumaCore Lens** — architectural shape (front-end shell + modular engine HTMLs)
-- **Birchwood Advisory brand pack** — palette, typography, panel grammar
-- The four Python scripts in the parent project (`scripts/01_data_quality.py` … `04_mrp_analysis.py`) are the analytical spec; the JS port preserves their rule semantics line-for-line.
-
-## Roadmap
-
-- **Phase 4** — analysis engine, chart rendering, LLM review surface, Excel export via ExcelJS
-- **Lead-time + safety-stock-driven Min/Max** — when per-material lead-time data is available, switch from `monthsBased` to `leadTimeBased` in Settings
-- **Scope composition** — fleet × byClassification, vendor × byClassification, etc.
-- **Per-bucket parameter overrides** — different min/max-months per fleet model
-- **Cross-mine benchmarking** — read-only across saved assessments
+- **NumaCore Lens** — front-end-shell + modular-page architectural shape.
+- The four Python scripts in `3 - Source Tools/Legacy Python pipeline/` are the analytical spec; the JS port preserves their rule semantics.
