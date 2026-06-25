@@ -1561,6 +1561,7 @@
       { key:'minMonths',           label:'Min months',      type:'number', step:1 },
       { key:'maxMonths',           label:'Max months',      type:'number', step:1 },
       { key:'threshold',           label:'Threshold',       type:'number', step:1 },
+      { key:'minEventsThreshold',  label:'Min consumption events', type:'number', step:1 },
       { key:'hcePctThreshold',     label:'HCE % threshold', type:'number', step:0.05 },
       { key:'hceMultThreshold',    label:'HCE multiplier',  type:'number', step:0.5 },
       { key:'lumpyCvThreshold',    label:'Lumpy CV',        type:'number', step:0.1 },
@@ -1684,14 +1685,18 @@
     // Per-bucket: count materials that PASS the threshold filter
     // (i.e. would actually be analyzed by the pipeline)
     const threshold = json.parameters.threshold || 0;
+    // APP-E9 — second screen (min consumption events) mirrored here so the
+    // Step-6 count matches what the pipeline will actually analyse.
+    const minEvents = (typeof json.parameters.minEventsThreshold === 'number' && json.parameters.minEventsThreshold > 0)
+                        ? json.parameters.minEventsThreshold : 0;
     let totalQualifying = 0, totalRaw = 0;
     const bucketRows = buckets.map(b => {
       const raw = (b.materials instanceof Set) ? b.materials.size : (Array.isArray(b.materials) ? b.materials.length : 0);
-      // Compute net consumption per material in this bucket → count above threshold
+      // Compute net consumption per material in this bucket → count past both screens
       const netByMat = AppPipeline.netConsumptionByMaterial(b.transactions, new Map());
       let qualifying = 0;
       for (const [, agg] of netByMat) {
-        if (agg.net >= threshold) qualifying++;
+        if (agg.net >= threshold && agg.eventCount >= minEvents) qualifying++;
       }
       totalRaw         += raw;
       totalQualifying  += qualifying;
@@ -1732,8 +1737,8 @@
         </div>
         <div class="sub">
           Scope: <b style="color:var(--text-pri)">${escapeHtml(scopeDescr)}</b><br>
-          Threshold: <b style="color:var(--text-pri)">net consumption ≥ ${threshold}</b> over the analysis window.<br>
-          Materials below threshold are excluded automatically.
+          Screens: <b style="color:var(--text-pri)">net consumption ≥ ${threshold}</b>${minEvents > 0 ? ` <b style="color:var(--text-pri)">AND ≥ ${minEvents} consumption event${minEvents === 1 ? '' : 's'}</b> (a WO 261 or cost-centre 201 issue)` : ''} over the analysis window.<br>
+          Materials below ${minEvents > 0 ? 'either screen' : 'the threshold'} are excluded automatically.
         </div>
       </div>
       ${mismatchHtml}

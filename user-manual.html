@@ -654,6 +654,7 @@
             <tr><td><code>p2Months</code></td><td>3</td><td>Rolling current window; the P2 rate drives the recommendation.</td></tr>
             <tr><td><code>minMonths</code> / <code>maxMonths</code></td><td>3 / 6</td><td>Months of cover the recommended Min / Max should hold.</td></tr>
             <tr><td><code>threshold</code></td><td>10</td><td>Minimum net consumption (units) to qualify for analysis.</td></tr>
+            <tr><td><code>minEventsThreshold</code></td><td>3</td><td>Min distinct consumption events to qualify — a WO issue (261) or a cost-centre issue (201) each counts as one. Screens out high-qty / few-event materials. Applied <em>with</em> the qty threshold (a material must pass both); 0 = off. (APP-E9)</td></tr>
             <tr><td><code>hcePctThreshold</code> / <code>hceMultThreshold</code></td><td>0.50 / 3.0</td><td>HCE triggers: ≥50% of period total, or ≥3× the average WO.</td></tr>
             <tr><td><code>lumpyCvThreshold</code> / <code>lumpyTopWoThreshold</code></td><td>1.2 / 0.40</td><td>LUMPY triggers: CV &gt; 1.2, or a single WO ≥ 40% of total.</td></tr>
             <tr><td><code>invAdjSigmaThreshold</code></td><td>5</td><td>σ above the daily mean to flag a cycle-count / Inv-Adj date.</td></tr>

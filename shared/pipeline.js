@@ -46,6 +46,11 @@
    */
   function netConsumptionByMaterial(transactions, materialDescIndex){
     const agg = new Map();
+    // APP-E9 — distinct consumption events per material. An event is a
+    // work-order issue (261, keyed by its order) OR a cost-centre issue
+    // (201 / order-less issue, keyed by posting date so same-day line-item
+    // splits collapse to one event). Drives the minEventsThreshold screen.
+    const evMap = new Map();
     for (const r of transactions) {
       const m = String(r.material || '').trim();
       if (!m) continue;
@@ -54,11 +59,17 @@
       const q = Math.abs(parseFloat(r.quantity) || 0);
 
       const cur = agg.get(m) || { net: 0, qty261: 0, tx261: 0, qty262: 0 };
-      if (ISSUE_TYPES.has(mt))   { cur.net += q; cur.qty261 += q; if (mt === '261') cur.tx261++; }
+      if (ISSUE_TYPES.has(mt)) {
+        cur.net += q; cur.qty261 += q; if (mt === '261') cur.tx261++;
+        let ev = evMap.get(m); if (!ev) { ev = new Set(); evMap.set(m, ev); }
+        const o = String(r.order || '').trim();
+        ev.add(o ? ('WO|' + o) : ('CC|' + String(r.postingDate || '').trim()));
+      }
       if (RETURN_TYPES.has(mt))  { cur.net -= q; cur.qty262 += q; }
       agg.set(m, cur);
     }
-    // Attach description (first non-null seen) from the index if available
+    // Attach event count (and description, first non-null seen) per material.
+    for (const [m, v] of agg) v.eventCount = (evMap.get(m) ? evMap.get(m).size : 0);
     if (materialDescIndex) {
       for (const [m, v] of agg) v.description = materialDescIndex.get(m) || '';
     }
@@ -727,12 +738,19 @@
 
     const summary = { GREEN:0, BLUE:0, ORANGE:0, RED:0, GREY:0, PURPLE:0, total: 0 };
 
+    // APP-E9 — second screen: minimum distinct consumption events (WO 261 or
+    // cost-centre 201). Absent on legacy assessments → 0 (off) so re-runs are
+    // unchanged; new intakes carry the factory default (3) from the schema.
+    const minEvents = (typeof params.minEventsThreshold === 'number' && params.minEventsThreshold > 0)
+                        ? params.minEventsThreshold : 0;
+
     for (const bucket of buckets) {
       const desc = buildMaterialDescIndex(bucket.transactions);
       const net  = netConsumptionByMaterial(bucket.transactions, desc);
       const qualifying = [];
       for (const [mat, agg] of net) {
         if (agg.net < threshold) continue;
+        if (agg.eventCount < minEvents) continue;   // APP-E9 — min consumption events screen
         qualifying.push({ material: mat, description: agg.description, totalNet: agg.net });
       }
       qualifying.sort((a, b) => b.totalNet - a.totalNet);

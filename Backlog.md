@@ -7,7 +7,7 @@
 
 ## Deferred / queued (new)
 - **APP-E21b** — implement the memory-bloat reduction per the APP-E21 findings: drop the unused `cumulative` field (safe); MB51 column-prune at parse (needs field-usage audit); lazy `stockOnHandSeries` (medium). NOT safe: blanking `data.*` from the handoff (breaks the analysis re-run + Inv-Adj σ math).
-- **APP-E9 (#22)** — events-vs-qty screening + consolidated pre-run warnings panel. Sizable multi-file build (new `minEventsThreshold` param + ignore toggles + warnings panel + pipeline screening). Design decisions to confirm before building (see session notes).
+- **APP-E9 (#22)** — ✅ BUILT + verified (2026-06-25). Scoped down per operator to a simple screening parameter (no warnings panel, no toggles): `minEventsThreshold` (default 3) beside the qty threshold; event = WO (261) OR cost-centre (201) issue. canonical-schema + pipeline + settings + intake + manual. Unpushed at time of writing → see push status.
 
 ## Needs an operator decision
 - **APP-E8 PURPLE-PD nuance** — A Working-Redundant (PURPLE) PD item that carries a recommended Min/Max now also gets the "reclassify to V1" flag/note, on top of its "review for destocking" action. Confirm this is wanted, or scope the reclass flag to RED rule-6 only.

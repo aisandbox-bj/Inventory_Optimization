@@ -379,6 +379,26 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-E9 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-E9 · Min-consumption-events screening parameter (alongside the qty threshold)</h4>
+      <ul>
+        <li><b>Why.</b> Operator: many materials have high issued quantity but only 1–2 consumption events — they can't be reliably Min/Maxed. Add a second screening input next to the qty threshold so those are screened out of the analysis. <em>Scoped down from the original tile by operator direction: no warnings panel, no ignore toggles — just the screening parameter.</em></li>
+        <li><b>What it does.</b> New parameter <code>minEventsThreshold</code> (factory default 3) sits beside the existing qty <code>threshold</code> (default 10) on both the Settings → Parameter defaults grid and the intake Step 5 grid (label "Min consumption events"). A material qualifies for analysis only if net consumption ≥ threshold AND distinct consumption events ≥ minEventsThreshold.</li>
+        <li><b>What counts as an event (operator-confirmed).</b> A work-order issue (movement 261, keyed by its order) <b>OR</b> a cost-centre issue (movement 201 / order-less issue, keyed by posting date so same-day line-item splits collapse to one event). Both WO and CC events count toward the total.</li>
+        <li><b>Implementation.</b> <code>shared/canonical-schema.js</code> (FACTORY_DEFAULTS + PARAMETER_DESCRIPTIONS); <code>shared/pipeline.js</code> — <code>netConsumptionByMaterial()</code> now returns <code>eventCount</code> per material and the qualifying filter adds the events screen; <code>settings/settings.js</code> + <code>intake/intake.js</code> param grids get the box; the intake Step-6 scope summary mirrors the screen so its count matches what the pipeline will analyse (transparency — screened materials show as a reduced count, never a silent drop). Manual §12.1 row added.</li>
+        <li><b>Back-compat.</b> Absent on legacy assessment JSONs → treated as 0 (screen off), so re-runs are unchanged; new intakes carry the factory default 3. No SCHEMA_VERSION bump (additive parameter).</li>
+        <li><b>Verified.</b> Real <code>runPipeline</code> on a synthetic set: FEWEVT (net 100, one WO = 1 event) and CCFEW (net 16, two same-day CC = 1 event) screened OUT at minEvents 3; MANYEVT (3 WOs) and MIXEVT (1 WO + 2 CC = 3 events) qualified — confirming WO+CC both count and same-day CC collapses. minEvents 0 → all qualify (off). Settings box renders default 3; analysis/settings/intake load with zero console errors. Snapshot at <code>_rollback/APP-E9-pre/</code>.</li>
+        <li><b>Files touched.</b> canonical-schema.js, pipeline.js, settings.js, intake.js, user-manual.html.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-E21 (investigation) ───────── -->
     <article class="roc-entry dev">
       <div class="head">

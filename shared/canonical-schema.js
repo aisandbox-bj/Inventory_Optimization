@@ -24,6 +24,7 @@
     minMonths:              3,
     maxMonths:              6,
     threshold:              10,
+    minEventsThreshold:     3,                      // APP-E9 (2026-06-25): min distinct consumption events (a WO 261 issue OR a cost-centre 201 issue) a material needs to qualify. Screens out high-qty / few-event materials that can't be reliably Min/Maxed. 0 = off.
     hcePctThreshold:        0.50,                   // 50% of period total
     hceMultThreshold:       3.0,                    // 3× avg WO qty
     lumpyCvThreshold:       1.2,
@@ -65,6 +66,7 @@
     minMonths:           'Months of consumption the recommended <b>Min</b> should cover (only used in monthsBased method).',
     maxMonths:           'Months of consumption the recommended <b>Max</b> should cover (only used in monthsBased method).',
     threshold:           'Minimum net consumption (units) over the analysis window for a material to qualify for analysis.',
+    minEventsThreshold:  'Minimum number of distinct <b>consumption events</b> a material needs over the window to qualify — a work-order issue (261) or a cost-centre issue (201) each counts as one event. Screens out high-quantity / few-event materials that can\'t be reliably Min/Maxed. Set to 0 to disable. Applied alongside the quantity Threshold above (a material must pass <em>both</em>).',
     hcePctThreshold:     'Single WO ≥ this share of the period total flags as a <b>High Consumption Event</b> (one-off spike — e.g. rebuild).',
     hceMultThreshold:    'Single WO ≥ this many times the average WO quantity also flags as an HCE.',
     lumpyCvThreshold:       'Coefficient of variation above this classifies a material as <b>LUMPY</b> (clustered demand, not steady draw-down).',
