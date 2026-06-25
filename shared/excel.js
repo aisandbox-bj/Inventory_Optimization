@@ -512,6 +512,16 @@
       r++;
     });
 
+    // APP-E8 — MRP reclass note (PD → V1) when a Min/Max is recommended on a PD item
+    if (m.mrpReclassRecommended && m.mrpReclassNote) {
+      const noteRow = ws.getRow(r);
+      noteRow.getCell(2).value = '⚑ ' + m.mrpReclassNote;
+      noteRow.getCell(2).font = { name:'Calibri', size:9, italic:true, color:{ argb:'FF926E0A' } };
+      noteRow.getCell(2).alignment = { horizontal:'left', vertical:'middle', wrapText:true };
+      try { ws.mergeCells(r, 2, r, 4); } catch(e) {}
+      r++;
+    }
+
     // Embedded chart at col F (index 5 → ExcelJS col 6 zero-indexed = 5), row 1 (row index 1)
     try {
       const png = await renderChartPng(m);

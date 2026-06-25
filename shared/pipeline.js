@@ -890,11 +890,32 @@
                           ? Math.round((stock / p2r) * 10) / 10
                           : null;
 
-        // Recommended MRP type: V1 (consumption-driven) for LUMPY / HCE patterns where
-        // a fixed Min/Max is a poor fit; otherwise mirror the current setting.
-        const recMrpType = (pattern === 'LUMPY' || (hceP2 && hceP2.length))
+        // ── APP-E8 · MRP type vs Min/Max applicability ───────────────────
+        // Min/Max settings only operate under MRP type V1; PD cannot legitimately
+        // hold Min/Max. Min/Max is still computed for ALL materials (PD included) —
+        // so when the algorithm recommends a Min/Max for a PD material we must ALSO
+        // recommend reclassifying its MRP type to V1. This SURFACES misclassified
+        // PD items (the whole point) rather than excluding/hiding them. LUMPY / HCE
+        // patterns also point at V1 (a fixed Min/Max is a poor fit for them).
+        const _curMrp       = String(mrpType || '').trim().toUpperCase();
+        const _hasRecMinMax = (tl.recMin != null || tl.recMax != null);
+        const recMrpType = ((_curMrp === 'PD' && _hasRecMinMax) || pattern === 'LUMPY' || (hceP2 && hceP2.length))
                               ? 'V1'
                               : (mrpType || 'PD');
+        // Reclass recommended only when we're changing the MRP type AND there is a
+        // Min/Max to apply under it — the operator-stated trigger: "a Min/Max
+        // recommendation means the MRP type must become V1, because PD cannot hold
+        // Min/Max." Surfaces every misclassified PD → V1 candidate.
+        const mrpReclassRecommended = _hasRecMinMax && !!_curMrp
+                                       && String(recMrpType).trim().toUpperCase() !== _curMrp;
+        const mrpReclassNote = mrpReclassRecommended
+          ? `${mrpType} cannot hold Min/Max — reclassify MRP type to V1 to apply the recommended Min/Max.`
+          : null;
+        // Display-ready token for the analysis list column + set filter (clean,
+        // operator-facing). null → renders as '—' and filters out of the set.
+        const mrpRecFlag = mrpReclassRecommended
+          ? `${_curMrp} → V1`
+          : null;
 
         // v2.1.0 signal fields — netSign / daysSinceLastIssue use the
         // _issuesQty / _returnsQty / _lastIssueDate computed up top.
@@ -960,6 +981,9 @@
           recMin:       tl.recMin,
           recMax:       tl.recMax,
           recMrpType,
+          mrpReclassRecommended,                   // APP-E8 — true when a Min/Max is recommended on a PD item → reclassify to V1
+          mrpReclassNote,                          // APP-E8 — plain-English reclass note, or null
+          mrpRecFlag,                              // APP-E8 — display token ('PD → V1') for list column + set filter, or null
           runway,                                  // months of cover at P2 rate
           woCount,                                 // unique issuing work orders in window
           fewEvents:    !!tl.fewEvents,            // true if few-events overlay tripped

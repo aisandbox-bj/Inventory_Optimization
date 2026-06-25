@@ -233,6 +233,7 @@
     { k:'recMin',       l:'Rec Min',     type:'num',  picker:'range' },
     { k:'recMax',       l:'Rec Max',     type:'num',  picker:'range' },
     { k:'mrpType',      l:'MRP',         type:'text', picker:'set'   },
+    { k:'mrpRecFlag',   l:'Reclass',     type:'text', picker:'set'   },
     { k:'pattern',      l:'Pattern',     type:'text', picker:'set'   }
   ];
 
@@ -332,6 +333,7 @@
         <td class="num">${m.recMin ?? '—'}</td>
         <td class="num">${m.recMax ?? '—'}</td>
         <td class="num" style="color:var(--text-muted)">${escapeHtml(m.mrpType || '—')}</td>
+        <td class="num">${m.mrpRecFlag ? `<span class="mrp-reclass" title="${escapeAttr(m.mrpReclassNote || '')}">${escapeHtml(m.mrpRecFlag)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${escapeHtml(m.pattern || '—')}</td>
       </tr>`;
     }).join('');
@@ -783,6 +785,7 @@
           <h4>MRP Settings · Current vs Recommended</h4>
           <span class="hint">Yellow rows = recommendation differs from current. Safety Stock is informational (not modelled in v2 algorithm).</span>
         </div>
+        ${mat.mrpReclassRecommended ? `<div class="mrp-reclass-note">⚑ ${escapeHtml(mat.mrpReclassNote || '')}</div>` : ''}
         <table class="mrp-compare-table">
           <thead>
             <tr>
@@ -1377,6 +1380,16 @@
       margin: { left: M, right: M }
     });
     y = doc.lastAutoTable.finalY + 4;
+
+    // ── APP-E8 · MRP reclass note (PD → V1) when a Min/Max is recommended ─
+    if (m.mrpReclassRecommended && m.mrpReclassNote && y < H - 30) {
+      const pageW = doc.internal.pageSize.getWidth();
+      doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(146, 110, 10);
+      const noteLines = doc.splitTextToSize('⚑ ' + m.mrpReclassNote, pageW - 2 * M);
+      doc.text(noteLines, M, y + 1);
+      doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'normal');
+      y += noteLines.length * 4 + 3;
+    }
 
     // ── HCE events table (if any) ────────────────────────────────────────
     if (m.hceP2 && m.hceP2.length && y < H - 50) {

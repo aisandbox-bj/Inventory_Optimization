@@ -841,6 +841,19 @@
 }
 .mrp-compare-table tr.changed td.rec{ color:var(--status-warn); }
 
+/* ─── APP-E8 · MRP reclass (PD → V1) surfacing ──────────────────────────── */
+.mrp-reclass{
+  font-family:var(--font-mono); font-size:12px; font-weight:700;
+  letter-spacing:.4px; color:var(--status-warn); white-space:nowrap;
+}
+.mrp-reclass-note{
+  margin:6px 14px 2px; padding:7px 11px;
+  border-left:3px solid var(--status-warn);
+  background:rgba(241,196,15,0.08);
+  font-family:var(--font-body); font-size:12px; line-height:1.45;
+  color:var(--text-pri);
+}
+
 /* ─── Inventory Adjustment Review modal (v2.0) ──────────────────────────── */
 .ia-summary{
   display:grid;

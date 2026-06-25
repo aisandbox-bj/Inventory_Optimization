@@ -102,6 +102,8 @@
       recMin:       (material.recMin != null) ? material.recMin : '—',
       recMax:       (material.recMax != null) ? material.recMax : '—',
       recMrpType:   material.recMrpType || '—',
+      mrpReclassRecommended: !!material.mrpReclassRecommended,   // APP-E8 — PD→V1 reclass flagged
+      mrpReclassNote:        material.mrpReclassNote || '—',     // APP-E8 — reclass rationale (annotation only; math already decided)
       trafficLight: material.trafficLight,
       action:       material.action,
       // APP-E1 tokens — surface stockout diagnostic to the prompt template

@@ -379,6 +379,64 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-VER ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-VER · Sync nav version label to v2.1.3-dev on index / intake / analysis</h4>
+      <ul>
+        <li><b>Why.</b> Those three pages still stamped <code>v2.0.0-dev</code> (BUILD-STAMP, <code>&lt;meta app-version&gt;</code>, and the visible nav chip) while trace / RoC / manual already read <code>v2.1.3-dev</code> — an internally inconsistent label.</li>
+        <li><b>What changed.</b> On <code>index.html</code>, <code>intake/intake.html</code>, <code>analysis/analysis.html</code>: BUILD-STAMP version → <code>v2.1.3-dev (dev tip; last released tag v2.1.1)</code>, the Tag reference → v2.1.1, and the <code>app-version</code> meta + nav chip → <code>2.1.3-dev</code>. The whole app shell now reads one version. No code/behaviour change.</li>
+        <li><b>Files touched.</b> index.html, intake/intake.html, analysis/analysis.html.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-DOC-MANUAL ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-DOC-MANUAL · User manual rebuilt to the full v2.1.3-dev surface</h4>
+      <ul>
+        <li><b>Why.</b> <code>user-manual.html</code> was stranded at the <code>v2.0.0-dev</code> era (last touched 2026-05-17) and predated a large body of shipped work — the entire Calibre Trace sibling page, the Inventory Master Fiori migration, PR History intake, multi-plant infrastructure, the APP-E1 stock-on-hand back-calc + stockout-aware drop detection, and APP-E8. It was "way out of date."</li>
+        <li><b>What changed.</b> Full rebuild (13 → 15 sections). Updates throughout: version stamp → <code>2.1.3-dev</code>; data-files now cover MB51 movement 109 + plant + purchaseOrder, the Inventory Master Fiori fields, and PR History; the data-alignment gate (APP-E6) and manual materials-OR-work-orders list (APP-E22). New methodology subsection <b>7c · Stock-on-hand back-calc &amp; stockout-aware drop</b> (APP-E1/E11/E16/BACKCALC-TZ); <b>7g</b> rewritten for the APP-E8 PD→V1 reclass; <b>7h</b> decision tree updated (stockout-dominated rule 0). Charts section adds the violet SOH line, red stockout wash bands, and last-consumption marker. Two brand-new sections: <b>12 · Settings reference</b> (all 7 sections + factory defaults) and <b>13 · Calibre Trace</b> (scope, the four live views, chain state machine, filters, diagnostics, queued views).</li>
+        <li><b>Verified.</b> Browser load — zero console errors; 15 sections present and ordered; every TOC anchor (incl. the deep methodology links) resolves; <code>&lt;meta app-version&gt;</code> + nav chip read <code>2.1.3-dev</code>. Snapshot of the prior manual at <code>_rollback/MANUAL-REBUILD-pre/user-manual.html</code>.</li>
+        <li><b>Files touched.</b> <code>user-manual.html</code> only. No code, no schema change.</li>
+        <li><b>Note.</b> The nav <code>v2.0.0-dev</code> label that was on index/intake/analysis has now been synced to <code>v2.1.3-dev</code> — see APP-FIX-VER above.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-E8 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-E8 · MRP type vs Min/Max applicability — recommend PD → V1 when a Min/Max is warranted</h4>
+      <ul>
+        <li><b>Problem / requirement (operator-corrected this session).</b> Min/Max settings only operate under SAP MRP type <code>V1</code>; a <code>PD</code> material cannot legitimately hold Min/Max. The original roadmap framing said "when MRP type is PD, omit the Min/Max recommendation" — that is <em>wrong and was reversed by the operator</em>: Min/Max must still be computed for <strong>all</strong> materials, <em>especially</em> PD items that are misclassified in SAP, because those are exactly what we need to surface. The correct behaviour: when the algorithm produces a Min/Max recommendation for a PD item, the tool must <strong>also recommend reclassifying the MRP type to V1</strong> — never hide the signal by dropping the recommendation.</li>
+        <li><b>Implementation — <code>shared/pipeline.js</code> (deterministic; LLM untouched).</b><br>
+          (1) <code>recMrpType</code> now resolves to <code>V1</code> when a Min/Max is recommended (<code>recMin != null || recMax != null</code>) on a current-<code>PD</code> material — in addition to the existing LUMPY / HCE → V1 cases. Min/Max computation itself is unchanged (it already ran for every material — nothing was ever excluded).<br>
+          (2) New derived output fields on each material: <code>mrpReclassRecommended</code> (bool — true only when we are changing the MRP type AND there is a Min/Max to apply under it), <code>mrpReclassNote</code> (plain-English rationale), and <code>mrpRecFlag</code> (display token "PD → V1" for the list column + set filter).</li>
+        <li><b>Surfacing (all read the same verified fields).</b> <code>analysis/analysis.js</code>: new filterable <strong>"Reclass"</strong> list column (set picker → isolate every PD → V1 candidate in one click) and a reclass note banner in the material-detail MRP comparison (the MRP-type row already flags yellow since current ≠ recommended). <code>shared/excel.js</code>: per-material MRP comparison already shows the V1 recommendation; a note row was added. PDF pack (in <code>analysis.js</code>): note line under the MRP comparison table. <code>shared/llm.js</code>: <code>mrpReclassRecommended</code> + <code>mrpReclassNote</code> added to the prompt context (annotation only — the math already decided; no client identifiers added).</li>
+        <li><b>Scope &amp; a nuance flagged for sign-off.</b> By the existing decision tree, only PD (RED rule-6, and PURPLE Working-Redundant) and V1 carry a Min/Max; all other MRP types fall to GREY with no Min/Max, so the reclass recommendation is naturally PD-only. A <strong>PURPLE</strong> (Working-Redundant) PD item that carries a recommended Min/Max also now receives the reclass flag/note — its primary "review for destocking" action is preserved, and the note simply adds "if you do set these Min/Max, it must be under V1." Confirm this is the desired behaviour for PURPLE-PD items.</li>
+        <li><b>No SCHEMA_VERSION bump.</b> <code>recMrpType</code>/<code>mrpReclass*</code>/<code>mrpRecFlag</code> are derived per-material analysis outputs; the canonical intake JSON shape is unchanged. <code>APP_VERSION</code> stays <code>2.1.3-dev</code>.</li>
+        <li><b>How it was verified.</b> No Node in this environment, so the <code>node --check</code> syntax gate was substituted by a clean browser load (analysis.html + all edited modules, <strong>zero console errors</strong>). A synthetic dataset was run through the real <code>AppPipeline.runPipeline</code>: a PD material warranting Min/Max returned <code>tl=RED, recMin=30, recMax=60, mrpType=PD, recMrpType=V1, mrpReclassRecommended=true, mrpRecFlag="PD → V1"</code>; a V1 control returned no reclass (<code>mrpRecFlag=null</code>). The list "Reclass" column and the detail-panel note rendered correctly in the live UI.</li>
+        <li><b>Files touched.</b> <code>shared/pipeline.js</code>, <code>analysis/analysis.js</code>, <code>analysis/analysis.css</code>, <code>shared/excel.js</code>, <code>shared/llm.js</code>. Snapshot at <code>_rollback/APP-E8-pre/</code>.</li>
+        <li><b>Rollback.</b> Restore the five files from <code>_rollback/APP-E8-pre/</code>. <code>recMrpType</code> reverts to mirroring the current MRP type (except LUMPY/HCE), and the Reclass column + notes disappear.</li>
+        <li><b>Related but NOT in this change (surfaced, not hidden).</b> The nav header on <code>index.html</code>, <code>intake.html</code>, and <code>analysis.html</code> still shows <code>v2.0.0-dev</code> (3 spots each: HTML comment, <code>&lt;meta app-version&gt;</code>, visible nav label), while <code>trace.html</code> and this RoC correctly read <code>v2.1.3-dev</code>. Stale version label only — no functional impact. Queued as a separate tweak pending operator go-ahead.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-FIX-VOL-CANCEL ───────── -->
     <article class="roc-entry dev">
       <div class="head">
