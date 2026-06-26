@@ -1156,7 +1156,12 @@
   function renderYoY(host, material){
     state.chains = computeChainsForMaterial(material);
     const ex     = allExcl(state.chains, material);
-    const acAll  = state.chains.filter(c => !ex.has(c.pr));   // ignore yearFilter; respect manual + sigma
+    // APP-FIX-YOY-CALC (2026-06-26) — average over COMPLETED chains only (those
+    // that reached Site WH = received POs), matching the Phase Distribution view.
+    // Previously this used every non-excluded chain incl. PR-only / cancelled /
+    // in-flight, whose un-happened phases compute as 0 days — that dragged every
+    // mean toward zero and made the per-year "n" count PRs, not POs.
+    const acAll  = state.chains.filter(c => !ex.has(c.pr) && !!c.siteWH);   // completed only; ignore yearFilter; respect manual + sigma
 
     // Shared filter toolbar (same construction as the other views). Year buttons
     // are shown for consistency but DON'T change this view — noted in the sub.
@@ -1197,7 +1202,7 @@
         <div class="pd-empty">
           <div class="pd-empty-lab">No year data</div>
           <h3>Nothing to compare for material ${escapeHtml(material)}</h3>
-          <p>The active set has no chains with phase durations. Check the sigma / manual exclusions, or switch to Raw Data to inspect what's there.</p>
+          <p>There are no <b>completed</b> chains (none reached Site WH), so there are no full phase durations to average year-on-year. Check the sigma / manual exclusions, or switch to Raw Data to inspect what's there.</p>
         </div>`;
       bindFilterBar(material);
       return;
@@ -1208,7 +1213,7 @@
       <div class="yoy-host">
         <div class="yoy-head">
           <span class="yoy-title">Year-over-Year — phase distribution</span>
-          <span class="yoy-sub">${yrNums.join(' vs ')} · active chains only · exclusions respected · the year filter is ignored here</span>
+          <span class="yoy-sub">${yrNums.join(' vs ')} · completed chains only (reached site, i.e. received POs) · exclusions respected · the year filter is ignored here</span>
         </div>
         <div class="yoy-legend"><b>Year-on-year direction:</b>
           <span style="color:#EF4444">▲ slower (worse)</span> ·
@@ -1256,10 +1261,16 @@
     const plotW = W - padL - padR;
     const slotW = plotW / n;
 
-    // Y scale — Tukey upper fence across ALL (phase, year) sets so it's fair.
-    const fences = [];
-    phYr.forEach(row => row.forEach(cell => { if (cell.s) fences.push(cell.s.upperFence); }));
-    const yMax = Math.max(Math.max(0, ...fences), 10) * 1.10;
+    // Y scale — max = the total average duration (sum of per-phase pooled means
+    // across both years), no padding factor (operator: drop the 1.x factor so
+    // the scale IS the average total). Boxes/whiskers above this clip and flag
+    // as ↑ off-chart.
+    const pooledMean = phases.map(ph => {
+      const vs = acAll.map(c => c[ph]).filter(v => v != null && Number.isFinite(v));
+      return vs.length ? vs.reduce((s, v) => s + v, 0) / vs.length : 0;
+    });
+    const totalMean = pooledMean.reduce((s, v) => s + v, 0);
+    const yMax = Math.max(totalMean, 10);
     const yMin = 0;
     const yScale = v => padT + (1 - (v - yMin) / (yMax - yMin)) * (H - padT - padB);
 
@@ -1285,7 +1296,7 @@
     // Top legend: active count + outlier note + year swatches
     const counts = yrNums.map(yr => acAll.filter(c => Number(getChainYear(c)) === yr).length);
     ctx.fillStyle = 'rgba(31,206,216,.55)'; ctx.textAlign = 'left'; ctx.font = '10px "JetBrains Mono",monospace';
-    ctx.fillText(`${acAll.length} active chains  ·  ↑ outliers above ${Math.round(yMax)} d (off-chart)`, padL, 18);
+    ctx.fillText(`${acAll.length} completed chains  ·  scale = avg total ${Math.round(yMax)} d  ·  ↑ = above scale`, padL, 18);
     let swX = Math.max(padL + 220, W - padR - yrNums.length * 96);
     yrNums.forEach((yr, i) => {
       ctx.fillStyle = yrColor[yr]; ctx.fillRect(swX, 11, 10, 10);
@@ -1322,8 +1333,13 @@
           if (s.mean <= yMax) {
             ctx.strokeStyle = col; ctx.lineWidth = 2.5; const yMean = yScale(s.mean);
             ctx.beginPath(); ctx.moveTo(cx - bw / 2, yMean); ctx.lineTo(cx + bw / 2, yMean); ctx.stroke();
-            ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.font = 'bold 10px "JetBrains Mono",monospace';
-            ctx.fillText(fmt1(s.mean) + 'd', cx, yMean - 7);
+            // Mean value OUTSIDE the box (operator: hard to read on the box) — the
+            // first year's label sits to the left of its box, later years to the
+            // right, at mean height, clear of the box fill.
+            ctx.fillStyle = col; ctx.font = 'bold 10px "JetBrains Mono",monospace';
+            const side = (yi === 0) ? -1 : 1;
+            ctx.textAlign = side < 0 ? 'right' : 'left';
+            ctx.fillText(fmt1(s.mean) + 'd', cx + side * (bw / 2 + 5), yMean + 3);
           }
 
           ctx.font = '8.5px "JetBrains Mono",monospace'; ctx.fillStyle = col + 'CC'; ctx.textAlign = 'center';

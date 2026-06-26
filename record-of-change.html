@@ -380,6 +380,25 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-YOY-CALC ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-YOY-CALC · Year-on-Year averaged over all PRs (incl. incomplete) instead of completed POs — corrected</h4>
+      <ul>
+        <li><b>Symptom (operator).</b> The YoY box-plot means were far lower than the Phase Distribution view for the same material, and the per-year "n" looked too big — e.g. YoY showed n=29 (2025) / 48 (2026) where Phase Distribution averaged "11 chains". The operator's read was exactly right: <em>"average should be by number of POs, not PRs."</em> A numbers-don't-reconcile signal (credibility principle) → investigated, not papered over.</li>
+        <li><b>Root cause.</b> <code>renderYoY</code> averaged over <b>every non-excluded chain</b> — including PR-only, cancelled, and in-flight chains. Those chains' un-happened phases compute as <b>0 days</b> (<code>days()</code> returns 0 when an endpoint date is missing), so they dragged every phase mean toward zero and made the per-year count tally <b>PRs, not completed POs</b>. The Phase Distribution view was always correct because it averages over <code>drawn</code> = chains that reached Site WH.</li>
+        <li><b>Fix.</b> YoY now averages over <b>completed chains only</b> (<code>!!c.siteWH</code> = received POs), matching Phase Distribution. The per-year "n" is now the completed-chain count, and the per-year means pool back to the Phase Distribution means.</li>
+        <li><b>Readability (bundled, operator asks).</b> (B) The mean value moved <b>outside the box</b> (first year's label to the left, later years to the right, at mean height) — it was hard to read on the box. (D) The y-axis max is now the <b>total average duration</b> (sum of per-phase pooled means), dropping the old ×1.10 padding factor; boxes/whiskers above the scale clip and flag as <b>↑</b> off-chart.</li>
+        <li><b>Verified (live preview, probe vs Phase Distribution).</b> Material 1000640: Phase Distribution pooled means over 24 completed chains = B 7.1 / C 16.5 / D 8.0; <b>fixed</b> YoY per-year (2025 n=22, 2026 n=2) pools right back to those. The <b>old</b> path gave B 4.9 / C 12.4 with n=31+5 (all PRs). Same reconciliation on 1003380. Live YoY sub now reads "completed chains only (reached site, i.e. received POs)"; zero console errors.</li>
+        <li><b>Files.</b> <code>trace/trace.js</code> (<code>renderYoY</code> chain filter + <code>drawYoYCanvas</code> scaling + mean-label). Snapshot: <code>_rollback/APP-FIX-YOY-CALC-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-6 ───────── -->
     <article class="roc-entry dev">
       <div class="head">
