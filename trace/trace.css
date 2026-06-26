@@ -1048,3 +1048,15 @@
   padding: 8px;
   margin-bottom: 10px;
 }
+/* APP-V03-PORT-6b — per-year total-timeline chevrons above the YoY box plots */
+.yoy-chevrons{ margin: 4px 0 12px; }
+.yoy-chevrons-lab{ font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.yoy-chev{ display: flex; align-items: stretch; gap: 10px; margin-bottom: 8px; }
+.yoy-chev .pd-chevron-bar{ flex: 1 1 auto; min-width: 0; }
+.yoy-chev-year{
+  flex: 0 0 auto; min-width: 50px;
+  display: flex; flex-direction: column; justify-content: center; line-height: 1.1;
+  font-family: var(--font-mono); font-weight: 700; font-size: 14px;
+  border-left: 3px solid; padding-left: 8px;
+}
+.yoy-chev-year small{ font-weight: 400; font-size: 9px; color: var(--text-muted); }

@@ -238,9 +238,12 @@
     return ticks;
   }
 
-  // SVG box plot — vertical. APP-FIX-PD-POLISH (A): all five plots share one
-  // y-domain (yMaxShared) so phase durations compare visually; outliers above
-  // the Tukey fence are clipped and flagged numerically.
+  // SVG box plot — vertical. APP-E-PD-RESTYLE (2026-06-26): carries the YoY
+  // box-and-whisker visual style — whiskers to min/max, IQR box, the MEAN as the
+  // bold headline line with its value labelled beside the box, jittered data
+  // points, min/max labels, and ↑ markers for values above the shared scale
+  // (yMaxShared = the average total LT; values above it clip). Needs p.vals (the
+  // raw per-phase durations) for the jittered points + above-scale count.
   function renderBoxPlotSvg(p, yMaxShared){
     const W = 168, H = 220, PAD_T = 14, PAD_B = 50, PAD_L = 36, PAD_R = 12;
     const innerH = H - PAD_T - PAD_B;
@@ -252,12 +255,14 @@
       </div>`;
     }
     const s = p.stats;
+    const vals = (p.vals || []).filter(v => v != null && Number.isFinite(v));
     const yMax = yMaxShared || (Math.max(s.upperFence, s.q3 + 1, 1) * 1.06);
-    const yScale = (v) => PAD_T + innerH - (v / yMax) * innerH;
+    const clamp = v => Math.min(v, yMax);
+    const yScale = (v) => PAD_T + innerH - (clamp(v) / yMax) * innerH;
     const boxX = PAD_L + innerW / 2 - 18;
     const boxW = 36;
     const midX = PAD_L + innerW / 2;
-    const whiskerW = 18;
+    const capW = 16;
 
     const ticks = niceTicks(0, yMax, 4);
     const tickMarks = ticks.map(t => `
@@ -265,34 +270,41 @@
       <text x="${PAD_L - 4}" y="${yScale(t) + 3}" text-anchor="end" fill="#9BABA8" font-family="JetBrains Mono, monospace" font-size="9">${t}</text>
     `).join('');
 
-    const outlierMarkers = s.outliers.length
-      ? `<g class="pd-outliers" transform="translate(${midX}, ${PAD_T - 4})">
-          <text x="0" y="0" text-anchor="middle" fill="#f4c14a" font-family="JetBrains Mono, monospace" font-size="13" font-weight="600">↑ ${s.outliers.length}</text>
-        </g>`
+    const meanOn    = s.mean <= yMax;
+    const aboveScale = vals.filter(v => v > yMax).length;
+    const dots = vals.filter(v => v <= yMax).map((v, i) => {
+      const jx = midX + Math.sin(i * 1.7) * boxW * 0.30;     // deterministic jitter (stable across re-renders)
+      return `<circle cx="${jx.toFixed(1)}" cy="${yScale(v).toFixed(1)}" r="1.8" fill="${p.color}" fill-opacity="0.5"/>`;
+    }).join('');
+    const outlierMarkers = aboveScale
+      ? `<text x="${midX}" y="${PAD_T - 2}" text-anchor="middle" fill="#f4c14a" font-family="JetBrains Mono, monospace" font-size="12" font-weight="600">↑ ${aboveScale}</text>`
       : '';
+    const boxTopY = yScale(s.q3), boxBotY = yScale(s.q1);
 
     return `<div class="pd-plot" data-phase="${p.key}">
       <div class="pd-plot-title" style="border-color:${p.color}"><span class="pd-plot-code">${p.key}</span><span class="pd-plot-name">${p.label}</span></div>
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" class="pd-plot-svg">
         ${tickMarks}
-        <!-- Whiskers -->
-        <line x1="${midX}" x2="${midX}" y1="${yScale(s.whiskerUpper)}" y2="${yScale(s.q3)}" stroke="${p.color}" stroke-width="1.5"/>
-        <line x1="${midX}" x2="${midX}" y1="${yScale(s.q1)}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.5"/>
-        <line x1="${midX - whiskerW/2}" x2="${midX + whiskerW/2}" y1="${yScale(s.whiskerUpper)}" y2="${yScale(s.whiskerUpper)}" stroke="${p.color}" stroke-width="1.5"/>
-        <line x1="${midX - whiskerW/2}" x2="${midX + whiskerW/2}" y1="${yScale(s.min)}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.5"/>
-        <!-- Box -->
-        <rect x="${boxX}" y="${yScale(s.q3)}" width="${boxW}" height="${yScale(s.q1) - yScale(s.q3)}" fill="${p.color}" fill-opacity="0.22" stroke="${p.color}" stroke-width="1.5" rx="2"/>
-        <!-- Median line -->
-        <line x1="${boxX}" x2="${boxX + boxW}" y1="${yScale(s.q2)}" y2="${yScale(s.q2)}" stroke="${p.color}" stroke-width="2.5"/>
-        <!-- Mean marker (hollow circle) + value label on the plot -->
-        <circle cx="${midX}" cy="${yScale(s.mean)}" r="3.5" fill="rgba(8,12,20,.96)" stroke="${p.color}" stroke-width="1.5"/>
-        <text x="${boxX + boxW + 4}" y="${yScale(s.mean) + 3}" text-anchor="start" fill="${p.color}" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600">${s.mean.toFixed(1)}</text>
+        <!-- Whiskers to min / max (clipped at scale) -->
+        <line x1="${midX}" x2="${midX}" y1="${yScale(clamp(s.max))}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.3" stroke-opacity="0.55"/>
+        <line x1="${midX - capW/2}" x2="${midX + capW/2}" y1="${yScale(s.min)}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.3" stroke-opacity="0.7"/>
+        ${s.max <= yMax ? `<line x1="${midX - capW/2}" x2="${midX + capW/2}" y1="${yScale(s.max)}" y2="${yScale(s.max)}" stroke="${p.color}" stroke-width="1.3" stroke-opacity="0.7"/>` : ''}
+        <!-- IQR box -->
+        <rect x="${boxX}" y="${boxTopY}" width="${boxW}" height="${Math.max(boxBotY - boxTopY, 0.5)}" fill="${p.color}" fill-opacity="0.18" stroke="${p.color}" stroke-opacity="0.5" stroke-width="1" rx="2"/>
+        <!-- Jittered data points -->
+        ${dots}
+        <!-- Mean as the bold headline line + value beside the box -->
+        ${meanOn ? `<line x1="${boxX - 2}" x2="${boxX + boxW + 2}" y1="${yScale(s.mean)}" y2="${yScale(s.mean)}" stroke="${p.color}" stroke-width="2.5"/>` : ''}
+        ${meanOn ? `<text x="${boxX + boxW + 4}" y="${yScale(s.mean) + 3}" text-anchor="start" fill="${p.color}" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700">${s.mean.toFixed(1)}d</text>` : ''}
+        <!-- Min / max labels -->
+        <text x="${midX}" y="${yScale(s.min) + 11}" text-anchor="middle" fill="${p.color}" fill-opacity="0.8" font-family="JetBrains Mono, monospace" font-size="8">${Math.round(s.min)}d</text>
+        ${s.max <= yMax ? `<text x="${midX}" y="${yScale(s.max) - 4}" text-anchor="middle" fill="${p.color}" fill-opacity="0.8" font-family="JetBrains Mono, monospace" font-size="8">${Math.round(s.max)}d</text>` : ''}
         ${outlierMarkers}
       </svg>
       <div class="pd-plot-foot">
-        <span class="pd-foot-lbl" title="Median">M</span><span class="pd-foot-val">${s.q2.toFixed(1)}d</span>
+        <span class="pd-foot-lbl" title="Completed chains in this phase">n</span><span class="pd-foot-val">${s.n}</span>
         <span class="pd-foot-sep">·</span>
-        <span class="pd-foot-lbl" title="Mean (○)">μ</span><span class="pd-foot-val">on plot</span>
+        <span class="pd-foot-lbl" title="Mean (bold line)">μ</span><span class="pd-foot-val">${s.mean.toFixed(1)}d</span>
       </div>
     </div>`;
   }
@@ -321,12 +333,16 @@
   ═════════════════════════════════════════════════════════════════════════ */
   function renderPhaseVisual(drawn){
     // ── Per-phase stats ───────────────────────────────────────────────────
-    const phaseStats = PHASE_KEYS.map(ph => ({
-      key:   ph,
-      label: PHASE_LABELS[ph],
-      color: PHASE_COLORS[PHASE_KEYS.indexOf(ph)],
-      stats: boxStats(drawn.map(c => c[ph]))
-    }));
+    const phaseStats = PHASE_KEYS.map(ph => {
+      const vals = drawn.map(c => c[ph]).filter(v => v != null && Number.isFinite(v));
+      return {
+        key:   ph,
+        label: PHASE_LABELS[ph],
+        color: PHASE_COLORS[PHASE_KEYS.indexOf(ph)],
+        vals,                              // APP-E-PD-RESTYLE — raw durations for jittered points
+        stats: boxStats(drawn.map(c => c[ph]))
+      };
+    });
 
     // Total LT chevron — APP-FIX-PD-CHEVRON: flow covers A–D (up to site
     // availability); phase E (Time to First Use) split out as a purple shelf
@@ -367,10 +383,11 @@
       </div>
     `;
 
-    // ── Build SVG box plots (uniform y-scale, APP-FIX-PD-POLISH A) ─────────
-    const pdFenceMax = Math.max(0, ...phaseStats.map(p => p.stats ? Math.max(p.stats.whiskerUpper, p.stats.q3) : 0));
-    let pdYMax = Math.ceil((totalMean * 1.2) / 10) * 10;
-    pdYMax = Math.max(pdYMax, Math.ceil(pdFenceMax / 10) * 10, 10);
+    // ── Build SVG box plots ───────────────────────────────────────────────
+    // APP-E-PD-RESTYLE — y-axis max = the total average duration (sum of phase
+    // means), no padding factor (operator: drop the ×1.2). Boxes/whiskers above
+    // this clip and flag as ↑ off-chart, matching the YoY view.
+    const pdYMax = Math.max(totalMean, 10);
     const plotHtml = `
       <div class="pd-plots">
         ${phaseStats.map(p => renderBoxPlotSvg(p, pdYMax)).join('')}
@@ -418,7 +435,7 @@
       ${chevronHtml}
       ${plotHtml}
       ${tableHtml}
-      <div class="chart-caveat">All five plots share one y-axis (scaled to avg total LT + 20%) so phase durations compare directly. Box plots show Q1/Median/Q3 per phase. Whiskers extend to min and to the largest value below the <b>Tukey upper fence</b> (Q3 + 1.5·IQR). Outliers above the fence render as <span class="pd-mark">↑</span> markers above each plot. Mean is a hollow circle with its value labelled on the plot. N is the count of <em>complete</em> chains (those that reached Site WH) within the active filter set.</div>
+      <div class="chart-caveat">All five plots share one y-axis = the <b>average total lead time</b> (sum of the phase means; no padding) so phase durations compare directly. Each box is the IQR (Q1–Q3); whiskers reach min and max; the <b>mean</b> is the bold line with its value beside the box; individual completed chains show as faint dots. Durations above the scale are clipped and flagged with <span class="pd-mark">↑</span> (count above the plot). <b>n</b> per plot is the count of <em>completed</em> chains (those that reached Site WH) in the active filter set.</div>
     `;
   }
 

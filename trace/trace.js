@@ -1208,6 +1208,33 @@
       return;
     }
 
+    // APP-V03-PORT-6b — per-year total-timeline chevrons (phases A–D to site +
+    // shelf E) so the operator can compare the whole timeline year-over-year
+    // above the box plots. Phase-coloured segments (consistent with the Phase
+    // Distribution chevron); the year is labelled on the left.
+    const palette = ['#4FC2D7', '#F87171', '#FBBF24', '#A78BFA', '#5AB69D', '#FB923C'];
+    const yrColor = {}; yrNums.forEach((y, i) => { yrColor[y] = palette[i % palette.length]; });
+    const PK = TracePhase.PHASE_KEYS, PL = TracePhase.PHASE_LABELS, PC = TracePhase.PHASE_COLORS;
+    const meanPh = (chs, ph) => { const v = chs.map(c => c[ph]).filter(x => x != null && Number.isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; };
+    const yoyChevrons = yrNums.map(yr => {
+      const cc = acAll.filter(c => Number(getChainYear(c)) === yr);
+      const m = {}; PK.forEach(ph => { m[ph] = meanPh(cc, ph); });
+      const flowMean = m.A + m.B + m.C + m.D;
+      const segs = PK.filter(k => k !== 'E').map((ph, i) => {
+        const frac = flowMean > 0 ? m[ph] / flowMean : 0;
+        return `<div class="pd-chev-seg" style="flex:${frac || 0.001}; background:${PC[i]}; --pd-chev-fill:${PC[i]};">
+          <div class="pd-chev-inner"><span class="pd-chev-code">${ph}</span><span class="pd-chev-name">${PL[ph]}</span><span class="pd-chev-val">${m[ph].toFixed(1)}d</span></div>
+        </div>`;
+      }).join('');
+      return `<div class="yoy-chev">
+        <span class="yoy-chev-year" style="border-color:${yrColor[yr]}; color:${yrColor[yr]};">${yr}<small>n=${cc.length}</small></span>
+        <div class="pd-chevron-bar">${segs}</div>
+        <div class="pd-chev-total-site" title="Average total processing time to site (phases A–D) for ${yr}."><span class="lab">Total to site</span><span class="v">${flowMean.toFixed(1)}d</span></div>
+        <div class="pd-chev-shelf" style="border-color:${PC[4]}; background:${PC[4]}1f;" title="Average shelf time before first use (phase E) for ${yr}."><span class="pd-chev-shelf-lab">then on shelf</span><span class="pd-chev-shelf-name">E · ${PL.E}</span><span class="pd-chev-shelf-val" style="color:${PC[4]};">${m.E.toFixed(1)}d</span></div>
+      </div>`;
+    }).join('');
+    const chevronsHtml = `<div class="yoy-chevrons"><div class="yoy-chevrons-lab">Total timeline by year — phases A–D to site, plus shelf time (E)</div>${yoyChevrons}</div>`;
+
     host.innerHTML = `
       ${filterToolbar}
       <div class="yoy-host">
@@ -1221,6 +1248,7 @@
           <span style="color:#34D399">▼ faster (better)</span> ·
           <span style="color:#1FCED8">● stable ±5%</span>
         </div>
+        ${chevronsHtml}
         <div class="yoy-chart-host"><canvas id="yoyCanvas"></canvas></div>
         <div class="chart-caveat">Each phase A–E shows one box plot per year side by side — mean line labelled, whiskers to min/max, IQR box, jittered points. All boxes share one y-axis (Tukey upper fence across every phase-year; values above the clip render as <b>↑</b> off-chart). The marker between the two most recent years flags the change in <b>mean</b> processing time: <span style="color:#EF4444">red &gt;+15%</span> / <span style="color:#FBBF24">orange +5–15%</span> slower · <span style="color:#34D399">green &lt;−5%</span> faster · <span style="color:#1FCED8">blue ±5%</span> stable. The <b>year filter is ignored</b> here (the view IS the comparison); sigma + manual exclusions are respected.</div>
       </div>`;

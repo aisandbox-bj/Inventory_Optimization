@@ -380,6 +380,41 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-6b ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-6b · Year-on-Year — per-year total-timeline chevrons</h4>
+      <ul>
+        <li><b>Why.</b> Operator enhancement (E): add a chevron for each year so the whole procurement timeline can be compared year-over-year, not just phase by phase.</li>
+        <li><b>What shipped.</b> Above the YoY box plots, one chevron per year (e.g. 2025, 2026): phase-coloured A–D segments (proportional to that year's phase means, consistent with the Phase Distribution chevron) + a <b>Total to site</b> readout + a detached <b>shelf (E)</b> block. Each row is labelled with the year + its completed-chain count. Built from the same completed-chain set as the box plots, so the totals reconcile.</li>
+        <li><b>Verified (live preview, 1003380).</b> Two rows render — 2025 (n=13) total-to-site <b>32.0d</b> · shelf 4.4d; 2026 (n=6) <b>25.7d</b> · shelf 3.5d — and the totals tie out to the box-plot per-year means (2025 A+B+C+D = 0+7.3+15.8+8.8 ≈ 32.0). Zero console errors.</li>
+        <li><b>Files.</b> <code>trace/trace.js</code> (<code>renderYoY</code> chevron block), <code>trace/trace.css</code> (<code>.yoy-chevrons</code>/<code>.yoy-chev</code>). Snapshot: <code>_rollback/APP-V03-PORT-6b-pre/</code>.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-E-PD-RESTYLE ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-E-PD-RESTYLE · Phase Distribution box plots adopt the YoY look + total-average scaling</h4>
+      <ul>
+        <li><b>Why.</b> Operator asks (C + D): carry the YoY box-and-whisker visual style onto the Phase Distribution plots, and set the y-axis max to the <b>total average duration</b> (drop the old ×1.2 padding) — in all cases.</li>
+        <li><b>What changed.</b> <code>renderBoxPlotSvg</code> in <code>shared/trace-phase.js</code> restyled to match the YoY canvas plots: the <b>mean</b> is now the bold headline line with its value beside the box (was a hollow circle); whiskers reach <b>min/max</b> (was the Tukey fence); <b>jittered data points</b> for the individual completed chains; <b>min/max labels</b>; and <b>↑</b> markers count durations above the scale. The median line was dropped (the mean is the headline, as in YoY); the foot now reads <code>n · μ</code>. Scaling: <code>renderPhaseVisual</code> sets <code>pdYMax = total average duration</code> (sum of phase means, no padding).</li>
+        <li><b>Where it lands.</b> <code>trace-phase.js</code> is shared, so the new look applies to the <b>Trace</b> Phase Distribution, the <b>Screener</b> combined-detail plots, and the <b>per-material PDF export</b> — one consistent box-and-whisker style across all three.</li>
+        <li><b>Verified (live preview, Trace).</b> Phase Distribution for 1003380: five plots each render the jittered dots (n=19), the bold mean line + value, min/max labels, and the foot <code>n19 · μX.Xd</code>; the shared scale top-tick is 30 for a 34d total average (was ~50 under the old ×1.2). Zero console errors. (Shared renderer → Screener + export inherit it.)</li>
+        <li><b>Files.</b> <code>shared/trace-phase.js</code> (<code>renderBoxPlotSvg</code> + <code>renderPhaseVisual</code> scaling/vals/caveat). Snapshot: <code>_rollback/APP-E-PD-RESTYLE-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-FIX-SCR-EXCL ───────── -->
     <article class="roc-entry dev">
       <div class="head">
