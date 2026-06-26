@@ -380,6 +380,24 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-SCR-EXCL ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-SCR-EXCL · Screener now honours Trace's excluded chains — average lead time reconciles</h4>
+      <ul>
+        <li><b>Symptom (operator).</b> The average chain length differed between the Screener and the Trace page for the same material, because Trace's manual + sigma chain exclusions were applied on Trace but not on the Screener — so the two tools showed different numbers for the same thing (a reconciliation/credibility gap).</li>
+        <li><b>What changed.</b> At boot the Screener reads <code>trace.viewState</code> (the per-material <code>manualExclByMat</code> + the <code>sigmaLimit</code>). Both the <b>avg procurement lead time</b> (used by the "Min below lead-time cover" band) and the <b>embedded Trace phase-distribution visual</b> (on screen and in the PDF export) now run through <code>TracePhase.activeChains</code> with those same exclusions before averaging. New helper <code>traceFiltersFor(material)</code> builds the shared filter object.</li>
+        <li><b>Scope note.</b> Year is always <code>All</code> on the Screener (it's an all-time view by design), so a year filter set on the Trace page is intentionally <em>not</em> carried; <b>manual + sigma exclusions are</b>. When no exclusions are set (the default), behaviour is unchanged.</li>
+        <li><b>Verified (live preview).</b> 1000640 avg-to-site: 31.7d with no exclusions; with a 2σ trim it drops to 29.9d (one outlier removed) and the Screener's embedded chevron reads <b>29.9d</b> after reload — matching Trace; manual-excluding the longest chain gives the same 29.9d. Reuses the shared <code>TracePhase.activeChains</code>, so Screener and Trace can't diverge. Zero console errors.</li>
+        <li><b>Files.</b> <code>screener/screener.js</code> (boot loads <code>trace.viewState</code>; <code>computeRiskFields</code> + both <code>TracePhase.render</code> calls use <code>traceFiltersFor</code>). Snapshot: <code>_rollback/APP-FIX-SCR-EXCL-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-FIX-YOY-CALC ───────── -->
     <article class="roc-entry dev">
       <div class="head">

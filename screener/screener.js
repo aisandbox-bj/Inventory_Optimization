@@ -70,7 +70,12 @@
     selectedMaterial: null,
     search:           '',
     hasPr:            false,
-    exportFlags:      new Set() // material numbers flagged for PDF export
+    exportFlags:      new Set(), // material numbers flagged for PDF export
+    // APP-FIX-SCR-EXCL — Trace's per-material manual excludes + sigma setting,
+    // loaded from trace.viewState so the Screener's avg lead time + embedded
+    // Trace phase-distribution honour the SAME exclusions the operator set on
+    // the Trace page (otherwise the average chain length wouldn't reconcile).
+    traceExcl:        { manualByMat: {}, sigmaLimit: null }
   };
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -98,6 +103,14 @@
       }
     }
     state.materials = [...seen.values()];
+
+    // APP-FIX-SCR-EXCL — pull in Trace's exclusions BEFORE deriving risk fields,
+    // so the avg lead time matches what the operator sees on the Trace page.
+    try {
+      const tvs = await AppStorage.get('trace.viewState');
+      state.traceExcl.manualByMat = (tvs && tvs.manualExclByMat && typeof tvs.manualExclByMat === 'object') ? tvs.manualExclByMat : {};
+      state.traceExcl.sigmaLimit  = (tvs && typeof tvs.sigmaLimit === 'number') ? tvs.sigmaLimit : null;
+    } catch (e) { /* no Trace state saved → no exclusions */ }
 
     // Derive per-material risk fields used by the new bands (SoH-vs-P2/Min,
     // PO/PR open status, avg procurement lead time, Min-vs-lead-time cover).
@@ -232,6 +245,17 @@
   }
   function flagLabel(k){ return FLAG_LABELS[k] || k; }
 
+  // APP-FIX-SCR-EXCL — the same filter object Trace uses, for one material, so
+  // completed-chain stats here match the Trace page. Year is always 'All' (the
+  // Screener is all-time by design); manual + sigma exclusions are honoured.
+  function traceFiltersFor(material){
+    return {
+      yearFilter: 'All',
+      sigmaLimit: state.traceExcl.sigmaLimit,
+      manualExcl: new Set(state.traceExcl.manualByMat[material] || [])
+    };
+  }
+
   // Drop persisted bands whose field no longer exists / isn't available (bands
   // removed this version, or PR-only bands when no PR History is loaded) so a
   // stale invisible filter can't silently hide materials.
@@ -276,7 +300,10 @@
       if (state.hasPr && prMatHas.has(m.material)) {
         chainCalls++;
         const chains   = TracePhase.computeChains(state.json, m.material);
-        const complete = chains.filter(c => !!c.siteWH);
+        // Apply Trace's manual + sigma exclusions before averaging, so the avg
+        // lead time reconciles with the Trace view (APP-FIX-SCR-EXCL).
+        const act      = TracePhase.activeChains(chains, traceFiltersFor(m.material));
+        const complete = act.filter(c => !!c.siteWH);
         if (complete.length) {
           const tot = complete.reduce((s, c) => s + (c.A + c.B + c.C + c.D), 0);
           avgLT = tot / complete.length;                 // mean phase A–D total (days to site)
@@ -426,7 +453,7 @@
     // Trace per-material visual — graceful degradation when PR History absent.
     const tcell = $('#scrCellTrace');
     if (state.hasPr) {
-      TracePhase.render(tcell, state.json, entry.m.material, { filters: {} });
+      TracePhase.render(tcell, state.json, entry.m.material, { filters: traceFiltersFor(entry.m.material) });
     } else {
       tcell.innerHTML = `
         <div class="scr-trace-missing">
@@ -860,7 +887,7 @@
 
     // Box plots (each SVG → PNG), 5 across
     host.innerHTML = '<div id="expTp"></div>';
-    TracePhase.render(host.querySelector('#expTp'), state.json, m.material, { filters: {} });
+    TracePhase.render(host.querySelector('#expTp'), state.json, m.material, { filters: traceFiltersFor(m.material) });
     const plotSvgs = [...host.querySelectorAll('.pd-plot-svg')];
     if (plotSvgs.length) {
       const gap = 3, n = plotSvgs.length;
