@@ -1,0 +1,236 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   screener.css · APP-SCR-01 (2026-06-25)
+   Page chrome for the Screener. Detail-panel + phase-distribution visuals are
+   styled by shared/material-detail.css + shared/trace-phase.css (linked in the
+   shell). Design tokens + .appnav/.shell/buttons come from brand-tokens.css.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Wider shell for the Screener ──────────────────────────────────────────
+   The shared .shell caps at 1280px (fine for the single-column Analysis layout).
+   The Screener shows a list rail + two detail tiles side by side, so it needs
+   the full width of a 16:9 laptop. Override to use most of the viewport; the
+   list rail stays fixed-width (below) so the extra width flows into the tiles. */
+.screener-shell{ max-width:min(1760px, 95vw); }
+
+/* ─── Loaded JSON banner (copied from analysis.css for visual parity) ─────── */
+.loaded-banner{
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);
+  padding:18px 24px;
+  margin-bottom:18px;
+  display:grid;
+  grid-template-columns:1.4fr 1fr 1fr;
+  gap:24px;
+  position:relative;
+  overflow:hidden;
+}
+.loaded-banner::before{
+  content:"";position:absolute;width:300px;height:300px;border-radius:50%;
+  background:rgba(31,206,216,0.08);filter:blur(70px);
+  top:-120px;right:-120px;pointer-events:none;z-index:0;
+}
+.loaded-banner > *{ position:relative; z-index:1; }
+.loaded-banner .lab{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:1.5px;
+  color:var(--text-muted);text-transform:uppercase;display:block;margin-bottom:5px;
+}
+.loaded-banner h2{
+  font-family:var(--font-display);font-weight:700;font-size:22px;
+  letter-spacing:1.5px;text-transform:uppercase;color:var(--text-pri);
+  line-height:1.15;margin-bottom:8px;
+}
+.loaded-banner .sub{
+  font-family:var(--font-mono);font-size:11.5px;color:var(--accent);
+  letter-spacing:.5px;line-height:1.5;
+}
+.loaded-banner .row{ display:flex;flex-direction:column;gap:8px; }
+.loaded-banner .row .v{
+  font-family:var(--font-mono);font-size:13px;color:var(--text-pri);letter-spacing:.3px;
+}
+
+/* ─── Traffic-light dot (copied from analysis.css) ──────────────────────── */
+.tl-dot{ width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0; }
+.tl-dot.GREEN { background:var(--status-ok); }
+.tl-dot.BLUE  { background:var(--accent); }
+.tl-dot.ORANGE{ background:var(--status-warn); }
+.tl-dot.RED   { background:var(--status-crit); }
+.tl-dot.GREY  { background:var(--text-disabled); }
+.tl-dot.PURPLE{ background:#9B59B6; }
+
+/* ─── Toolbar ───────────────────────────────────────────────────────────── */
+.scr-toolbar{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-bottom:14px;
+}
+.scr-count{
+  font-family:var(--font-mono); font-size:12.5px; color:var(--text-pri);
+  letter-spacing:.4px; white-space:nowrap;
+}
+.scr-toolbar-spacer{ flex:1 1 auto; }
+.scr-active-bands{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; max-width:55%; }
+.scr-band-none{ font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
+.scr-band-chip{
+  font-family:var(--font-mono); font-size:10.5px; letter-spacing:.3px;
+  color:var(--accent); background:rgba(31,206,216,.08);
+  border:1px solid var(--border-soft); border-radius:10px; padding:2px 9px;
+  white-space:nowrap; max-width:240px; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* ─── Main split: list rail + detail ────────────────────────────────────── */
+.scr-main{ display:flex; gap:16px; align-items:flex-start; }
+.scr-list-wrap{
+  flex:0 0 288px; max-width:288px;
+  background:var(--bg-panel); border:1px solid var(--border-soft);
+  border-radius:var(--r-sm); overflow:hidden;
+  position:sticky; top:14px;
+}
+.scr-list-toolbar{ padding:10px; border-bottom:1px solid var(--border-soft); }
+.scr-search{
+  width:100%; box-sizing:border-box; font-family:var(--font-mono); font-size:12px;
+}
+.scr-list{ max-height:calc(100vh - 220px); overflow:auto; }
+.scr-list-empty{ padding:24px 14px; text-align:center; color:var(--text-muted); font-family:var(--font-mono); font-size:11.5px; }
+.scr-row{
+  display:flex; align-items:center; gap:9px; padding:9px 12px; cursor:pointer;
+  border-bottom:1px solid rgba(31,206,216,.06);
+}
+.scr-row:hover{ background:rgba(31,206,216,.04); }
+.scr-row.selected{ background:rgba(31,206,216,.10); box-shadow:inset 3px 0 0 var(--accent); }
+.scr-row-flag{ flex:0 0 auto; margin:0; cursor:pointer; accent-color:var(--accent); width:15px; height:15px; }
+.scr-row.flagged{ box-shadow:inset 3px 0 0 var(--status-warn); }
+.scr-row.flagged.selected{ box-shadow:inset 3px 0 0 var(--accent), inset 6px 0 0 var(--status-warn); }
+.scr-row-main{ flex:1 1 auto; min-width:0; }
+.scr-row-id{
+  font-family:var(--font-mono); font-size:12px; color:var(--text-pri);
+  display:flex; align-items:center; gap:6px;
+}
+.scr-row-reclass{
+  font-family:var(--font-mono); font-size:9.5px; font-weight:700; color:var(--status-warn);
+  border:1px solid rgba(251,191,36,.4); border-radius:8px; padding:0 5px;
+}
+.scr-row-desc{
+  font-family:var(--font-body); font-size:11px; color:var(--text-muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;
+}
+.scr-row-stats{
+  display:flex; flex-direction:column; align-items:flex-end; gap:2px;
+  font-family:var(--font-mono); font-size:11px; color:var(--accent); flex-shrink:0;
+}
+.scr-row-stats .muted{ color:var(--text-muted); font-size:10px; }
+
+/* ─── Detail area + responsive combined grid ────────────────────────────── */
+.scr-detail{ flex:1 1 auto; min-width:0; }
+.scr-empty{
+  background:var(--bg-panel); border:1px solid var(--border-soft);
+  border-radius:var(--r-sm); padding:48px 30px; text-align:center;
+  color:var(--text-muted); font-family:var(--font-body); font-size:13px; line-height:1.6;
+}
+.scr-empty-big{
+  font-family:var(--font-display); font-size:18px; color:var(--text-pri);
+  text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;
+}
+.scr-detail-grid{
+  /* APP-SCR-01c (2026-06-25) — vertical stack per operator: Trace sits UNDER
+     the Consumption detail (was side-by-side). The detail area keeps its full
+     (widened) width; each tile spans it. Same stacking applies in the PDF. */
+  display:grid;
+  grid-template-columns:1fr;
+  gap:16px;
+  align-items:start;
+}
+.scr-detail-cell{
+  background:var(--bg-panel); border:1px solid var(--border-soft);
+  border-radius:var(--r-sm); padding:14px; min-width:0;
+}
+.scr-cell-lab{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1.5px;
+  text-transform:uppercase; color:var(--text-muted);
+  margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border-soft);
+}
+/* Make the back-calc chart fully responsive inside the half-width cell:
+   AppChart sets width:100% + a fixed height attr + a viewBox — overriding
+   height to auto lets it scale to the cell width at the viewBox aspect. */
+.scr-detail-cell .chart-host svg{ height:auto; }
+.scr-detail-cell .detail-head{ margin-top:0; }
+
+.scr-trace-missing{
+  border:1px dashed var(--border-soft); border-radius:var(--r-sm);
+  padding:18px 16px; color:var(--text-muted);
+  font-family:var(--font-body); font-size:12.5px; line-height:1.55;
+}
+.scr-trace-missing b{ color:var(--status-warn); }
+
+/* Stack the list above the detail on narrow viewports. */
+@media (max-width: 920px){
+  .scr-main{ flex-direction:column; }
+  .scr-list-wrap{ flex:1 1 auto; max-width:none; width:100%; position:static; }
+  .scr-list{ max-height:320px; }
+}
+
+/* ─── Bands modal ───────────────────────────────────────────────────────── */
+.scr-modal{ position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; }
+.scr-modal.hidden{ display:none; }
+.scr-backdrop{ position:absolute; inset:0; background:rgba(4,12,16,.72); backdrop-filter:blur(2px); }
+.scr-dialog{
+  position:relative; z-index:1; width:min(880px, 94vw); max-height:88vh;
+  display:flex; flex-direction:column;
+  background:var(--bg-panel); border:1px solid var(--border-soft);
+  border-radius:var(--r-sm); box-shadow:0 24px 60px rgba(0,0,0,.5);
+}
+.scr-modal-head{
+  display:flex; align-items:center; gap:14px; padding:16px 20px;
+  border-bottom:1px solid var(--border-soft);
+}
+.scr-modal-title .lab{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1.5px;
+  text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:3px;
+}
+.scr-modal-title h3{
+  font-family:var(--font-display); font-size:16px; letter-spacing:1px;
+  text-transform:uppercase; color:var(--text-pri); margin:0;
+}
+.scr-close{ margin-left:auto; padding:4px 10px; }
+.scr-close:hover{ border-color:var(--status-crit); color:var(--status-crit); }
+.scr-modal-body{ padding:18px 20px; overflow:auto; }
+.scr-modal-foot{
+  display:flex; align-items:center; gap:10px; padding:14px 20px;
+  border-top:1px solid var(--border-soft);
+}
+.scr-spacer{ flex:1 1 auto; }
+
+.band-intro{
+  font-family:var(--font-body); font-size:12px; color:var(--text-muted);
+  line-height:1.55; margin-bottom:16px;
+}
+.band-group-lab{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:1.5px;
+  text-transform:uppercase; color:var(--accent); margin:16px 0 10px;
+}
+.band-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; }
+.band-field{
+  background:var(--bg-elevated); border:1px solid var(--border-soft);
+  border-radius:var(--r-sm); padding:11px 12px;
+}
+.band-field-lab{
+  font-family:var(--font-mono); font-size:12px; color:var(--text-pri);
+  margin-bottom:8px; display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+}
+.band-field-key{ font-size:9.5px; color:var(--text-muted); letter-spacing:.3px; }
+.band-checks{ display:flex; flex-wrap:wrap; gap:6px 12px; }
+.band-chk{ display:flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; color:var(--text-pri); cursor:pointer; }
+.band-chk input{ accent-color:var(--accent); }
+.band-range-row{ display:flex; align-items:center; gap:8px; }
+.band-range-row input{ width:100%; box-sizing:border-box; font-family:var(--font-mono); font-size:12px; }
+.band-dash{ color:var(--text-muted); }
+
+/* ─── Toast (export feedback) ───────────────────────────────────────────── */
+.scr-toast{
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  z-index:1200; padding:11px 18px; border-radius:8px;
+  background:var(--bg-elevated); border:1px solid var(--border-soft);
+  color:var(--text-pri); font-family:var(--font-mono); font-size:12px;
+  box-shadow:0 12px 32px rgba(0,0,0,.45); max-width:80vw;
+}
+.scr-toast.ok{ border-color:var(--status-ok); }
+.scr-toast.crit{ border-color:var(--status-crit); color:#fff; }

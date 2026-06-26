@@ -1,18 +1,27 @@
 # Calibre Tune v2.1.3-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-06-25 (after APP-E8 · MRP type vs Min/Max applicability)
-**Status:** APP-E8 built + self-verified (synthetic pipeline run + live UI render). **Pending operator validation** and a decision to push. The user manual (`user-manual.html`) was also rebuilt to the full v2.1.3-dev surface (APP-DOC-MANUAL) — adds Settings reference + Calibre Trace sections, stock-on-hand methodology, APP-E8 reclass.
+**Updated:** 2026-06-25 (after APP-SCR-01 + APP-SCR-01b + APP-FIX-BACKCALC-PARSE — pushed)
+**Status:** Screener (APP-SCR-01) + operator-review refinements & PDF export (APP-SCR-01b) + the back-calc parse fix (APP-FIX-BACKCALC-PARSE) built, self-verified in the live preview, and **pushed to origin/main** after a remote backup. **Pending operator validation 2026-06-26.** Earlier 2026-06-25 work (APP-E8, APP-DOC-MANUAL, APP-FIX-VER, APP-FIX-PD-POLISH, APP-E21 investigation, APP-E9, APP-FIX-PD-CHEVRON, README rebuild) was already on origin (`f7063f9`).
 
 **Update 2026-06-25 (batch 2):** APP-E8 (#21), APP-DOC-MANUAL + APP-FIX-VER pushed (origin `579cf99`). Then: **APP-FIX-PD-POLISH (#1)** built + verified (Trace Phase Distribution: uniform scale + transposed stats table + on-plot mean) — unpushed. **APP-E21 (#15)** investigation complete (findings + ranked reduction plan in RoC); reduction implementation queued as **APP-E21b** (deferred). **APP-E9 (#22)** not yet built — see below.
 
+**Update 2026-06-25 (batch 3 · APP-SCR-01 — Screener):** Built the new **Screener** page (post-analysis band filter + combined Analysis+Trace detail). Load-bearing refactor: the Analysis detail render and the Trace phase-distribution render were extracted into shared modules (`shared/material-detail.js` + `shared/trace-phase.js`, single source of truth; `analysis.js` + `trace.js` refactored to consume them; `.pd-*` CSS moved to `shared/trace-phase.css`). Self-verified in the live preview (regression gate: Analysis + all Trace views render identically, zero console errors; Screener: bands filter, both visuals, persistence, graceful no-PR degradation). Repo reconciliation this session found **origin/main is `f7063f9`** (= `834fff8` + a README rebuild); CLAUDE.md's `834fff8` is **stale** and should be corrected.
+
+**Update 2026-06-25 (batch 4 · operator review → APP-SCR-01b + APP-FIX-BACKCALC-PARSE):**
+- **APP-FIX-BACKCALC-PARSE** — found + fixed a *shipped* parse error in `shared/inventory-back-calc.js` (a `*/` embedded in a comment from APP-FIX-BACKCALC-TZ / origin `2ae7b26`) that had **silently disabled the entire back-calc app-wide since 2ae7b26** — no Stock-on-Hand line, no stockout bands, no stockout-aware math on Analysis *or* Screener. Fixed (comment rephrased). SOH line + bands render again. Measured back-calc cost ≈32&nbsp;ms / 110 materials.
+- **APP-SCR-01b** — operator-review refinements: vertical (stacked) combined detail on screen + print; widened shell; **new per-material PDF export** (one letter page each: chart + stats + MRP above a visual timeline chevron + named box plots), built from SVG→JPEG + jsPDF autoTable (no html2canvas), libs lazy-loaded on Export click.
+- **Pushed to origin/main** 2026-06-25 after a remote backup (`backup/pre-APP-SCR-01-f7063f9` branch + `checkpoint/pre-APP-SCR-01` tag). **Pending operator validation 2026-06-26.**
+
 ## Deferred / queued (new)
+- **APP-DOC-SCREENER** — add a Screener section to `user-manual.html` (the nav link is in place but the manual has no Screener page yet): bands, the combined detail, and the PDF export. User-facing doc; not a blocker for testing.
+- **APP-SCR-02** — consolidate the Analysis detail-panel CSS into `shared/material-detail.css` and have `analysis.html` link it (removing the moved rules from `analysis.css`), so the detail *styling* is single-source like the render *logic*. APP-SCR-01 deliberately left `analysis.css` untouched and duplicated the rules into the shared file (zero Analysis-CSS regression risk); this closes that gap. Verify Analysis renders identically after the move.
 - **APP-E21b** — implement the memory-bloat reduction per the APP-E21 findings: drop the unused `cumulative` field (safe); MB51 column-prune at parse (needs field-usage audit); lazy `stockOnHandSeries` (medium). NOT safe: blanking `data.*` from the handoff (breaks the analysis re-run + Inv-Adj σ math).
 - **APP-E9 (#22)** — ✅ BUILT + verified (2026-06-25). Scoped down per operator to a simple screening parameter (no warnings panel, no toggles): `minEventsThreshold` (default 3) beside the qty threshold; event = WO (261) OR cost-centre (201) issue. canonical-schema + pipeline + settings + intake + manual. Unpushed at time of writing → see push status.
 
 ## Needs an operator decision
 - **APP-E8 PURPLE-PD nuance** — A Working-Redundant (PURPLE) PD item that carries a recommended Min/Max now also gets the "reclassify to V1" flag/note, on top of its "review for destocking" action. Confirm this is wanted, or scope the reclass flag to RED rule-6 only.
 - **Stale version label** — `index.html`, `intake.html`, `analysis.html` still show `v2.0.0-dev` (HTML comment + `<meta app-version>` + visible nav label); `trace.html` + RoC read `v2.1.3-dev`. Trivial 3-page tweak; held pending go-ahead (not bundled into APP-E8).
-- **Push** — local dev tip was confirmed in sync with origin/main (`2ae7b26`) before APP-E8; APP-E8 is now the only unpushed change. No push performed — awaiting explicit go-ahead per session instruction.
+- **Push** — origin/main is now **`f7063f9`** (verified by clone this session; CLAUDE.md's `834fff8` is stale = `f7063f9` minus the README rebuild). The local working folder content-matches `f7063f9` except the APP-SCR-01 changes, so a push will be a clean, minimal diff. No push performed — awaiting explicit go-ahead. **Before pushing**, follow `_rollback/APP-SCR-01-ROLLBACK-PLAN.md` §3.0 (push the `backup/pre-APP-SCR-01-f7063f9` branch + `checkpoint/pre-APP-SCR-01` tag first) and exclude `_patch_tmp/` + `_rollback/` from the copy.
 
 ## Deferred to next version (carried from roadmap, operator-priority order)
 - **APP-FIX-PD-POLISH** — Phase Distribution: uniform scale + transposed stats table + mean labels on plots (operator PPT 2026-05-26).
@@ -36,7 +45,11 @@
 
 ## Snapshots in this version folder
 ```
-_rollback/APP-E8-pre/   ← rollback point for APP-E8 (pipeline.js, analysis.js/.css, excel.js, llm.js, RoC)
-record-of-change.html   ← APP-E8 entry added at top
-Backlog.md              ← this file
+_rollback/APP-SCR-01-extract-pre/        ← pre-edit copies of every file APP-SCR-01 modifies
+_rollback/RESTORE_APP-SCR-01.py          ← one-shot local restore (dry-run unless --confirm)
+_rollback/origin-main-f7063f9-PREPUSH.zip ← immutable copy of the current live GH tree
+_rollback/APP-SCR-01-ROLLBACK-PLAN.md    ← repo + local rollback procedure (anchor f7063f9)
+_rollback/APP-E8-pre/                    ← rollback point for APP-E8
+record-of-change.html                    ← APP-SCR-01 entry added at top
+Backlog.md                               ← this file
 ```

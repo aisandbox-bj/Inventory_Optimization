@@ -20,3 +20,6 @@ build/
 
 # Local rollback snapshots (per-change pre-edit backups; never pushed)
 _rollback/
+
+# Throwaway patch / verification scratch (one-shot scripts + test datasets; never pushed)
+_patch_tmp/

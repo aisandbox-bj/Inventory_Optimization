@@ -128,8 +128,13 @@
      ("2026-05-25" from raw posting date) didn't match the days[] keys
      ("2026-05-24" from toIsoDay), so some receipts/issues were silently
      dropped from the walk and the SOH cursor floated above zero — hiding
-     real stockouts. Using getUTC*/setUTC* keeps both sides in calendar-day
-     space regardless of browser locale. */
+     real stockouts. Using the UTC getters/setters keeps both sides in
+     calendar-day space regardless of browser locale.
+     (APP-FIX-BACKCALC-PARSE 2026-06-25 — the original wording used an
+     asterisk-shorthand for the UTC getter/setter family whose embedded
+     star-then-slash closed THIS block comment early, turning the trailing
+     words into code and breaking the whole module parse. Rephrased to avoid
+     any comment-delimiter sequence — keep it that way.) */
   function toMs(s) {
     if (s == null || s === '') return null;
     const t = Date.parse(s);

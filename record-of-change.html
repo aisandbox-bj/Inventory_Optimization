@@ -330,6 +330,7 @@ main.shell { padding-top: 28px; }
     <a href="intake/intake.html">Intake</a>
     <a href="analysis/analysis.html">Analysis</a>
     <a href="trace/trace.html">Trace</a>
+    <a href="screener/screener.html">Screener</a>
     <a href="settings/settings.html">Settings</a>
     <a href="record-of-change.html" class="active">RoC</a>
     <a href="user-manual.html">Manual</a>
@@ -378,6 +379,66 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- ───────── v2.1.3-dev — APP-FIX-BACKCALC-PARSE ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-BACKCALC-PARSE · Stock-on-Hand back-calc was silently dead since 2ae7b26 — restored</h4>
+      <ul>
+        <li><b>Symptom (operator).</b> The violet <b>Stock-on-Hand line</b> (and the red stockout wash bands) were missing from the consumption chart — on the Screener <em>and</em> the Analysis page. A blank-where-data-was-expected signal (the operator-locked credibility principle), so the cause was investigated rather than worked around.</li>
+        <li><b>Root cause.</b> In <code>shared/inventory-back-calc.js</code>, the date-helpers block comment added by <b>APP-FIX-BACKCALC-TZ</b> (origin <code>2ae7b26</code>) contained the shorthand <code>getUTC*/setUTC*</code>. The embedded <code>*/</code> <b>closed the block comment early</b>, so the trailing words parsed as JavaScript → <code>SyntaxError</code> → the module never defined <code>window.InventoryBackCalc</code>. Every pipeline guard (<code>typeof InventoryBackCalc !== 'undefined'</code>) was therefore false, so the <b>entire back-calc was silently skipped on every page</b> for ~a month: no SOH series, no stockout windows, and the stockout-aware adjustments (P2-window choice + rate-drop-cause from APP-E1) were all inert.</li>
+        <li><b>Fix.</b> Rephrased the comment to remove the embedded <code>*/</code> — no logic change. The module now parses and defines all functions.</li>
+        <li><b>Verified.</b> Real <code>runPipeline</code> on a 110-material sample: <code>InventoryBackCalc</code> defined; materials get <code>stockOnHandSeries</code> (≈213 daily points) + <code>stockoutWindows</code> again; the SOH line + bands render on Analysis and the Screener (confirmed in the live preview); zero console errors.</li>
+        <li><b>Behaviour change to expect.</b> Because the stockout-aware math now actually runs again, some recommendations may differ from the recent (broken) state — this is the intended APP-E1 behaviour. The back-calc also re-adds modest pipeline time (measured ~32&nbsp;ms across 110 materials; scales with MB51 size). If it ever bites on very large datasets, lazy per-material series is queued as <b>APP-E21b</b>.</li>
+        <li><b>Files.</b> <code>shared/inventory-back-calc.js</code>. Rollback snapshot: <code>_rollback/APP-FIX-BACKCALC-PARSE-pre/</code>.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-SCR-01b ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-SCR-01b · Screener — operator-review refinements + per-material PDF export</h4>
+      <ul>
+        <li><b>Layout (operator feedback).</b> The combined detail changed from side-by-side to a <b>vertical stack</b> — Procurement phase distribution sits <em>under</em> the Consumption detail — on screen and in print. The Screener shell was widened (<code>max-width: min(1760px, 95vw)</code>) so a 16:9 laptop uses the full width; the material-list rail stays fixed at 288&nbsp;px so the extra width flows into the detail tiles.</li>
+        <li><b>PDF export (new).</b> A checkbox on each list row flags a material "for export"; the <b>Export flagged</b> button produces <b>one letter-portrait page per material</b>: Consumption detail (chart + key stats + MRP Current-vs-Recommended) above Procurement phase distribution (a visual timeline chevron + the five box plots). Built from the chart/box-plot SVGs rasterised to JPEG (<code>AppChart.toPng</code>-style) + jsPDF <code>autoTable</code> — <b>no html2canvas</b>, so it's fast (~1–2&nbsp;s) and small (~250&nbsp;KB for two materials). jsPDF + autoTable are <b>lazy-loaded only on the first Export click</b> (off the normal page load). Flags persist in <code>screener.viewState</code>.</li>
+        <li><b>Export polish from review.</b> The timeline renders as a proportional <b>visual chevron</b> (not a table); the chevron blocks and box plots are labelled with phase <b>names only</b> (A–E letter codes dropped); the MRP <em>Current</em>/<em>Recommended</em> headers are centred; the per-phase stats table was dropped; the visuals are vertically compressed so each material fits one page; and all jsPDF text is sanitised to WinAnsi (Unicode <code>→ ⚑</code> etc. mapped to ASCII to stop glyph corruption).</li>
+        <li><b>Verified.</b> Live preview, rendered the resulting PDFs back to images: one clean page per material, SOH line present, chevron + named box plots, centred MRP headers, all on a single page; zero console errors (one benign <code>jspdf-autotable</code> "width could not fit" <em>warning</em> during export — it auto-compresses; output verified correct page-by-page).</li>
+        <li><b>Still pending operator validation</b> (testing 2026-06-26).</li>
+        <li><b>Files.</b> <code>screener/screener.html</code>, <code>screener.js</code>, <code>screener.css</code> (consumes the shared <code>material-detail.js</code> + <code>trace-phase.js</code> modules from APP-SCR-01).</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-SCR-01 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-SCR-01 · Screener — a post-analysis band filter with a combined Analysis + Trace detail view</h4>
+      <ul>
+        <li><b>Why.</b> Operator wants a fast, saved "view" over the analysis: pick operator-defined <b>bands</b> (filters over the pipeline output) and see the subset of analysed materials that fall inside them; on selecting a material, see <em>both</em> the Analysis consumption detail and the Trace procurement phase distribution at once.</li>
+        <li><b>New page.</b> <code>screener/screener.html</code> + <code>screener.js</code> + <code>screener.css</code> — a sibling page (own nav link, added to all 7 shells after Trace). Boots from <code>intake.current</code>, runs <code>AppPipeline.runPipeline</code>, lists the materials passing the bands ("X of Y in analysis"), and on select renders the combined detail responsive (side-by-side when wide, stacked when narrow). LLM is OFF on the Screener (math decides; the panel stays an Analysis affordance). No <code>SCHEMA_VERSION</code> bump — bands persist in <code>settings.screenerBands</code>, selection in <code>screener.viewState</code>; nothing added to the canonical JSON.</li>
+        <li><b>Bands.</b> Set pickers (<code>trafficLight</code>, <code>pattern</code>, <code>mrpType</code>, reclass <code>mrpRecFlag</code>) + numeric ranges (<code>p2Rate</code>, <code>runway</code>, <code>totalNet</code>, <code>recMin</code>, <code>recMax</code>, <code>stock</code>, <code>totValueOh</code>, <code>daysSinceLastIssue</code>), <b>AND</b>-combined, set in a modal and persisted.</li>
+        <li><b>Load-bearing refactor (single source of truth).</b> The two renders were <b>extracted into shared modules</b> so Analysis, Trace, and the Screener all use one implementation: <code>shared/material-detail.js</code> (<code>MaterialDetail.render</code> — was <code>analysis.js renderDetail</code> + its helpers) and <code>shared/trace-phase.js</code> (<code>TracePhase</code> — chain compute + box-plots + A–D chevron + shelf block, was <code>trace.js</code>). <code>analysis.js</code> <code>renderDetail()</code> now calls <code>MaterialDetail.render</code>; <code>trace.js</code> <code>computeChainsForMaterial</code> delegates to <code>TracePhase.computeChains</code> and <code>renderPhaseDistribution</code> calls <code>TracePhase</code> (Trace keeps its own filter toolbar). The <code>.pd-*</code> CSS was <b>moved</b> from <code>trace.css</code> to <code>shared/trace-phase.css</code> (linked by both Trace + Screener).</li>
+        <li><b>Surfaced tradeoff (not yet single-source).</b> The Analysis detail-panel <b>CSS</b> is <em>duplicated</em> into <code>shared/material-detail.css</code> (a faithful copy of the rules in <code>analysis.css</code>), linked only by the Screener; <code>analysis.css</code> is left <b>untouched</b> so the heavily-used Analysis page has <b>zero CSS-regression risk</b>. The render <em>logic</em> (JS) is single-source; the detail <em>styling</em> is not. Consolidating the detail CSS into the shared file is queued (see Backlog / <b>APP-SCR-02</b>). This is a deliberate, recorded choice — not an oversight.</li>
+        <li><b>Verified (self-test, zero console errors).</b> Built a 353 KB trimmed canonical sample (5 materials with completable chains) from the PM_Supplies assessment and ran it in the live preview. <b>Regression gate:</b> Analysis detail panel (chart + 11 stats + MRP compare + LLM/copy buttons) renders as before; all Trace views (procurement chain, raw data, phase distribution, volume) render via the delegating wrapper — identical to pre-refactor. <b>Screener:</b> bands narrow the list (trafficLight=ORANGE → 3 of 5, all ORANGE), both visuals render on select, layout flips side-by-side ↔ stacked on resize (1500px vs 768px), bands + selection persist, and the no-PR-History path degrades gracefully (Analysis visual renders, Trace cell shows the "needs PR History" note, banner flags it).</li>
+        <li><b>Still pending operator validation</b> on production data (per the per-release rule) — this entry is self-verified only.</li>
+        <li><b>Rollback.</b> Pre-edit snapshot of every modified file at <code>_rollback/APP-SCR-01-extract-pre/</code>; one-shot restore via <code>_rollback/RESTORE_APP-SCR-01.py</code>; full current-repo archive at <code>_rollback/origin-main-f7063f9-PREPUSH.zip</code>; written plan at <code>_rollback/APP-SCR-01-ROLLBACK-PLAN.md</code>. <b>Repo note:</b> <code>origin/main</code> is <code>f7063f9</code> (CLAUDE.md's <code>834fff8</code> is stale — <code>f7063f9</code> = <code>834fff8</code> + the README-rebuild commit).</li>
+        <li><b>Files.</b> NEW <code>shared/material-detail.js</code>, <code>shared/trace-phase.js</code>, <code>shared/trace-phase.css</code>, <code>shared/material-detail.css</code>, <code>screener/{screener.html, screener.js, screener.css}</code>. REFACTOR <code>analysis/analysis.js</code> + <code>analysis.html</code>, <code>trace/trace.js</code> + <code>trace.html</code> + <code>trace.css</code>. NAV link added to <code>index.html</code>, <code>intake/intake.html</code>, <code>analysis/analysis.html</code>, <code>trace/trace.html</code>, <code>settings/settings.html</code>, <code>record-of-change.html</code>, <code>user-manual.html</code>.</li>
+      </ul>
+    </article>
 
     <!-- ───────── v2.1.3-dev — APP-FIX-PD-CHEVRON ───────── -->
     <article class="roc-entry dev">

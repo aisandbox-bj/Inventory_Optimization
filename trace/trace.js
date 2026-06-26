@@ -776,44 +776,12 @@
      trim, manual excludes from Procurement Chain view all carry through.
   ═════════════════════════════════════════════════════════════════════════ */
 
-  function quantile(sorted, q){
-    if (sorted.length === 0) return null;
-    const pos = (sorted.length - 1) * q;
-    const base = Math.floor(pos);
-    const rest = pos - base;
-    if (sorted[base + 1] !== undefined) {
-      return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
-    }
-    return sorted[base];
-  }
-
-  function boxStats(values){
-    const xs = values.filter(v => v != null && Number.isFinite(v)).sort((a, b) => a - b);
-    if (xs.length === 0) return null;
-    const n = xs.length;
-    const min = xs[0];
-    const max = xs[n - 1];
-    const q1 = quantile(xs, 0.25);
-    const q2 = quantile(xs, 0.5);
-    const q3 = quantile(xs, 0.75);
-    const mean = xs.reduce((s, v) => s + v, 0) / n;
-    const iqr = q3 - q1;
-    const upperFence = q3 + 1.5 * iqr;
-    const outliers = xs.filter(v => v > upperFence);
-    // Whisker upper = max value not above the fence (so the box drawing stays bounded)
-    const inFence = xs.filter(v => v <= upperFence);
-    const whiskerUpper = inFence.length ? inFence[inFence.length - 1] : max;
-    return { n, min, max, q1, q2, q3, mean, iqr, upperFence, whiskerUpper, outliers };
-  }
-
   function renderPhaseDistribution(host, material){
     state.chains = computeChainsForMaterial(material);
     const act    = active(state.chains, material);
     // Phase distribution operates on chains with all five phases populated —
-    // i.e. those that reached site warehouse. v0.3 line 1568 used `active()`
-    // which by the data-curation rule was already siteWH-complete; v0.4 has
-    // to gate explicitly because IN_FLIGHT / PR_ONLY chains carry null
-    // phases that would otherwise pollute the stats.
+    // i.e. those that reached site warehouse. IN_FLIGHT / PR_ONLY chains carry
+    // null phases and are excluded so they don't pollute the stats.
     const drawn  = act.filter(c => !!c.siteWH);
 
     // Filter toolbar (same UX as Procurement Chain view — single source of truth)
@@ -849,218 +817,17 @@
       </div>
     `;
 
-    // ── Empty state — not enough complete chains to draw box plots ────────
+    // APP-SCR-01 (2026-06-25) — the chevron + box-plot grid + transposed stats
+    // table now live in shared/trace-phase.js (TracePhase), the single source of
+    // truth shared with the Screener. The filter toolbar + its bindFilterBar
+    // wiring stay here: Trace owns the year / sigma / manual-exclude UX.
     if (drawn.length < 2) {
-      host.innerHTML = `
-        ${filterToolbar}
-        <div class="pd-empty">
-          <div class="pd-empty-lab">Need at least 2 complete chains</div>
-          <h3>Phase Distribution requires chains that reached Site WH</h3>
-          <p>Currently <b>${drawn.length}</b> chain${drawn.length === 1 ? '' : 's'} with full Phase A–E data for material <b>${escapeHtml(material)}</b>.</p>
-          <p>Box plots compute quartiles + Tukey fence per phase across the <em>active set</em> (post year / sigma / manual filters). PR-only and in-flight chains carry null phase values and are excluded from this view; they still appear in Raw Data.</p>
-          ${drawn.length === 0 && act.length > 0
-            ? `<p class="pd-hint">${act.length} chain${act.length === 1 ? '' : 's'} active but none have a Site WH receipt — see Procurement Chain view for the state breakdown.</p>`
-            : ''}
-        </div>
-      `;
-      bindFilterBar(material);
-      return;
+      host.innerHTML = filterToolbar + TracePhase.renderPhaseEmpty(material, drawn.length, act.length);
+    } else {
+      host.innerHTML = filterToolbar + TracePhase.renderPhaseVisual(drawn);
     }
-
-    // ── Per-phase stats ───────────────────────────────────────────────────
-    const phaseStats = PHASE_KEYS.map(ph => ({
-      key:   ph,
-      label: PHASE_LABELS[ph],
-      color: PHASE_COLORS[PHASE_KEYS.indexOf(ph)],
-      stats: boxStats(drawn.map(c => c[ph]))
-    }));
-
-    // Total LT chevron — APP-FIX-PD-CHEVRON: the flowing timeline covers only
-    // the phases up to site availability (A–D). Phase E (Time to First Use) is
-    // the shelf time AFTER the material is available, so it is pulled OUT of the
-    // flow and shown as a separate purple block — the bar total now reads "time
-    // until available on site", and the block reads "then time on shelf before
-    // first consumption". (totalMean below still spans A–E and drives the
-    // box-plot shared y-scale, which is intentionally left unchanged.)
-    const phaseMeans = phaseStats.map(p => (p.stats ? p.stats.mean : 0));
-    const totalMean  = phaseMeans.reduce((s, v) => s + v, 0);
-    const flowPhases = phaseStats.filter(p => p.key !== 'E');           // A–D: up to site availability
-    const ePhase     = phaseStats.find(p => p.key === 'E');             // E: shelf time, shown separately
-    const flowMean   = flowPhases.reduce((s, p) => s + (p.stats ? p.stats.mean : 0), 0);
-    const eMean      = (ePhase && ePhase.stats) ? ePhase.stats.mean : 0;
-    const flowPct    = flowPhases.map(p => (flowMean > 0 ? (p.stats ? p.stats.mean : 0) / flowMean : 0));
-    const chevronHtml = `
-      <div class="pd-chevron">
-        <div class="pd-chevron-lab">Total Lead Time to site availability · phase decomposition · avg across ${drawn.length} chain${drawn.length === 1 ? '' : 's'}</div>
-        <div class="pd-chevron-row">
-          <div class="pd-chevron-bar">
-            ${flowPhases.map((p, i) => `
-              <div class="pd-chev-seg" style="flex: ${flowPct[i] || 0.001}; background: ${p.color}; --pd-chev-fill: ${p.color};">
-                <div class="pd-chev-inner">
-                  <span class="pd-chev-code">${p.key}</span>
-                  <span class="pd-chev-name">${p.label}</span>
-                  <span class="pd-chev-val">${p.stats ? p.stats.mean.toFixed(1) : '—'}d</span>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-          <div class="pd-chev-total-site" title="Average total processing time until the material is received at site (phases A–D). Excludes shelf time before first use.">
-            <span class="lab">Total to site</span>
-            <span class="v">${flowMean.toFixed(1)}d</span>
-          </div>
-          ${ePhase ? `
-          <div class="pd-chev-shelf" style="border-color:${ePhase.color}; background:${ePhase.color}1f;" title="Average time the material sits on the shelf after arriving at site, before its first consumption (phase E). Not part of the lead-time-to-availability total.">
-            <span class="pd-chev-shelf-lab">then on shelf</span>
-            <span class="pd-chev-shelf-name">${ePhase.key} · ${ePhase.label}</span>
-            <span class="pd-chev-shelf-val" style="color:${ePhase.color};">${ePhase.stats ? eMean.toFixed(1) : '—'}d</span>
-          </div>` : ''}
-        </div>
-      </div>
-    `;
-
-    // ── Build SVG box plots ───────────────────────────────────────────────
-    // APP-FIX-PD-POLISH (A) — uniform y-scale across all five plots so phase
-    // durations compare visually. Base scale = avg total LT + 20%, rounded up
-    // to a clean 10 (e.g. 29.4d avg → 40d). Floored to fit the tallest
-    // box/whisker so nothing clips off the top.
-    const pdFenceMax = Math.max(0, ...phaseStats.map(p => p.stats ? Math.max(p.stats.whiskerUpper, p.stats.q3) : 0));
-    let pdYMax = Math.ceil((totalMean * 1.2) / 10) * 10;
-    pdYMax = Math.max(pdYMax, Math.ceil(pdFenceMax / 10) * 10, 10);
-    const plotHtml = `
-      <div class="pd-plots">
-        ${phaseStats.map(p => renderBoxPlotSvg(p, pdYMax)).join('')}
-      </div>
-    `;
-
-    // ── Stats table — APP-FIX-PD-POLISH (B): transposed so columns = phases
-    // A–E (aligned under the box plots above) and rows = stat names. ────────
-    const PD_STAT_ROWS = [
-      { lab:'N',        fmt: s => String(s.n) },
-      { lab:'Min',      fmt: s => s.min.toFixed(1) },
-      { lab:'Q1',       fmt: s => s.q1.toFixed(1) },
-      { lab:'Median',   fmt: s => s.q2.toFixed(1) },
-      { lab:'Mean',     fmt: s => s.mean.toFixed(1), bold:true },
-      { lab:'Q3',       fmt: s => s.q3.toFixed(1) },
-      { lab:'Max',      fmt: s => s.max.toFixed(1) },
-      { lab:'Outliers', fmt: s => String(s.outliers.length), warn: s => s.outliers.length > 0 }
-    ];
-    const tableHtml = `
-      <div class="pd-stats-wrap">
-        <table class="pd-stats pd-stats-t">
-          <thead>
-            <tr>
-              <th class="rowlab"></th>
-              ${phaseStats.map(p => `<th class="num"><span class="pd-phase-dot" style="background:${p.color}"></span>${p.key}<span class="pd-th-name">${p.label}</span></th>`).join('')}
-            </tr>
-          </thead>
-          <tbody>
-            ${PD_STAT_ROWS.map(row => `
-              <tr>
-                <td class="rowlab">${row.lab}</td>
-                ${phaseStats.map(p => {
-                  if (!p.stats) return `<td class="num mono empty">—</td>`;
-                  const warn = row.warn && row.warn(p.stats) ? ' warn' : '';
-                  const val  = row.fmt(p.stats);
-                  return `<td class="num mono${warn}">${row.bold ? `<b>${val}</b>` : val}</td>`;
-                }).join('')}
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-
-    host.innerHTML = `
-      ${filterToolbar}
-      ${chevronHtml}
-      ${plotHtml}
-      ${tableHtml}
-      <div class="chart-caveat">All five plots share one y-axis (scaled to avg total LT + 20%) so phase durations compare directly. Box plots show Q1/Median/Q3 per phase. Whiskers extend to min and to the largest value below the <b>Tukey upper fence</b> (Q3 + 1.5·IQR). Outliers above the fence render as <span class="pd-mark">↑</span> markers above each plot. Mean is a hollow circle with its value labelled on the plot. N is the count of <em>complete</em> chains (those that reached Site WH) within the active filter set.</div>
-    `;
 
     bindFilterBar(material);
-  }
-
-  // SVG box plot — vertical. APP-FIX-PD-POLISH (A): all five plots share one
-  // y-domain (yMaxShared) so phase durations compare visually; outliers above
-  // the Tukey fence are clipped and flagged numerically as before.
-  function renderBoxPlotSvg(p, yMaxShared){
-    const W = 168, H = 220, PAD_T = 14, PAD_B = 50, PAD_L = 36, PAD_R = 12;
-    const innerH = H - PAD_T - PAD_B;
-    const innerW = W - PAD_L - PAD_R;
-    if (!p.stats) {
-      return `<div class="pd-plot pd-plot-empty">
-        <div class="pd-plot-title" style="border-color:${p.color}">${p.key} · ${p.label}</div>
-        <div class="pd-plot-nodata">no data</div>
-      </div>`;
-    }
-    const s = p.stats;
-    // Y domain — shared across all plots (APP-FIX-PD-POLISH A); fall back to
-    // the per-plot fence scale if no shared max was passed.
-    const yMax = yMaxShared || (Math.max(s.upperFence, s.q3 + 1, 1) * 1.06);
-    const yScale = (v) => PAD_T + innerH - (v / yMax) * innerH;
-    // Box geometry
-    const boxX = PAD_L + innerW / 2 - 18;
-    const boxW = 36;
-    const midX = PAD_L + innerW / 2;
-    const whiskerW = 18;
-
-    // Y-axis ticks (4-5 nice marks)
-    const ticks = niceTicks(0, yMax, 4);
-    const tickMarks = ticks.map(t => `
-      <line x1="${PAD_L}" x2="${W - PAD_R}" y1="${yScale(t)}" y2="${yScale(t)}" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
-      <text x="${PAD_L - 4}" y="${yScale(t) + 3}" text-anchor="end" fill="#9BABA8" font-family="JetBrains Mono, monospace" font-size="9">${t}</text>
-    `).join('');
-
-    // Outlier markers — stacked at the top of the plot, with a count label
-    const outlierMarkers = s.outliers.length
-      ? `<g class="pd-outliers" transform="translate(${midX}, ${PAD_T - 4})">
-          <text x="0" y="0" text-anchor="middle" fill="#f4c14a" font-family="JetBrains Mono, monospace" font-size="13" font-weight="600">↑ ${s.outliers.length}</text>
-        </g>`
-      : '';
-
-    return `<div class="pd-plot" data-phase="${p.key}">
-      <div class="pd-plot-title" style="border-color:${p.color}"><span class="pd-plot-code">${p.key}</span><span class="pd-plot-name">${p.label}</span></div>
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" class="pd-plot-svg">
-        ${tickMarks}
-        <!-- Whiskers -->
-        <line x1="${midX}" x2="${midX}" y1="${yScale(s.whiskerUpper)}" y2="${yScale(s.q3)}" stroke="${p.color}" stroke-width="1.5"/>
-        <line x1="${midX}" x2="${midX}" y1="${yScale(s.q1)}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.5"/>
-        <line x1="${midX - whiskerW/2}" x2="${midX + whiskerW/2}" y1="${yScale(s.whiskerUpper)}" y2="${yScale(s.whiskerUpper)}" stroke="${p.color}" stroke-width="1.5"/>
-        <line x1="${midX - whiskerW/2}" x2="${midX + whiskerW/2}" y1="${yScale(s.min)}" y2="${yScale(s.min)}" stroke="${p.color}" stroke-width="1.5"/>
-        <!-- Box -->
-        <rect x="${boxX}" y="${yScale(s.q3)}" width="${boxW}" height="${yScale(s.q1) - yScale(s.q3)}" fill="${p.color}" fill-opacity="0.22" stroke="${p.color}" stroke-width="1.5" rx="2"/>
-        <!-- Median line -->
-        <line x1="${boxX}" x2="${boxX + boxW}" y1="${yScale(s.q2)}" y2="${yScale(s.q2)}" stroke="${p.color}" stroke-width="2.5"/>
-        <!-- Mean marker (hollow circle) + APP-FIX-PD-POLISH (C): value label on the plot -->
-        <circle cx="${midX}" cy="${yScale(s.mean)}" r="3.5" fill="rgba(8,12,20,.96)" stroke="${p.color}" stroke-width="1.5"/>
-        <text x="${boxX + boxW + 4}" y="${yScale(s.mean) + 3}" text-anchor="start" fill="${p.color}" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600">${s.mean.toFixed(1)}</text>
-        ${outlierMarkers}
-      </svg>
-      <div class="pd-plot-foot">
-        <span class="pd-foot-lbl" title="Median">M</span><span class="pd-foot-val">${s.q2.toFixed(1)}d</span>
-        <span class="pd-foot-sep">·</span>
-        <span class="pd-foot-lbl" title="Mean (○)">μ</span><span class="pd-foot-val">on plot</span>
-      </div>
-    </div>`;
-  }
-
-  // "Nice" axis tick generator — 1/2/5 × 10^n stepping for round numbers
-  function niceTicks(min, max, target){
-    if (max <= min) return [min];
-    const range = max - min;
-    const rough = range / Math.max(1, target);
-    const mag = Math.pow(10, Math.floor(Math.log10(rough)));
-    const norm = rough / mag;
-    let step;
-    if      (norm < 1.5) step = 1   * mag;
-    else if (norm < 3)   step = 2   * mag;
-    else if (norm < 7)   step = 5   * mag;
-    else                 step = 10  * mag;
-    const ticks = [];
-    const start = Math.ceil(min / step) * step;
-    for (let v = start; v <= max; v += step) ticks.push(Math.round(v * 100) / 100);
-    return ticks;
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -1606,105 +1373,13 @@
     });
   }
 
+  // APP-SCR-01 (2026-06-25) — chain compute extracted to shared/trace-phase.js
+  // (TracePhase.computeChains, with `json` passed as an argument). This thin
+  // wrapper keeps every existing call site (Procurement Chain / Raw Data /
+  // Volume / Phase Distribution) unchanged while the logic lives in one place
+  // shared with the Screener.
   function computeChainsForMaterial(material){
-    const j = state.json;
-    const prHistory = j.data.prHistory || [];
-    const mb51      = j.data.mb51 || [];
-
-    const prRows = prHistory.filter(r => String(r.material || '').trim() === material);
-
-    const mb51ForMat = mb51.filter(r => String(r.material || '').trim() === material);
-    const firstByPoMvt = new Map();
-    for (const r of mb51ForMat) {
-      const po = String(r.purchaseOrder || '').trim();
-      const mvt = String(r.movementType || '').trim();
-      if (!po || !mvt) continue;
-      const key = po + '|' + mvt;
-      const d = parseISO(r.postingDate);
-      if (!d) continue;
-      const existing = firstByPoMvt.get(key);
-      if (!existing || d < existing.date) {
-        firstByPoMvt.set(key, { date: d, qty: numOr(r.quantity, 0) });
-      }
-    }
-
-    const cons261 = mb51ForMat
-      .filter(r => String(r.movementType || '').trim() === '261')
-      .map(r => parseISO(r.postingDate))
-      .filter(Boolean)
-      .sort((a, b) => a - b);
-
-    return prRows.map(r => {
-      const pr        = String(r.pr || '').trim();
-      const po        = String(r.purchaseOrder || '').trim();
-      const prDate    = parseISO(r.prDate);
-      const relDate   = parseISO(r.releaseDate);
-      const poDate    = parseISO(r.poDate);
-      const gr3pl     = po ? (firstByPoMvt.get(po + '|107')?.date || null) : null;
-      const siteWH    = po ? (firstByPoMvt.get(po + '|109')?.date || null) : null;
-      const qtyAtWH   = po ? (firstByPoMvt.get(po + '|109')?.qty || 0)      : 0;
-      const c261      = siteWH ? cons261.find(d => d >= siteWH) || null : null;
-
-      // APP-FIX-T-04c (2026-05-17) — cancellation logic flipped OR → AND per
-      // v0.3's documented ledger filter: "Cancelled PR ledger — rows where
-      // Status='N' + Deletion Indicator=true". OR was over-classifying chains
-      // that had progressed to PO (processingStatus='N' is also "Not yet
-      // processed" / intermediate-state for non-cancelled PRs); v0.3's AND
-      // requires BOTH signals before calling a PR cancelled.
-      const cancelled = String(r.deletionIndicator || '').toLowerCase() === 'true'
-                     && String(r.processingStatus || '').trim().toUpperCase() === 'N';
-
-      const A = days(prDate, relDate);
-      const B = days(relDate, poDate);
-      const C = days(poDate, gr3pl);
-      const D = days(gr3pl, siteWH);
-      const E = days(siteWH, c261);
-      const total = [A, B, C, D, E].reduce((s, x) => s + (x || 0), 0);
-
-      // APP-V03-PORT-1 (2026-05-24) — precedence flip per operator-locked PR/PO rule
-      // (auto-memory project_pr_po_classification_rule.md):
-      //   "If there is a PO, ignore the final state of the PR. The PR's
-      //    sole purpose is to raise the need; a PO is the action. If there
-      //    is a PR without a PO, consider it cancelled — user denied
-      //    approval. If there is a PO, the user approved — and the post-PO
-      //    cancellation has very little other than admin meaning."
-      // Previously CANCELLED was highest-precedence (Exhibit A from the v0.3
-      // logic analysis): chains with both `purchaseOrder` and the
-      // deletion-flag AND processingStatus='N' misclassified as CANCELLED
-      // instead of by the phase they actually reached. v0.3 honoured the
-      // same rule via an upstream data filter (its CANCELLED_PRS ledger only
-      // included PR-without-PO rows). v0.4 must honour it at runtime since
-      // it ingests raw PR History.
-      //
-      // Reporting-only flag `adminCancelled` surfaces chains where the PR
-      // was deletion-flagged AFTER the PO landed. It appears in the Raw
-      // Data state column but does NOT affect classification, counts, or
-      // the swimlane filter.
-      let state_ = 'COMPLETE';
-      if      (!po && cancelled)  state_ = 'CANCELLED';
-      else if (!po)               state_ = 'PR_ONLY';
-      else if (!siteWH)           state_ = 'IN_FLIGHT';
-      else if (!c261)             state_ = 'NOT_YET_CONSUMED';
-
-      const adminCancelled = !!po && cancelled;
-
-      return {
-        pr, po,
-        prDate:   fmtISO(prDate),
-        relDate:  fmtISO(relDate),
-        poDate:   fmtISO(poDate),
-        gr3pl:    fmtISO(gr3pl),
-        siteWH:   fmtISO(siteWH),
-        c261:     fmtISO(c261),
-        A, B, C, D, E, total,
-        qty:      qtyAtWH || numOr(r.qtyRequested, 0),
-        qtySource: qtyAtWH ? 'MB51-109' : 'PR-requested',
-        state:    state_,
-        cancelled,          // raw deletion+status flag (kept for diagnostics)
-        adminCancelled,     // !!po && cancelled — reporting-only, does NOT drive state
-        creationIndicator: String(r.creationIndicator || '').trim() || 'B'
-      };
-    }).sort((a, b) => (b.prDate || '').localeCompare(a.prDate || ''));
+    return TracePhase.computeChains(state.json, material);
   }
 
   /* ─── APP-V03-PORT-2 (2026-05-24) · Filter machinery ────────────────────
@@ -2108,24 +1783,6 @@
      Helpers
   ═════════════════════════════════════════════════════════════════════════ */
 
-  function parseISO(s){
-    if (!s) return null;
-    const str = String(s).slice(0, 10);
-    const d = new Date(str + 'T00:00:00Z');
-    return isNaN(d.getTime()) ? null : d;
-  }
-  function fmtISO(d){ if (!d) return null; return d.toISOString().slice(0, 10); }
-  function days(a, b){
-    if (!a || !b) return 0;
-    const ms = b - a;
-    if (ms < 0) return 0;
-    return Math.round(ms / 86400000);
-  }
-  function numOr(v, fb){
-    if (v == null || v === '') return fb;
-    const n = parseFloat(v);
-    return isNaN(n) ? fb : n;
-  }
   function toNum(v){
     if (v == null || v === '') return null;
     const n = parseFloat(v);

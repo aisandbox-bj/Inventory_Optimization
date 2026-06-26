@@ -1,0 +1,313 @@
+/* ════════════════════════════════════════════
+   shared/material-detail.css · APP-SCR-01 (2026-06-25)
+   Styles for the shared MaterialDetail render (shared/material-detail.js).
+   This is a faithful COPY of the detail-panel rules in analysis/analysis.css
+   so the Screener styles the panel identically. analysis.css is intentionally
+   left untouched (zero Analysis-CSS regression); the duplication is a
+   deliberate, surfaced tradeoff — consolidation is a queued follow-up.
+   Depends on shared/brand-tokens.css for .pill*, .amber, design tokens.
+════════════════════════════════════════════ */
+
+/* ─── Material detail ───────────────────────────────────────────────────── */
+/* APP-E12 (2026-05-16) — tightened vertical spacing so operator doesn't
+   scroll back up to the material list after every selection. Padding,
+   margins, and stat-cell vertical metrics all trimmed; min-height killed.
+   Horizontal real estate unchanged — readability preserved. */
+.material-detail{
+  background:var(--bg-panel);border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);padding:14px 18px;
+}
+.detail-empty{
+  padding:60px 32px;text-align:center;color:var(--text-muted);
+  font-family:var(--font-mono);font-size:12px;letter-spacing:.5px;line-height:1.55;
+}
+.detail-empty .big{
+  font-family:var(--font-display);font-size:18px;letter-spacing:1.5px;
+  color:var(--text-pri);text-transform:uppercase;margin-bottom:10px;
+}
+
+/* APP-E18 (2026-05-16) — banner-inline recommendation per Graph visuals
+   deck. The action-banner is no longer a separate row; its label + text
+   now occupy the centre column of .detail-head, and the traffic-light
+   tint moves to the head's left border. */
+.detail-head{
+  display:flex;align-items:stretch;gap:18px;margin-bottom:9px;
+  padding:7px 12px;border:1px solid var(--border-soft);
+  border-left:3px solid var(--accent);background:var(--bg-panel-2);
+  border-radius:var(--r-sm);
+}
+.detail-head .detail-head-id{
+  flex:0 0 auto;min-width:140px;align-self:center;
+}
+.detail-head .mat{
+  font-family:var(--font-mono);font-size:16px;color:var(--text-pri);
+  letter-spacing:.5px;
+}
+/* APP-E26 (2026-05-17) — material-number copy button. Sits inline next to
+   the material number; small icon-only with brand cyan on hover. Visible
+   but not loud. Placeholder ahead of the cross-tool "Trace it!" button
+   (APP-T-07). */
+.detail-head .mat-row{
+  display:flex; align-items:center; gap:8px;
+}
+.detail-head .mat-copy{
+  background:transparent; border:1px solid var(--border-soft);
+  color:var(--text-muted); cursor:pointer;
+  font-family:var(--font-mono); font-size:12px; line-height:1;
+  padding:2px 6px; border-radius:3px;
+  transition:all .12s;
+  min-width:24px; text-align:center;
+}
+.detail-head .mat-copy:hover{
+  color:var(--accent); border-color:var(--accent);
+  background:rgba(31,206,216,0.06);
+}
+.detail-head .mat-copy:active{ transform:translateY(1px); }
+.detail-head .mat-copy.copied{
+  color:var(--status-ok); border-color:var(--status-ok);
+  background:rgba(52,211,153,0.08);
+}
+.detail-head .mat-copy.failed{
+  color:var(--status-crit); border-color:var(--status-crit);
+  background:rgba(239,68,68,0.08);
+}
+.detail-head .desc{
+  font-family:var(--font-heading);font-weight:500;font-size:14px;
+  color:var(--accent);line-height:1.3;margin-top:2px;
+}
+.detail-head .detail-head-rec{
+  flex:1 1 auto;min-width:0;display:flex;flex-direction:column;
+  justify-content:center;padding-left:14px;
+  border-left:1px solid var(--border-soft);
+  font-family:var(--font-body);font-size:12.5px;color:var(--text-sec);
+  line-height:1.4;
+}
+.detail-head .rec-lab{
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--text-muted);
+  display:block;margin-bottom:2px;
+}
+.detail-head .rec-text{
+  color:var(--text-sec);
+}
+.detail-head .pill{
+  align-self:center;flex:0 0 auto;
+}
+/* Traffic-light tint — was on .action-banner pre-APP-E18 */
+.detail-head.GREEN { border-left-color:var(--status-ok); }
+.detail-head.BLUE  { border-left-color:var(--accent); }
+.detail-head.ORANGE{ border-left-color:var(--status-warn); }
+.detail-head.RED   { border-left-color:var(--status-crit); }
+.detail-head.GREY  { border-left-color:var(--text-disabled); }
+.detail-head.PURPLE{ border-left-color:#9B59B6; }
+
+/* ─── APP-E11 · Chart toolbar (legend toggles + caveat) ────────────────── */
+/* APP-E12 — tighter top/bottom margins; caveat sits flush under chart. */
+.chart-toolbar{
+  display:flex;align-items:center;gap:14px;
+  margin:0 2px 4px;
+  font-family:var(--font-mono);font-size:11px;
+  color:var(--text-muted);
+}
+.chart-toolbar-lab{
+  letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--text-muted);
+}
+.chart-toggle{
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  color:var(--text-sec);font-family:var(--font-body);font-size:12px;
+  user-select:none;
+}
+.chart-toggle input{
+  cursor:pointer;accent-color:var(--accent);width:13px;height:13px;
+}
+.chart-toggle:hover{ color:var(--text-pri); }
+
+/* chart container */
+.chart-host{
+  background:#0C2D3B;border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);padding:4px;margin-bottom:2px;
+  overflow:hidden;
+}
+/* APP-E11 — legend-toggle hide rules. Class is toggled on .chart-host by
+   wireChartToggles() in analysis.js; SVG layers are tagged by chart.js. */
+.chart-host.hide-cum .chart-cumulative-line{ display:none; }
+.chart-host.hide-soh .chart-grp-soh{ display:none; }
+
+.chart-caveat{
+  font-family:var(--font-body);font-size:10.5px;font-style:italic;
+  color:var(--text-muted);line-height:1.35;
+  padding:0 4px;margin-bottom:9px;
+}
+
+/* key stats grid
+   APP-E18 (2026-05-16) — single-line cells per Graph visuals deck.
+   Label sits left, value right (justify-content:space-between), so each
+   cell is ~22px tall instead of ~44px. Cells are reordered (in JS) into
+   three thematic groups: stock+runway, consumption rates, variances. */
+.stat-grid{
+  display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;margin-bottom:9px;
+}
+@media (max-width:780px){ .stat-grid{ grid-template-columns:repeat(2,1fr); } }
+.stat-cell{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  background:var(--bg-panel-2);border:1px solid var(--border-soft);
+  padding:4px 10px;border-radius:var(--r-sm);min-width:0;
+}
+.stat-cell .lab{
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.2px;
+  text-transform:uppercase;color:var(--text-muted);flex-shrink:0;
+}
+.stat-cell .v{
+  font-family:var(--font-mono);font-size:13px;letter-spacing:.3px;
+  color:var(--accent);line-height:1.2;text-align:right;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.stat-cell .v.warn{ color:var(--status-warn); }
+.stat-cell .v.crit{ color:var(--status-crit); }
+.stat-cell .v small{ color:var(--text-muted); font-size:10px; }
+
+/* HCE table */
+.hce-table{
+  width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:11.5px;
+  margin-bottom:14px;
+}
+.hce-table th{
+  background:var(--bg-elevated);color:var(--text-muted);
+  padding:7px 10px;text-align:left;font-weight:500;letter-spacing:1px;
+  text-transform:uppercase;font-size:9.5px;border-bottom:1px solid var(--border-soft);
+}
+.hce-table td{
+  padding:7px 10px;border-bottom:1px solid rgba(155,171,168,.05);
+  color:var(--text-sec);vertical-align:top;
+}
+.hce-table td.q{ color:var(--accent); text-align:right; }
+.hce-table tr.p2 td{ background:rgba(239,68,68,.05); }
+.hce-table tr.p1 td{ background:rgba(251,191,36,.04); }
+
+/* LLM review panel */
+.llm-panel{
+  background:var(--bg-panel-2);border:1px solid var(--border-soft);
+  border-top:3px solid var(--accent);padding:16px 18px;border-radius:var(--r-sm);
+  margin-top:6px;
+}
+.llm-panel.tweak{ border-top-color:var(--status-warn); }
+.llm-panel.review{ border-top-color:var(--status-crit); }
+.llm-panel.ok{ border-top-color:var(--status-ok); }
+.llm-head{
+  display:flex;align-items:center;gap:14px;margin-bottom:10px;
+}
+.llm-head h4{
+  font-family:var(--font-display);font-size:14px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--text-pri);
+}
+.llm-head .verdict{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:1.5px;
+  text-transform:uppercase;padding:3px 10px;
+  border:1px solid currentColor;
+}
+.llm-head .verdict.ok     { color:var(--status-ok); }
+.llm-head .verdict.tweak  { color:var(--status-warn); }
+.llm-head .verdict.review { color:var(--status-crit); }
+.llm-head .provider{
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:1px;
+  color:var(--text-muted);
+}
+.llm-head .spacer{flex:1;}
+.llm-body{
+  font-family:var(--font-body);font-size:13px;color:var(--text-sec);line-height:1.55;
+  margin-bottom:10px;
+}
+.llm-edits{
+  border-top:1px solid var(--border-soft);padding-top:10px;
+}
+.llm-edit{
+  padding:7px 10px;background:var(--bg-deep);border-left:2px solid var(--accent);
+  font-family:var(--font-mono);font-size:11px;color:var(--text-sec);line-height:1.45;
+  margin-bottom:6px;
+}
+.llm-edit .field{ color:var(--accent); }
+.llm-edit .arrow{ color:var(--text-muted);margin:0 6px; }
+.llm-edit .rationale{
+  display:block;color:var(--text-muted);font-family:var(--font-body);
+  font-size:11.5px;margin-top:4px;font-style:italic;
+}
+.llm-spinner{
+  font-family:var(--font-mono);font-size:11px;color:var(--accent);
+  letter-spacing:.5px;animation:pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse{ 0%,100%{opacity:.55;} 50%{opacity:1;} }
+.llm-error{
+  font-family:var(--font-mono);font-size:11.5px;color:var(--status-crit);
+  letter-spacing:.3px;line-height:1.5;
+}
+
+.mrp-compare{
+  margin:4px 0 10px;
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+}
+.mrp-compare-head{
+  padding:6px 14px;
+  border-bottom:1px solid var(--border-soft);
+  display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;
+}
+.mrp-compare-head h4{
+  font-family:var(--font-display); font-weight:700; font-size:12.5px;
+  letter-spacing:1.4px; text-transform:uppercase; color:var(--text-pri);
+  margin:0;
+}
+.mrp-compare-head .hint{
+  font-family:var(--font-mono); font-size:10.5px;
+  letter-spacing:.4px; color:var(--text-muted);
+}
+.mrp-compare-table{
+  width:100%; border-collapse:collapse; font-family:var(--font-body); font-size:13px;
+}
+.mrp-compare-table th, .mrp-compare-table td{
+  padding:5px 14px; border-bottom:1px solid rgba(155,171,168,.06); vertical-align:middle;
+}
+.mrp-compare-table tbody tr:last-child td{ border-bottom:none; }
+.mrp-compare-table th{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1.3px;
+  text-transform:uppercase; color:var(--text-muted); text-align:center;
+  background:var(--bg-elevated);
+}
+.mrp-compare-table th.current-head{
+  color:var(--accent-soft, #B0E0E6); background:rgba(155,171,168,0.10);
+}
+.mrp-compare-table th.rec-head{
+  color:var(--accent); background:rgba(31,206,216,0.10);
+}
+.mrp-compare-table td.lab{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1.4px;
+  color:var(--text-muted); text-transform:uppercase; width:30%;
+}
+.mrp-compare-table td.current{
+  background:rgba(155,171,168,0.06);
+  font-family:var(--font-mono); font-size:13.5px; color:var(--text-pri);
+  text-align:center; width:35%;
+}
+.mrp-compare-table td.rec{
+  background:rgba(31,206,216,0.05);
+  font-family:var(--font-mono); font-size:13.5px; color:var(--accent);
+  text-align:center; width:35%; font-weight:600;
+}
+.mrp-compare-table tr.changed td.current,
+.mrp-compare-table tr.changed td.rec{
+  background:rgba(241,196,15,0.10);
+}
+.mrp-compare-table tr.changed td.rec{ color:var(--status-warn); }
+
+/* ─── APP-E8 · MRP reclass (PD → V1) surfacing ──────────────────────────── */
+.mrp-reclass{
+  font-family:var(--font-mono); font-size:12px; font-weight:700;
+  letter-spacing:.4px; color:var(--status-warn); white-space:nowrap;
+}
+.mrp-reclass-note{
+  margin:6px 14px 2px; padding:7px 11px;
+  border-left:3px solid var(--status-warn);
+  background:rgba(241,196,15,0.08);
+  font-family:var(--font-body); font-size:12px; line-height:1.45;
+  color:var(--text-pri);
+}

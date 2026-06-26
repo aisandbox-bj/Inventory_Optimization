@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
+     Inventory Optimization App · Screener · v2.1.3-dev · APP-SCR-01
+     Repo : https://github.com/aisandbox-bj/Inventory_Optimization
+     RoC  : ../record-of-change.html
+     A post-analysis band filter. Reads the same canonical JSON as Analysis +
+     Trace, runs the pipeline, lists the subset of analysed materials inside
+     operator-defined bands, and on select renders BOTH the Analysis
+     material-detail visual (shared MaterialDetail) and the Trace per-material
+     visual (shared TracePhase), responsive side-by-side / stacked.
+═════════════════════════════════════════════════════════════════════════-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Inventory Optimization · Screener</title>
+<meta name="app-version" content="2.1.3-dev" />
+<link rel="stylesheet" href="../shared/brand-tokens.css" />
+<link rel="stylesheet" href="../shared/material-detail.css" />
+<link rel="stylesheet" href="../shared/trace-phase.css" />
+<link rel="stylesheet" href="screener.css" />
+</head>
+<body>
+
+<nav class="appnav">
+  <div class="brand">
+    <span class="dot"></span>
+    Inventory Optimization
+    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.1.3-dev · Screener</a>
+  </div>
+  <div class="links">
+    <a href="../index.html">Dashboard</a>
+    <a href="../intake/intake.html">Intake</a>
+    <a href="../analysis/analysis.html">Analysis</a>
+    <a href="../trace/trace.html">Trace</a>
+    <a href="screener.html" class="active">Screener</a>
+    <a href="../settings/settings.html">Settings</a>
+    <a href="../record-of-change.html">RoC</a>
+    <a href="../user-manual.html">Manual</a>
+  </div>
+</nav>
+
+<main class="shell screener-shell">
+  <div id="root">
+
+    <section id="banner" class="loaded-banner">
+      <div>
+        <span class="lab">Loading</span>
+        <h2>—</h2>
+        <div class="sub">awaiting canonical JSON from local storage…</div>
+      </div>
+      <div class="row"></div>
+      <div class="row"></div>
+    </section>
+
+    <div class="scr-toolbar" id="scrToolbar" hidden>
+      <div class="scr-count" id="scrCount">— of — in analysis</div>
+      <div class="scr-toolbar-spacer"></div>
+      <div class="scr-active-bands" id="scrActiveBands"></div>
+      <button id="btnBands" class="primary" title="Set the bands (filters) that decide which analysed materials appear in the Screener">⚙ Screener bands…</button>
+      <button id="btnClearBands" class="ghost" title="Clear all bands — show every analysed material">Clear bands</button>
+      <button id="btnExport" class="primary" title="Export one letter-size PDF page per flagged material — both tiles side by side. Flag materials with the checkbox in the list.">⤓ Export flagged (0)</button>
+    </div>
+
+    <div class="scr-main" id="scrMain" hidden>
+      <aside class="scr-list-wrap">
+        <div class="scr-list-toolbar">
+          <input type="text" id="scrSearch" class="scr-search" placeholder="Search material or description…" autocomplete="off" />
+        </div>
+        <div id="scrList" class="scr-list">
+          <div class="scr-list-empty">no materials in band</div>
+        </div>
+      </aside>
+
+      <section class="scr-detail" id="scrDetail">
+        <div class="scr-empty">
+          <div class="scr-empty-big">Pick a material</div>
+          Select a material on the left to load its consumption detail (chart + stats + MRP recommendation) alongside its procurement phase distribution.
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+  <!-- ─── Screener bands modal ─── -->
+  <div id="bandsModal" class="scr-modal hidden" aria-hidden="true">
+    <div class="scr-backdrop" id="bandsBackdrop"></div>
+    <div class="scr-dialog">
+      <div class="scr-modal-head">
+        <div class="scr-modal-title">
+          <span class="lab">Screener bands</span>
+          <h3>Filter the analysed materials</h3>
+        </div>
+        <button id="bandsClose" class="scr-close" title="Close">✕</button>
+      </div>
+      <div class="scr-modal-body" id="bandsBody"></div>
+      <div class="scr-modal-foot" id="bandsFoot"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ─── App scripts (load order matters) ─── -->
+<!-- PDF-export libs (jsPDF + autoTable) are lazy-loaded on first Export click. -->
+<script src="../shared/canonical-schema.js"></script>
+<script src="../shared/storage.js"></script>
+<script src="../shared/locale.js"></script>
+<script src="../shared/parsers.js"></script>
+<script src="../shared/config.js"></script>
+<script src="../shared/inventory-back-calc.js"></script>
+<script src="../shared/pipeline.js"></script>
+<script src="../shared/chart.js"></script>
+<script src="../shared/client-context.js"></script>
+<script src="../shared/llm.js"></script>
+<script src="../shared/trace-phase.js"></script>
+<script src="../shared/material-detail.js"></script>
+<script src="screener.js"></script>
+
+</body>
+</html>
