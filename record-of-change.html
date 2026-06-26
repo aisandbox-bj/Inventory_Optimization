@@ -380,6 +380,42 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-FIX-VOL-V03-PARITY ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-VOL-V03-PARITY · Trace Volume cumulative — restore v0.3's deliberate per-series styling</h4>
+      <ul>
+        <li><b>Why.</b> Operator feedback (PPT 2026-05-26, slide 2): the v0.3 Volume chart had specific colour + line-style choices the operator had spent time tuning; the v0.4 port had flattened all four cumulative series to identical solid lines. This restores the v0.3 look.</li>
+        <li><b>What changed (styling only).</b> In <code>trace/trace.js renderVolume</code>, the four cumulative datasets now mirror v0.3's <code>buildVolume</code> (v0.3 lines 2808–2842): <b>PR Raised</b> = pink <code>#F472B6</code> dashed (<code>[6,4]</code>) with point markers; <b>PO Raised</b> = orange <code>#FB923C</code> dashed with markers; <b>Site Receipt</b> = cyan <code>#1FCED8</code> solid + filled, the thicker headline series; <b>Consumed</b> = amber <code>#FBBF24</code> smooth line (<code>tension 0.3</code>, not stepped). Cancelled-PR red ticks (<code>#EF4444</code>) and the cancel-tick plugin were already at parity (APP-FIX-VOL-CANCEL) and are unchanged.</li>
+        <li><b>Not changed.</b> No datasets added/removed; the cumulative math, the active-set filtering, the pack-size multiplier, and the KPI strip are untouched — this is purely <code>borderColor</code> / <code>borderDash</code> / <code>fill</code> / marker treatment.</li>
+        <li><b>Verified (live preview).</b> Volume view for material 1000640: <code>Chart.getChart('volChart')</code> reports the four series styled exactly as v0.3 (PR/PO dashed + markers, Site filled solid, Consumed tension 0.3) plus the red cancel ticks; zero console errors.</li>
+        <li><b>Files.</b> <code>trace/trace.js</code>. Snapshot: <code>_rollback/APP-FIX-VOL-V03-PARITY-pre/</code>.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-T-07 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-T-07 · "Trace it!" — one-click handoff from an Analysis material to Calibre Trace</h4>
+      <ul>
+        <li><b>Why.</b> Operator request (2026-05-17): from a material's Analysis detail, jump straight into Trace's procurement-chain view for the same material instead of switching to Trace and re-finding it in the picker.</li>
+        <li><b>What changed.</b> The Analysis material-detail panel gains a <b>"Trace it! &rarr;"</b> button beside the material-number copy button. It opens <code>../trace/trace.html#mat=&lt;material&gt;</code>. On boot, <code>trace.js</code> reads the URL hash: if the material exists in this assessment it switches to single-material mode, selects it, persists it as the current selection, and consumes the hash (<code>history.replaceState</code>) so a later reload respects the normal last-picked selection. Falls back to the existing default-first-material when no hash is present or the material isn't in scope.</li>
+        <li><b>Where it shows (and doesn't).</b> The button is opt-in via a new <code>enableTraceLink</code> option on the shared <code>MaterialDetail.render</code> — Analysis passes <code>true</code>; the <b>Screener does not</b> (Trace is already inline there, so a jump button would be redundant). The button's styling lives in <code>analysis.css</code> only, since it's Analysis-only.</li>
+        <li><b>Verified (live preview, 5-material sample).</b> Analysis detail shows the cyan "Trace it! &rarr;" button; clicking it lands on <code>trace.html</code> with material <code>1000640</code> auto-selected and the hash stripped from the URL; the Screener detail shows the copy button but <b>no</b> Trace button; zero console errors.</li>
+        <li><b>Files.</b> <code>shared/material-detail.js</code> (opt-in button + wiring), <code>analysis/analysis.js</code> (passes <code>enableTraceLink</code>), <code>analysis/analysis.css</code> (<code>.mat-trace</code> style), <code>trace/trace.js</code> (hash read on boot). Snapshot: <code>_rollback/APP-T-07-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-SCR-01d ───────── -->
     <article class="roc-entry dev">
       <div class="head">

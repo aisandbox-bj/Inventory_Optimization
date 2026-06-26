@@ -19,7 +19,9 @@
         onLlmResult,   // (materialNo, out) => void — called after a review run
         enableLlm,     // default true — render + wire the "Run LLM review" button
         chartWidth,    // default 936  (Analysis parity)
-        chartHeight    // default 320
+        chartHeight,   // default 320
+        enableTraceLink// default false — render a "Trace it!" button (Analysis only;
+                       //   opens ../trace/trace.html#mat=<material>)
      })
 
    Depends on globals: AppChart, AppLocale, AppLlm (only when enableLlm).
@@ -251,6 +253,7 @@
           <div class="mat-row">
             <span class="mat">${escapeHtml(mat.material)}</span>
             <button class="mat-copy" id="btnCopyMat" title="Copy material number to clipboard" aria-label="Copy material number">⧉</button>
+            ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt" title="Open this material in Calibre Trace">Trace it! &rarr;</button>` : ''}
           </div>
           <div class="desc">${escapeHtml(mat.description || '')}</div>
         </div>
@@ -340,6 +343,20 @@
           copyBtn.textContent = orig;
         }, 1200);
       });
+    }
+
+    // APP-T-07 — "Trace it!" cross-tool deep link (opt-in; Analysis only). Opens
+    // this material directly in Calibre Trace via the URL hash; trace.js reads it
+    // on boot. Not rendered on the Screener (Trace is already inline there).
+    if (opts.enableTraceLink) {
+      const traceBtn = hostEl.querySelector('#btnTraceIt');
+      if (traceBtn && !traceBtn._wired) {
+        traceBtn._wired = true;
+        traceBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.location.href = '../trace/trace.html#mat=' + encodeURIComponent(mat.material);
+        });
+      }
     }
   }
 

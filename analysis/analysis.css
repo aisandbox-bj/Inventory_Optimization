@@ -361,6 +361,20 @@
   color:var(--status-crit); border-color:var(--status-crit);
   background:rgba(239,68,68,0.08);
 }
+/* APP-T-07 (2026-06-26) — cross-tool "Trace it!" button beside the copy button.
+   Opens this material directly in Calibre Trace (trace.html#mat=…). A touch
+   louder than the icon-only copy button since it's a navigation action. */
+.detail-head .mat-trace{
+  background:rgba(31,206,216,0.08); border:1px solid var(--accent);
+  color:var(--accent); cursor:pointer;
+  font-family:var(--font-mono); font-size:11px; line-height:1; letter-spacing:.3px;
+  padding:3px 9px; border-radius:3px;
+  transition:all .12s;
+}
+.detail-head .mat-trace:hover{
+  background:rgba(31,206,216,0.18); box-shadow:0 0 0 1px var(--accent);
+}
+.detail-head .mat-trace:active{ transform:translateY(1px); }
 .detail-head .desc{
   font-family:var(--font-heading);font-weight:500;font-size:14px;
   color:var(--accent);line-height:1.3;margin-top:2px;

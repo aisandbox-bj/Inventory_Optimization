@@ -83,6 +83,20 @@
      BOOT
   ═════════════════════════════════════════════════════════════════════════ */
 
+  // APP-T-07 — deep-link helpers for the Analysis "Trace it!" button.
+  // trace.html#mat=<material> selects that material on boot.
+  function readHashMaterial(){
+    const h = (window.location.hash || '').replace(/^#/, '');
+    if (!h) return null;
+    const m = /(?:^|&)mat=([^&]+)/.exec(h);
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+  function clearHash(){
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); }
+    catch (e) { try { window.location.hash = ''; } catch (e2) { /* ignore */ } }
+  }
+
   async function boot(){
     const json = await AppStorage.get('intake.current');
     if (!json) { showEmptyState(renderNoIntake()); return; }
@@ -99,6 +113,18 @@
 
     // Hydrate persisted view state — silently fall through if anything's stale
     await hydratePersistedState();
+
+    // APP-T-07 — "Trace it!" deep link. trace.html#mat=<material> auto-picks that
+    // material (overriding any persisted selection) when it exists in this
+    // assessment, persists it as the new selection, then consumes the hash so a
+    // later reload respects the normal last-picked selection.
+    const hashMat = readHashMaterial();
+    if (hashMat && state.matIndex.has(hashMat)) {
+      state.scopeMode = 'single';
+      state.scopeSingle = hashMat;
+      await persistState();
+      clearHash();
+    }
 
     // Default the single-mode picker to first material if nothing persisted
     if (state.scopeMode === 'single' && !state.scopeSingle) {
@@ -1037,10 +1063,15 @@
       type: 'line',
       data: {
         datasets: [
-          { label: 'PR Raised',    data: prSeries,   borderColor: '#1FCED8', backgroundColor: 'rgba(31,206,216,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
-          { label: 'PO Raised',    data: poSeries,   borderColor: '#5AB69D', backgroundColor: 'rgba(90,182,157,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
-          { label: 'Site Receipt', data: siteSeries, borderColor: '#FBBF24', backgroundColor: 'rgba(251,191,36,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
-          { label: 'Consumed',     data: consSeries, borderColor: '#A78BFA', backgroundColor: 'rgba(167,139,250,.10)', fill: false, stepped: 'before', pointRadius: 0, borderWidth: 2, tension: 0 },
+          // APP-FIX-VOL-V03-PARITY (2026-06-26) — per-series styling restored to
+          // v0.3's deliberate choices (buildVolume, v0.3 lines 2808–2842): PR/PO
+          // dashed lines with point markers, Site Receipt the solid filled
+          // headline series, Consumed a smooth (tension) line. Palette + dash /
+          // fill / marker treatment only — data + cumulative math unchanged.
+          { label: 'PR Raised',    data: prSeries,   borderColor: '#F472B6', backgroundColor: 'rgba(244,114,182,.06)', fill: false, stepped: 'before', borderDash: [6,4], borderWidth: 2,   pointRadius: 4, pointHoverRadius: 7, pointBackgroundColor: '#F472B6', tension: 0 },
+          { label: 'PO Raised',    data: poSeries,   borderColor: '#FB923C', backgroundColor: 'rgba(251,146,60,.06)',  fill: false, stepped: 'before', borderDash: [6,4], borderWidth: 2,   pointRadius: 4, pointHoverRadius: 7, pointBackgroundColor: '#FB923C', tension: 0 },
+          { label: 'Site Receipt', data: siteSeries, borderColor: '#1FCED8', backgroundColor: 'rgba(31,206,216,.10)',  fill: true,  stepped: 'before', pointRadius: 6, pointHoverRadius: 9, pointBackgroundColor: '#1FCED8', borderWidth: 2.5, tension: 0 },
+          { label: 'Consumed',     data: consSeries, borderColor: '#FBBF24', backgroundColor: 'rgba(251,191,36,.04)',  fill: false, stepped: false,    pointRadius: 0, pointHoverRadius: 4, borderWidth: 2,   tension: 0.3 },
           // APP-FIX-VOL-CANCEL (2026-05-24) — cancelled-PR markers now render
           // as vertical red ticks at the x-axis baseline via cancelTickPlugin
           // (defined below). The scatter dataset is kept for Chart.js hover
