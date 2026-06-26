@@ -29,20 +29,38 @@
   // = numeric min/max over per-material result fields.
   const SET_FIELDS = [
     { k:'trafficLight', l:'Traffic light' },
-    { k:'pattern',      l:'Pattern' },
-    { k:'mrpType',      l:'MRP type' },
-    { k:'mrpRecFlag',   l:'Reclass flag' }
+    { k:'mrpType',      l:'MRP type' }
   ];
   const RANGE_FIELDS = [
     { k:'p2Rate',            l:'P2 rate / mo' },
     { k:'runway',            l:'Runway (mo)' },
     { k:'totalNet',          l:'Total (window)' },
-    { k:'recMin',            l:'Rec Min' },
-    { k:'recMax',            l:'Rec Max' },
     { k:'stock',             l:'Stock on hand' },
-    { k:'totValueOh',        l:'Stock value (CAD)' },
     { k:'daysSinceLastIssue',l:'Days since last issue' }
   ];
+
+  // ── New bands (APP-SCR-01d, 2026-06-26) ───────────────────────────────────
+  // PR-derived set bands — only meaningful when PR History is loaded.
+  const PR_SET_FIELDS = [
+    { k:'poStatus', l:'PO status' },
+    { k:'prStatus', l:'PR status' }
+  ];
+  // Risk-flag bands. Each card flags an at-risk condition; checks within a card
+  // combine with OR. need:'pr' cards depend on the procurement lead time, so
+  // they only appear when PR History is loaded. Min comparisons use the CURRENT
+  // SAP Min (operator decision 2026-06-26). Flags are computed per material in
+  // computeRiskFields().
+  const FLAG_CARDS = [
+    { id:'sohBelow',   l:'SoH below',                 need:'soh', combine:'or', flags:[
+        { k:'sohBelowP2',  l:'P2 (under 1 mo cover)' },
+        { k:'sohBelowMin', l:'Min (current SAP)' }
+    ]},
+    { id:'minBelowLT', l:'Min below lead-time cover', need:'pr',  combine:'or', flags:[
+        { k:'minBelowLT', l:'Min < P2 × avg lead-time (mo)' }
+    ]}
+  ];
+  const FLAG_LABELS = {};
+  FLAG_CARDS.forEach(c => c.flags.forEach(fl => { FLAG_LABELS[fl.k] = fl.l; }));
 
   const state = {
     json:             null,
@@ -81,8 +99,13 @@
     }
     state.materials = [...seen.values()];
 
+    // Derive per-material risk fields used by the new bands (SoH-vs-P2/Min,
+    // PO/PR open status, avg procurement lead time, Min-vs-lead-time cover).
+    computeRiskFields();
+
     // Load persisted bands + view state.
     try { state.bands = (await AppStorage.get('settings.screenerBands')) || {}; } catch { state.bands = {}; }
+    if (sanitizeBands()) persistBands();
     try {
       const vs = await AppStorage.get('screener.viewState');
       if (vs && vs.selectedMaterial && seen.has(vs.selectedMaterial)) state.selectedMaterial = vs.selectedMaterial;
@@ -184,10 +207,99 @@
     el.innerHTML = keys.map(k => {
       const f = state.bands[k];
       let txt;
-      if (f.type === 'set') txt = `${k}: ${f.values.join('/')}`;
-      else txt = `${k}: ${f.min != null ? f.min : '−∞'}…${f.max != null ? f.max : '∞'}`;
+      if (f.type === 'set') txt = `${bandLabel(k)}: ${f.values.join('/')}`;
+      else if (f.type === 'flag') {
+        const labs = (f.flags || []).map(flagLabel);
+        txt = labs.length > 1 ? `${bandLabel(k)}: ${labs.join(' / ')}` : bandLabel(k);
+      }
+      else txt = `${bandLabel(k)}: ${f.min != null ? f.min : '−∞'}…${f.max != null ? f.max : '∞'}`;
       return `<span class="scr-band-chip" title="${escapeAttr(txt)}">${escapeHtml(txt)}</span>`;
     }).join('');
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     PER-MATERIAL RISK FIELDS + band helpers (APP-SCR-01d)
+  ═════════════════════════════════════════════════════════════════════════ */
+  function numify(v){ if (v == null || v === '') return null; const n = (typeof v === 'number') ? v : parseFloat(v); return Number.isFinite(n) ? n : null; }
+
+  function activeSetFields(){ return state.hasPr ? SET_FIELDS.concat(PR_SET_FIELDS) : SET_FIELDS.slice(); }
+  function activeFlagCards(){ return FLAG_CARDS.filter(c => c.need !== 'pr' || state.hasPr); }
+  function bandLabel(k){
+    const f = activeSetFields().find(x => x.k === k)
+           || RANGE_FIELDS.find(x => x.k === k)
+           || FLAG_CARDS.find(x => x.id === k);
+    return f ? f.l : k;
+  }
+  function flagLabel(k){ return FLAG_LABELS[k] || k; }
+
+  // Drop persisted bands whose field no longer exists / isn't available (bands
+  // removed this version, or PR-only bands when no PR History is loaded) so a
+  // stale invisible filter can't silently hide materials.
+  function sanitizeBands(){
+    const valid = new Set([
+      ...activeSetFields().map(f => f.k),
+      ...RANGE_FIELDS.map(f => f.k),
+      ...activeFlagCards().map(c => c.id)
+    ]);
+    let changed = false;
+    for (const k of Object.keys(state.bands)) if (!valid.has(k)) { delete state.bands[k]; changed = true; }
+    return changed;
+  }
+
+  // Derive the fields the new bands filter on. SoH-vs-P2/Min need no PR data;
+  // PO/PR open status, avg procurement lead time, and Min-vs-lead-time cover use
+  // the PR→PO→GR chains (TracePhase.computeChains), so chain work runs only for
+  // materials that actually have PR History rows. 'NA' = can't evaluate (missing
+  // inputs) — never silently treated as "not at risk".
+  function computeRiskFields(){
+    const prMatHas = new Set();
+    if (state.hasPr) {
+      for (const r of (state.json.data && state.json.data.prHistory) || []) {
+        const k = String(r.material == null ? '' : r.material).trim();
+        if (k) prMatHas.add(k);
+      }
+    }
+    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+    let chainCalls = 0;
+    for (const e of state.materials) {
+      const m = e.m;
+      const stock = numify(m.stock);
+      const cmin  = numify(m.cmin);
+      const p2    = (m.p2Flag === 'OK') ? numify(m.p2Rate) : null;
+
+      // SoH below thresholds (no PR data needed).
+      m.sohBelowP2  = (stock != null && p2   != null) ? (stock < p2   ? 'Y' : 'N') : 'NA';
+      m.sohBelowMin = (stock != null && cmin != null) ? (stock < cmin ? 'Y' : 'N') : 'NA';
+
+      // Chain-derived fields.
+      let avgLT = null, poOpen = false, prOpen = false;
+      if (state.hasPr && prMatHas.has(m.material)) {
+        chainCalls++;
+        const chains   = TracePhase.computeChains(state.json, m.material);
+        const complete = chains.filter(c => !!c.siteWH);
+        if (complete.length) {
+          const tot = complete.reduce((s, c) => s + (c.A + c.B + c.C + c.D), 0);
+          avgLT = tot / complete.length;                 // mean phase A–D total (days to site)
+        }
+        poOpen = chains.some(c => c.state === 'IN_FLIGHT' && !c.adminCancelled); // PO placed, not yet received at site
+        prOpen = chains.some(c => c.state === 'PR_ONLY');                        // PR raised, no PO yet
+      }
+      m.avgProcTimelineDays = avgLT;
+      m.poStatus = state.hasPr ? (poOpen ? 'Open' : 'None') : null;
+      m.prStatus = state.hasPr ? (prOpen ? 'Open' : 'None') : null;
+
+      // Min below lead-time cover: current SAP Min < P2/mo × (avg lead-time in mo).
+      if (cmin != null && p2 != null && avgLT != null) {
+        m.ltCoverUnits = p2 * (avgLT / 30);              // expected demand over avg lead time
+        m.minBelowLT   = cmin < m.ltCoverUnits ? 'Y' : 'N';
+      } else {
+        m.ltCoverUnits = null;
+        m.minBelowLT   = 'NA';
+      }
+    }
+    if (t0 && typeof console !== 'undefined') {
+      console.log(`[screener] risk fields: ${state.materials.length} materials · ${chainCalls} chain computes · ${(performance.now() - t0).toFixed(0)}ms`);
+    }
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -209,6 +321,10 @@
         }
         if (f.min != null && n < f.min) return false;
         if (f.max != null && n > f.max) return false;
+      } else if (f.type === 'flag') {
+        // OR within a flag card: pass if ANY checked condition is true ('Y').
+        const flags = Array.isArray(f.flags) ? f.flags : [];
+        if (flags.length && !flags.some(fk => m[fk] === 'Y')) return false;
       }
     }
     return true;
@@ -348,7 +464,7 @@
   }
 
   function buildBandsBody(){
-    const setHtml = SET_FIELDS.map(f => {
+    const setHtml = activeSetFields().map(f => {
       const vals = distinctValues(f.k);
       const band = state.bands[f.k];
       const checkedSet = (band && band.type === 'set') ? new Set(band.values) : null;
@@ -380,12 +496,33 @@
         </div>`;
     }).join('');
 
+    const flagCards = activeFlagCards();
+    const flagHtml = flagCards.map(card => {
+      const band = state.bands[card.id];
+      const checkedSet = (band && band.type === 'flag') ? new Set(band.flags) : null;
+      return `
+        <div class="band-field">
+          <div class="band-field-lab">${escapeHtml(card.l)} <span class="band-field-key">any of</span></div>
+          <div class="band-checks">
+            ${card.flags.map(fl => {
+              const checked = checkedSet ? (checkedSet.has(fl.k) ? 'checked' : '') : '';
+              return `<label class="band-chk"><input type="checkbox" data-flag-card="${escapeAttr(card.id)}" data-flag-key="${escapeAttr(fl.k)}" ${checked}><span>${escapeHtml(fl.l)}</span></label>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }).join('');
+    const flagGroup = flagCards.length ? `
+      <div class="band-group-lab">Risk flags</div>
+      <div class="band-intro">Each card flags an at-risk condition; checks within a card combine with <b>OR</b> (match if any checked condition is true). Min comparisons use the <b>current SAP Min</b>. Cards that need the procurement lead time only appear when PR History is loaded.</div>
+      <div class="band-grid">${flagHtml}</div>` : '';
+
     $('#bandsBody').innerHTML = `
       <div class="band-intro">Bands <b>AND</b> together — a material must satisfy every constraint you set. For a category band, leave it fully unchecked (or fully checked) to ignore it. For a range, leave both inputs blank to ignore it.</div>
       <div class="band-group-lab">Category bands</div>
       <div class="band-grid">${setHtml}</div>
       <div class="band-group-lab">Numeric range bands</div>
-      <div class="band-grid">${rangeHtml}</div>`;
+      <div class="band-grid">${rangeHtml}</div>
+      ${flagGroup}`;
   }
 
   function buildBandsFoot(){
@@ -402,7 +539,7 @@
 
   function applyBands(){
     const bands = {};
-    for (const f of SET_FIELDS) {
+    for (const f of activeSetFields()) {
       const boxes = $$(`#bandsBody input[data-set="${f.k}"]`);
       const total = boxes.length;
       const checked = boxes.filter(b => b.checked).map(b => b.value);
@@ -417,6 +554,11 @@
       const min = isNaN(mn) ? null : mn;
       const max = isNaN(mx) ? null : mx;
       if (min != null || max != null) bands[f.k] = { type:'range', min, max };
+    }
+    for (const card of activeFlagCards()) {
+      const boxes = $$(`#bandsBody input[data-flag-card="${card.id}"]`);
+      const checked = boxes.filter(b => b.checked).map(b => b.dataset.flagKey);
+      if (checked.length) bands[card.id] = { type:'flag', combine: card.combine || 'or', flags: checked };
     }
     state.bands = bands;
     persistBands();

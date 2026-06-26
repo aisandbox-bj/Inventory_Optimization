@@ -161,6 +161,13 @@
 }
 .scr-trace-missing b{ color:var(--status-warn); }
 
+/* The phase-distribution numeric stats table is shown on the Trace page only.
+   On the Screener we keep the chevron + box plots but hide the table (operator
+   request 2026-06-26). This is a display-only hide scoped to the Screener trace
+   cell — the table code stays in shared/trace-phase.js and still renders on
+   Trace. */
+#scrCellTrace .pd-stats-wrap{ display:none; }
+
 /* Stack the list above the detail on narrow viewports. */
 @media (max-width: 920px){
   .scr-main{ flex-direction:column; }
