@@ -1,6 +1,6 @@
 # Calibre Tune v2.1.3-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-06-26 (after APP-SCR-01d Screener band overhaul — built + verified, unpushed)
+**Updated:** 2026-06-26 (after APP-SCR-01d Screener band overhaul — pushed origin `dac65d8`)
 **Status:** Screener (APP-SCR-01) + operator-review refinements & PDF export (APP-SCR-01b) + the back-calc parse fix (APP-FIX-BACKCALC-PARSE) built, pushed to origin/main (`966e045`) after a remote backup, and **operator-validated 2026-06-26 ("working pretty well")**. More work to follow (see deferred/queued). Earlier 2026-06-25 work (APP-E8, APP-DOC-MANUAL, APP-FIX-VER, APP-FIX-PD-POLISH, APP-E21 investigation, APP-E9, APP-FIX-PD-CHEVRON, README rebuild) was already on origin (`f7063f9`).
 
 **Update 2026-06-25 (batch 2):** APP-E8 (#21), APP-DOC-MANUAL + APP-FIX-VER pushed (origin `579cf99`). Then: **APP-FIX-PD-POLISH (#1)** built + verified (Trace Phase Distribution: uniform scale + transposed stats table + on-plot mean) — unpushed. **APP-E21 (#15)** investigation complete (findings + ranked reduction plan in RoC); reduction implementation queued as **APP-E21b** (deferred). **APP-E9 (#22)** not yet built — see below.
@@ -17,7 +17,7 @@
 - **Bands removed:** Pattern, Reclass flag, Rec Min, Rec Max, Stock value (CAD).
 - **Bands added:** PO status (Open/None), PR status (Open/None), a "SoH below" risk card (below P2 = <1 mo cover · below current SAP Min), and a "Min below lead-time cover" risk card (current SAP Min < P2/mo × avg procurement lead time in months). Risk-card checks OR within a card; cards AND with other bands.
 - New per-material fields computed at boot via `TracePhase.computeChains` (PO/PR open status, avg lead time = mean phases A–D, Min-vs-lead-time). **Min comparisons use current SAP Min** (operator decision 2026-06-26). Unevaluable cases marked `NA` (not silently "not at risk"); PR-dependent cards hidden when no PR History. Stale persisted bands dropped on load.
-- Built + browser-verified (5-material PR-bearing sample; zero console errors). **Unpushed** — origin/main still `966e045`; pending operator validation. Files: `screener/screener.js`, `screener/screener.css`, `record-of-change.html`.
+- Built + browser-verified (5-material PR-bearing sample; zero console errors), then **pushed as `dac65d8`** (2026-06-26) after a remote backup (`backup/pre-APP-SCR-01d-966e045` branch + `checkpoint/pre-APP-SCR-01d` tag at `966e045`) + local snapshot `_rollback/APP-SCR-01d-pre/`. Pending operator validation. Files: `screener/screener.js`, `screener/screener.css`, `record-of-change.html`, `Backlog.md`.
 
 ## Deferred / queued (new)
 - **APP-DOC-SCREENER** — add a Screener section to `user-manual.html` (the nav link is in place but the manual has no Screener page yet): bands, the combined detail, and the PDF export. User-facing doc; not a blocker for testing.
