@@ -653,6 +653,21 @@
       return;
     }
 
+    // APP-V03-PORT-6 (2026-06-26) — Year-on-Year view.
+    if (state.activeView === 'year-on-year') {
+      if (state.scopeMode === 'single') {
+        const mat = state.matIndex.get(state.scopeSingle);
+        if (!mat) {
+          host.innerHTML = `<div class="view-empty">Pick a material from the rail to load the year-on-year view.</div>`;
+          return;
+        }
+        renderYoY(host, mat.material);
+      } else {
+        host.innerHTML = renderYoYInMultiPanel();
+      }
+      return;
+    }
+
     // Any other view is queued — render the not-built state (regardless of
     // scope mode). Queued multi-material views get a richer panel with the
     // candidate list; queued single-material views get a shorter one.
@@ -1128,6 +1143,267 @@
         }
       }
     });
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-V03-PORT-6 (2026-06-26) — YEAR-ON-YEAR VIEW
+     Faithful port of v0.3 buildYoY() (v0.3 lines 1835–2084): per-phase A–E box
+     plots, one box per year side by side, with a colour-coded mean-change delta
+     marker between the two most recent years. Canvas-drawn (matches v0.3).
+     Ignores the year filter (the view IS the year comparison); respects sigma +
+     manual exclusions. Generalised to the years actually present in the data.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function renderYoY(host, material){
+    state.chains = computeChainsForMaterial(material);
+    const ex     = allExcl(state.chains, material);
+    const acAll  = state.chains.filter(c => !ex.has(c.pr));   // ignore yearFilter; respect manual + sigma
+
+    // Shared filter toolbar (same construction as the other views). Year buttons
+    // are shown for consistency but DON'T change this view — noted in the sub.
+    const years     = getYearsForChains(state.chains);
+    const manualSet = getManualExcl(material);
+    const sigmaSetV = sigmaExcl(state.chains);
+    const totalExcl = manualSet.size + sigmaSetV.size;
+    const yearBtns = ['All'].concat(years).map(y =>
+      `<button class="tr-fbtn ${state.yearFilter === y ? 'active' : ''}" data-filter="year" data-val="${y}">${y === 'All' ? 'All years' : y}</button>`
+    ).join('');
+    const sigmaBtns = [
+      { v: 'null', lab: 'Off',         title: 'No sigma trim' },
+      { v: '3',    lab: 'Loose 3σ',    title: 'Drop chains slower than mean + 3·sd of total LT' },
+      { v: '2',    lab: 'Standard 2σ', title: 'Drop chains slower than mean + 2·sd of total LT' },
+      { v: '1.5',  lab: 'Tight 1.5σ',  title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+    ].map(s => {
+      const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
+      return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
+    }).join('');
+    const exclChipHtml = totalExcl ? `<span class="tr-excl-chip" title="Manually excluded: ${manualSet.size}. Sigma-trimmed: ${sigmaSetV.size}.">${totalExcl} excluded</span>` : '';
+    const resetBtnHtml = manualSet.size ? `<button class="tr-fbtn tr-reset" data-filter="reset-manual" title="Clear manual excludes for this material">Reset manual</button>` : '';
+    const filterToolbar = `
+      <div class="tr-filterbar" id="traceFilterBar">
+        <span class="tr-flbl">Year</span>${yearBtns}
+        <span class="tr-fsep"></span>
+        <span class="tr-flbl">Sigma trim</span>${sigmaBtns}
+        ${exclChipHtml}
+        ${resetBtnHtml}
+      </div>
+    `;
+
+    // Years present in the active set (numeric, ascending).
+    const yrNums = [...new Set(acAll.map(c => Number(getChainYear(c))).filter(y => !isNaN(y)))].sort((a, b) => a - b);
+
+    if (acAll.length === 0 || yrNums.length === 0) {
+      host.innerHTML = `
+        ${filterToolbar}
+        <div class="pd-empty">
+          <div class="pd-empty-lab">No year data</div>
+          <h3>Nothing to compare for material ${escapeHtml(material)}</h3>
+          <p>The active set has no chains with phase durations. Check the sigma / manual exclusions, or switch to Raw Data to inspect what's there.</p>
+        </div>`;
+      bindFilterBar(material);
+      return;
+    }
+
+    host.innerHTML = `
+      ${filterToolbar}
+      <div class="yoy-host">
+        <div class="yoy-head">
+          <span class="yoy-title">Year-over-Year — phase distribution</span>
+          <span class="yoy-sub">${yrNums.join(' vs ')} · active chains only · exclusions respected · the year filter is ignored here</span>
+        </div>
+        <div class="yoy-legend"><b>Year-on-year direction:</b>
+          <span style="color:#EF4444">▲ slower (worse)</span> ·
+          <span style="color:#FBBF24">▲ mild +5–15%</span> ·
+          <span style="color:#34D399">▼ faster (better)</span> ·
+          <span style="color:#1FCED8">● stable ±5%</span>
+        </div>
+        <div class="yoy-chart-host"><canvas id="yoyCanvas"></canvas></div>
+        <div class="chart-caveat">Each phase A–E shows one box plot per year side by side — mean line labelled, whiskers to min/max, IQR box, jittered points. All boxes share one y-axis (Tukey upper fence across every phase-year; values above the clip render as <b>↑</b> off-chart). The marker between the two most recent years flags the change in <b>mean</b> processing time: <span style="color:#EF4444">red &gt;+15%</span> / <span style="color:#FBBF24">orange +5–15%</span> slower · <span style="color:#34D399">green &lt;−5%</span> faster · <span style="color:#1FCED8">blue ±5%</span> stable. The <b>year filter is ignored</b> here (the view IS the comparison); sigma + manual exclusions are respected.</div>
+      </div>`;
+
+    bindFilterBar(material);
+    drawYoYCanvas(host.querySelector('#yoyCanvas'), acAll, yrNums);
+  }
+
+  // Canvas draw — ported from v0.3 buildYoY(), generalised to N years.
+  function drawYoYCanvas(canvas, acAll, yrNums){
+    if (!canvas) return;
+    const ctx  = canvas.getContext('2d');
+    const dpr  = window.devicePixelRatio || 1;
+    const wrap = canvas.parentNode;
+    const W    = Math.max((wrap && wrap.clientWidth) ? wrap.clientWidth : 800, 520);
+    const H    = 420;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const phases  = TracePhase.PHASE_KEYS;       // ['A','B','C','D','E']
+    const pLabels = TracePhase.PHASE_LABELS;     // { A:'PR Approval', ... }
+    const palette = ['#4FC2D7', '#F87171', '#FBBF24', '#A78BFA', '#5AB69D', '#FB923C'];
+    const yrColor = {}; yrNums.forEach((y, i) => { yrColor[y] = palette[i % palette.length]; });
+    const fmt0 = v => Math.round(v).toString();
+    const fmt1 = v => (Math.round(v * 10) / 10).toFixed(1);
+
+    // Per (phase, year): the raw values (for jitter/outliers) + box stats.
+    const phYr = phases.map(ph => yrNums.map(yr => {
+      const vals = acAll.filter(c => Number(getChainYear(c)) === yr)
+                        .map(c => c[ph]).filter(v => v != null && Number.isFinite(v));
+      return { vals, s: vals.length ? TracePhase.boxStats(vals) : null };
+    }));
+
+    const n = phases.length;
+    const padL = 68, padR = 16, padT = 46, padB = 60;
+    const plotW = W - padL - padR;
+    const slotW = plotW / n;
+
+    // Y scale — Tukey upper fence across ALL (phase, year) sets so it's fair.
+    const fences = [];
+    phYr.forEach(row => row.forEach(cell => { if (cell.s) fences.push(cell.s.upperFence); }));
+    const yMax = Math.max(Math.max(0, ...fences), 10) * 1.10;
+    const yMin = 0;
+    const yScale = v => padT + (1 - (v - yMin) / (yMax - yMin)) * (H - padT - padB);
+
+    // Y grid + axis labels
+    const yTicks = 5;
+    ctx.font = '10px "JetBrains Mono",monospace';
+    for (let i = 0; i <= yTicks; i++) {
+      const v = yMin + (yMax - yMin) * i / yTicks;
+      const y = yScale(v);
+      ctx.strokeStyle = 'rgba(31,206,216,.10)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      ctx.fillStyle = '#9BABA8'; ctx.textAlign = 'right';
+      ctx.fillText(Math.round(v) + 'd', padL - 8, y + 3);
+    }
+
+    // Lane separators between phase columns
+    ctx.strokeStyle = 'rgba(31,206,216,.18)'; ctx.lineWidth = 1;
+    for (let i = 1; i < n; i++) {
+      const x = padL + i * slotW;
+      ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
+    }
+
+    // Top legend: active count + outlier note + year swatches
+    const counts = yrNums.map(yr => acAll.filter(c => Number(getChainYear(c)) === yr).length);
+    ctx.fillStyle = 'rgba(31,206,216,.55)'; ctx.textAlign = 'left'; ctx.font = '10px "JetBrains Mono",monospace';
+    ctx.fillText(`${acAll.length} active chains  ·  ↑ outliers above ${Math.round(yMax)} d (off-chart)`, padL, 18);
+    let swX = Math.max(padL + 220, W - padR - yrNums.length * 96);
+    yrNums.forEach((yr, i) => {
+      ctx.fillStyle = yrColor[yr]; ctx.fillRect(swX, 11, 10, 10);
+      ctx.fillStyle = '#D6DFDE'; ctx.font = '10px "JetBrains Mono",monospace'; ctx.textAlign = 'left';
+      ctx.fillText(`${yr} (n=${counts[i]})`, swX + 16, 20);
+      swX += 96;
+    });
+
+    const subCx = (pi, yi) => padL + pi * slotW + (slotW - slotW * 0.82) / 2 + (yi + 0.5) * (slotW * 0.82 / yrNums.length);
+
+    phases.forEach((ph, pi) => {
+      const row = phYr[pi];
+      const slotCenterX = padL + (pi + 0.5) * slotW;
+      const subW = slotW * 0.82 / yrNums.length;
+
+      yrNums.forEach((yr, yi) => {
+        const cell = row[yi], s = cell.s, col = yrColor[yr];
+        const cx = subCx(pi, yi);
+        const bw = Math.min(subW * 0.62, 30);
+
+        if (s) {
+          const visMax = Math.min(s.max, yMax);
+          ctx.strokeStyle = col + '70'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(cx, yScale(s.min)); ctx.lineTo(cx, yScale(visMax)); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx - bw * 0.28, yScale(s.min)); ctx.lineTo(cx + bw * 0.28, yScale(s.min)); ctx.stroke();
+          if (s.max <= yMax) { ctx.beginPath(); ctx.moveTo(cx - bw * 0.28, yScale(s.max)); ctx.lineTo(cx + bw * 0.28, yScale(s.max)); ctx.stroke(); }
+
+          if (s.q1 !== s.q3) {
+            const yQ1 = yScale(s.q1), yQ3 = yScale(s.q3);
+            ctx.fillStyle = col + '20'; ctx.fillRect(cx - bw / 2, yQ3, bw, yQ1 - yQ3);
+            ctx.strokeStyle = col + '50'; ctx.lineWidth = 1; ctx.strokeRect(cx - bw / 2, yQ3, bw, yQ1 - yQ3);
+          }
+
+          if (s.mean <= yMax) {
+            ctx.strokeStyle = col; ctx.lineWidth = 2.5; const yMean = yScale(s.mean);
+            ctx.beginPath(); ctx.moveTo(cx - bw / 2, yMean); ctx.lineTo(cx + bw / 2, yMean); ctx.stroke();
+            ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.font = 'bold 10px "JetBrains Mono",monospace';
+            ctx.fillText(fmt1(s.mean) + 'd', cx, yMean - 7);
+          }
+
+          ctx.font = '8.5px "JetBrains Mono",monospace'; ctx.fillStyle = col + 'CC'; ctx.textAlign = 'center';
+          ctx.fillText(fmt0(s.min) + 'd', cx, yScale(s.min) + 11);
+          if (s.max <= yMax) ctx.fillText(fmt0(s.max) + 'd', cx, yScale(s.max) - 4);
+
+          const outl = cell.vals.filter(v => v > yMax).sort((a, b) => b - a);
+          if (outl.length) {
+            const arrowY = padT + 14;
+            ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.font = 'bold 14px "Rajdhani",sans-serif';
+            ctx.fillText('↑', cx, arrowY);
+            ctx.font = '8.5px "JetBrains Mono",monospace'; ctx.fillStyle = col + 'CC';
+            ctx.fillText(outl.length === 1 ? fmt0(outl[0]) + 'd' : fmt0(outl[0]) + 'd · +' + (outl.length - 1), cx, arrowY + 11);
+          }
+
+          cell.vals.forEach(v => {
+            if (v > yMax) return;
+            ctx.beginPath(); ctx.arc(cx + (Math.random() - 0.5) * bw * 0.35, yScale(v), 2.2, 0, Math.PI * 2);
+            ctx.fillStyle = col + '80'; ctx.fill();
+          });
+
+          ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.font = 'bold 9.5px "JetBrains Mono",monospace';
+          ctx.fillText(String(yr).slice(2), cx, H - padB + 12);
+        } else {
+          ctx.fillStyle = '#5C7270'; ctx.textAlign = 'center'; ctx.font = '9px "JetBrains Mono",monospace';
+          ctx.fillText('—', cx, (H - padB + padT) / 2);
+          ctx.fillStyle = col; ctx.font = 'bold 9.5px "JetBrains Mono",monospace';
+          ctx.fillText(String(yr).slice(2), cx, H - padB + 12);
+        }
+      });
+
+      // Delta marker between the two most recent years (mean change).
+      if (yrNums.length >= 2) {
+        const sA = row[yrNums.length - 2].s, sB = row[yrNums.length - 1].s;
+        if (sA && sB && sA.n && sB.n && sA.mean > 0) {
+          const deltaPct = (sB.mean - sA.mean) / sA.mean * 100;
+          const absDays  = Math.abs(sB.mean - sA.mean);
+          const absPct   = Math.abs(deltaPct);
+          let bandCol, sentence;
+          if (deltaPct > 15)      { bandCol = '#EF4444'; sentence = 'Processing time up ' + absDays.toFixed(1) + 'd · ' + absPct.toFixed(0) + '% increase'; }
+          else if (deltaPct > 5)  { bandCol = '#FBBF24'; sentence = 'Processing time up ' + absDays.toFixed(1) + 'd · ' + absPct.toFixed(0) + '% increase'; }
+          else if (deltaPct < -5) { bandCol = '#34D399'; sentence = 'Processing time down ' + absDays.toFixed(1) + 'd · ' + absPct.toFixed(0) + '% improvement'; }
+          else                    { bandCol = '#1FCED8'; sentence = 'Stable · within ±' + absPct.toFixed(0) + '% YoY'; }
+
+          ctx.fillStyle = bandCol; ctx.font = 'bold 10.5px "Rajdhani",sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText(sentence, slotCenterX, padT - 8);
+
+          const cxA = subCx(pi, yrNums.length - 2), cxB = subCx(pi, yrNums.length - 1);
+          const midX = (cxA + cxB) / 2;
+          const yA = yScale(Math.min(sA.mean, yMax)), yB = yScale(Math.min(sB.mean, yMax));
+          const midY = (yA + yB) / 2, triH = 22, triW = 22;
+          ctx.fillStyle = bandCol; ctx.beginPath();
+          if (deltaPct > 5)       { ctx.moveTo(midX, midY - triH / 2); ctx.lineTo(midX - triW / 2, midY + triH / 2); ctx.lineTo(midX + triW / 2, midY + triH / 2); ctx.closePath(); }
+          else if (deltaPct < -5) { ctx.moveTo(midX, midY + triH / 2); ctx.lineTo(midX - triW / 2, midY - triH / 2); ctx.lineTo(midX + triW / 2, midY - triH / 2); ctx.closePath(); }
+          else                    { ctx.arc(midX, midY, triW / 2.2, 0, Math.PI * 2); }
+          ctx.fill();
+          ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(8,12,20,.7)'; ctx.stroke();
+
+          const lbl = (deltaPct > 0 ? '+' : '') + deltaPct.toFixed(0) + '%';
+          ctx.textAlign = 'center'; ctx.font = 'bold 11px "JetBrains Mono",monospace';
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,12,20,.85)'; ctx.strokeText(lbl, midX, midY + triH / 2 + 13);
+          ctx.fillStyle = bandCol; ctx.fillText(lbl, midX, midY + triH / 2 + 13);
+        }
+      }
+
+      // Phase code + plain-English label below the year pair.
+      ctx.fillStyle = '#D6DFDE'; ctx.textAlign = 'center'; ctx.font = 'bold 12px "Rajdhani",sans-serif';
+      ctx.fillText(ph, slotCenterX, H - padB + 28);
+      ctx.font = '9px "JetBrains Mono",monospace'; ctx.fillStyle = 'rgba(240,244,243,.45)';
+      ctx.fillText(pLabels[ph], slotCenterX, H - padB + 42);
+    });
+  }
+
+  function renderYoYInMultiPanel(){
+    return `
+      <div class="view-empty">
+        <div class="view-empty-lab">Mode mismatch</div>
+        <h3>Year-on-Year renders one material at a time</h3>
+        <p>You're in <b>Multi-material</b> scope. The Year-on-Year view compares one material's phase durations across years; switch to <b>Single material</b> on the rail to load it.</p>
+      </div>`;
   }
 
   function renderPCInMultiPanel(){

@@ -380,6 +380,25 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-6 ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-6 · Trace Year-on-Year — per-phase box plots compared across years</h4>
+      <ul>
+        <li><b>Why.</b> Next chunk in the v0.3 → v0.4 port (analysis doc §9 P6). v0.3's <code>buildYoY()</code> "Annual Prog." view compared each procurement phase's duration year-on-year; it was a queued marker in v0.4. Operator confirmed the target look from the v0.3 file.</li>
+        <li><b>What shipped.</b> A new <b>Year-on-Year</b> single-material view in the Trace rail (4th built view, after Volume). For each phase A–E it draws one box plot per year side by side (mean line labelled, whiskers to min/max, IQR box, jittered points), all sharing one y-axis (Tukey upper fence across every phase-year; values above the clip render as <b>↑</b> off-chart). Between the two most recent years it draws a colour-coded <b>mean-change delta marker</b> — <span style="color:#EF4444">red ▲ &gt;+15%</span> / <span style="color:#FBBF24">orange ▲ +5–15%</span> slower, <span style="color:#34D399">green ▼ &lt;−5%</span> faster, <span style="color:#1FCED8">blue ● ±5%</span> stable — with a sentence blurb ("Processing time up 2.3d · 45% increase") and a % label, exactly per v0.3.</li>
+        <li><b>How it was ported.</b> Faithful canvas port of v0.3 <code>buildYoY()</code> (v0.3 lines 1835–2084) into <code>renderYoY</code> + <code>drawYoYCanvas</code> in <code>trace/trace.js</code>, adapted to v0.4 data: chains from <code>computeChainsForMaterial</code>, year via <code>getChainYear</code>, box stats via <code>TracePhase.boxStats</code>, phase keys/labels from <code>TracePhase</code>. <b>Generalised to the years present</b> (not hard-coded 2025/2026): a year palette cycles, and the delta compares the two most recent years. The <b>year filter is ignored</b> (the view IS the comparison); sigma + manual exclusions are respected. The rail button moved from the multi-material "queued" list to the single-material "built" group.</li>
+        <li><b>Not changed.</b> No analytical-engine or schema change; the other Trace views and the chain compute are untouched. Math is the same box statistics already used by Phase Distribution.</li>
+        <li><b>Verified (live preview, 5-material PR-bearing sample).</b> Year-on-Year button is un-queued and in the single-material group; selecting it renders the canvas (1147&nbsp;px wide, ~9% drawn pixels = boxes/grid/labels/markers present), detects <b>2025 vs 2026</b>, re-measures correctly on viewport resize; zero console errors.</li>
+        <li><b>Files.</b> <code>trace/trace.js</code> (renderYoY + drawYoYCanvas + dispatch + multi panel), <code>trace/trace.html</code> (rail button moved + un-queued), <code>trace/trace.css</code> (<code>.yoy-*</code> styles). Snapshot: <code>_rollback/APP-V03-PORT-6-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-FIX-VOL-V03-PARITY ───────── -->
     <article class="roc-entry dev">
       <div class="head">

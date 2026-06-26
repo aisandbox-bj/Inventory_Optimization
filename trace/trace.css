@@ -1032,3 +1032,19 @@
   padding: 8px;
   margin-bottom: 10px;
 }
+
+/* APP-V03-PORT-6 (2026-06-26) — Year-on-Year view */
+.yoy-host{ margin-top: 4px; }
+.yoy-head{ display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.yoy-title{ font-family: var(--font-display, 'Rajdhani', sans-serif); font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-pri); }
+.yoy-sub{ font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.yoy-legend{ font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.yoy-chart-host{
+  position: relative;
+  width: 100%;
+  background: rgba(0,0,0,.18);
+  border: 1px solid rgba(255,255,255,.04);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 10px;
+}
