@@ -380,6 +380,23 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-PD-SPREAD chevron total-duration spread ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-PD-SPREAD · Phase-Distribution chevron — "Total to site" gains a +/- spread from the box</h4>
+      <ul>
+        <li><b>What changed.</b> The Phase-Distribution chevron's <b>Total to site</b> value kept only the mean. It now carries a small two-line <b>+/-</b> beside the number — <b>+</b> (superscript) is the distance up to the box top (Q3) and <b>−</b> (subscript) the distance down to the box bottom (Q1) of the per-chain total-to-site distribution. So <code>headline + up = Q3</code> and <code>headline − dn = Q1</code> — the operator reads the box top/bottom straight off the number.</li>
+        <li><b>Basis.</b> The box is computed over chains with a <b>complete A–D</b> (all phases dated) so the totals are real, via the same <code>boxStats</code> the box plots use — cheap, because chains already carry <code>totalToSite</code> (APP-FIX-SIGMA-PROC). Excludes phase E (Time to First Use) per the request. Offsets clamp at 0 if the average sits outside the box; the spread is omitted when fewer than 2 fully-dated chains exist. Headline stays = the sum of the displayed segment means (no change to that number).</li>
+        <li><b>Verified (live preview).</b> Material 1003380 → "30.0d <sup>+7.5</sup>/<sub>−7.5</sub>", box Q1 22.5d – Q3 37.5d (30.0+7.5 = 37.5 = Q3; 30.0−7.5 = 22.5 = Q1). Tooltip explains the box + basis. Shared render, so it shows on both Trace (Phase Distribution) and the Screener. Zero console errors.</li>
+        <li><b>Files.</b> <code>shared/trace-phase.js</code> (<code>renderPhaseVisual</code> spread calc + markup), <code>shared/trace-phase.css</code> (<code>.pd-chev-spread</code>). Snapshot: <code>_rollback/APP-PD-SPREAD-pre/</code>. The <b>YoY per-year chevrons</b> are a candidate follow-up (same pattern, per-year box).</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-OPI-01 open-procurement indicator ───────── -->
     <article class="roc-entry dev">
       <div class="head">

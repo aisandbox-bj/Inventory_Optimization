@@ -121,6 +121,13 @@
   font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
   color: var(--text-pri, #e8eef4);
 }
+/* APP-PD-SPREAD — box spread (+upper / −lower quartile) beside the total-to-site */
+.pd-chev-spread{
+  display: inline-flex; flex-direction: column; align-items: flex-start;
+  vertical-align: middle; margin-left: 5px; line-height: 1.05;
+  font-family: 'JetBrains Mono', monospace; font-weight: 600;
+}
+.pd-chev-spread .up, .pd-chev-spread .dn{ font-size: 9px; color: var(--text-muted, #9BABA8); }
 .pd-chev-shelf{
   flex: 0 0 auto; min-width: 150px;
   display: flex; flex-direction: column; justify-content: center; gap: 3px;

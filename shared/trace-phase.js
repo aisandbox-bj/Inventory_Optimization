@@ -378,6 +378,17 @@
     const flowMean   = flowPhases.reduce((s, p) => s + (p.stats ? p.stats.mean : 0), 0);
     const eMean      = (ePhase && ePhase.stats) ? ePhase.stats.mean : 0;
     const flowPct    = flowPhases.map(p => (flowMean > 0 ? (p.stats ? p.stats.mean : 0) / flowMean : 0));
+    // APP-PD-SPREAD (2026-06-27) — spread of the total-to-site (A–D) across chains
+    // with a complete A–D (all phases dated). Shown beside the headline as
+    // +（Q3−median) / −(median−Q1) — the box top/bottom around the median, always
+    // ≥0. Headline stays = flowMean (the sum of the displayed segment means).
+    const adComplete = drawn.filter(c => c.A != null && c.B != null && c.C != null && c.D != null);
+    const adStats    = adComplete.length >= 2 ? boxStats(adComplete.map(c => c.totalToSite)) : null;
+    const spreadHtml = adStats
+      ? `<span class="pd-chev-spread" title="Total-to-site box across ${adComplete.length} fully-dated chain${adComplete.length === 1 ? '' : 's'}: Q1 ${adStats.q1.toFixed(1)}d – Q3 ${adStats.q3.toFixed(1)}d. The +/- is the distance from the ${flowMean.toFixed(1)}d average up to the box top (Q3) and down to the box bottom (Q1); clamped at 0 if the average sits outside the box.">`
+        + `<span class="up">+${Math.max(0, adStats.q3 - flowMean).toFixed(1)}</span>`
+        + `<span class="dn">−${Math.max(0, flowMean - adStats.q1).toFixed(1)}</span></span>`
+      : '';
     const chevronHtml = `
       <div class="pd-chevron">
         <div class="pd-chevron-lab">Total Lead Time to site availability · phase decomposition · avg across ${drawn.length} chain${drawn.length === 1 ? '' : 's'}</div>
@@ -393,9 +404,9 @@
               </div>
             `).join('')}
           </div>
-          <div class="pd-chev-total-site" title="Average total processing time until the material is received at site (phases A–D). Excludes shelf time before first use.">
+          <div class="pd-chev-total-site" title="Average total processing time until the material is received at site (phases A–D). Excludes shelf time before first use. The small +/- is the box spread (upper/lower quartile) of the per-chain total-to-site.">
             <span class="lab">Total to site</span>
-            <span class="v">${flowMean.toFixed(1)}d</span>
+            <span class="v">${flowMean.toFixed(1)}d${spreadHtml}</span>
           </div>
           ${ePhase ? `
           <div class="pd-chev-shelf" style="border-color:${ePhase.color}; background:${ePhase.color}1f;" title="Average time the material sits on the shelf after arriving at site, before its first consumption (phase E). Not part of the lead-time-to-availability total.">
