@@ -22,12 +22,12 @@ I'm continuing work on **Calibre Tune** (the Inventory Optimization App) — a b
 
 **GitHub repo:** [aisandbox-bj/Inventory_Optimization](https://github.com/aisandbox-bj/Inventory_Optimization) — repo root content mirrors `v2.1.3-dev/` (excludes `_rollback/`). Tags `v1.0.0` / `v1.1.0` preserve prior releases for rollback. `gh` CLI authenticated as `aisandbox-bj`.
 
-**Current version:** `v2.1.3-dev`. origin/main tip = `2ae7b26` (APP-FIX-BACKCALC-TZ, 2026-05-26). Last released tag: `v2.1.1`.
+**Current version:** `v2.1.3-dev`. The current origin/main tip is the **newest entry in `v2.1.3-dev\record-of-change.html`** — don't hard-pin a SHA here, it goes stale (as of the 2026-06-26 doc refresh the tip was the Backlog/doc-refresh commit on top of APP-DOC-SCREENER). Last released tag: `v2.1.1`.
 
 ## Before doing anything
 
 1. Read these in order — they are the source of truth:
-   - `v2.1.3-dev\record-of-change.html` — full changelog with rollback steps (newest entry: APP-FIX-BACKCALC-TZ, 2026-05-26)
+   - `v2.1.3-dev\record-of-change.html` — full changelog with rollback steps (newest entry = current origin/main tip)
    - `v2.1.3-dev\user-manual.html` — operator manual with the analytical methodology
    - `v2.1.3-dev\PLAN_v2.1.0.md` ★ — the LLM-boundary plan: threat model + durable LLM data-security principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
    - `v2.1.3-dev\shared\canonical-schema.js` — JSON contract + parameter defaults (SCHEMA_VERSION 1.0.0)
