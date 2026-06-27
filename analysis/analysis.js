@@ -629,7 +629,7 @@
       <div class="export-group">
         <span class="export-group-label">Data quality</span>
         <div class="export-group-buttons">
-          <button id="btnInvAdj" class="ghost" title="Open the Inventory Adjustment review modal — flags MB51 dates with anomalously high issue-transaction counts (likely cycle counts) so they can be excluded from rate math.">⚠ Inv Adj review</button>
+          <button id="btnInvAdj" class="ghost" title="Open the Inventory Adjustment review — flags MB51 dates with anomalously high issue-transaction counts (likely cycle counts) so they can be excluded from rate math. This is a heads-up, not an error.">✦ Inv Adj review</button>
         </div>
       </div>
 
@@ -2015,10 +2015,55 @@
     setTimeout(() => el.remove(), 4500);
   }
 
+  /* APP-E24 — brand-styled hover tooltips. Delegated on document so it also
+     covers dynamically-rendered controls (export buttons, tiles, chips). Moves
+     the native title into data-bt while shown (suppresses the browser default),
+     restores it on leave. */
+  function initBrandTooltips(){
+    if (window.__brandTipInit) return; window.__brandTipInit = true;
+    const tip = document.createElement('div');
+    tip.className = 'brand-tip'; tip.style.display = 'none';
+    document.body.appendChild(tip);
+    let cur = null;
+    function hide(){
+      tip.style.display = 'none';
+      if (cur && cur.getAttribute('data-bt') != null) {
+        cur.setAttribute('title', cur.getAttribute('data-bt'));
+        cur.removeAttribute('data-bt');
+      }
+      cur = null;
+    }
+    function show(el){
+      const t = el.getAttribute('title');
+      if (!t) return;
+      el.setAttribute('data-bt', t); el.removeAttribute('title');   // suppress native tooltip
+      cur = el;
+      tip.textContent = t; tip.style.display = 'block';
+      tip.style.left = '-9999px'; tip.style.top = '0px';            // measure off-screen first
+      const r = el.getBoundingClientRect();
+      const tr = tip.getBoundingClientRect();
+      let left = r.left + r.width / 2 - tr.width / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+      let top = r.top - tr.height - 8;
+      if (top < 8) top = r.bottom + 8;
+      tip.style.left = Math.round(left) + 'px';
+      tip.style.top  = Math.round(top) + 'px';
+    }
+    document.addEventListener('mouseover', (e) => {
+      if (cur && cur.contains(e.target)) return;                    // still inside current el
+      const el = e.target.closest && e.target.closest('[title]');
+      if (cur) hide();
+      if (el) show(el);
+    });
+    window.addEventListener('scroll', hide, true);
+    document.addEventListener('click', hide, true);
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     bindToolbar();
     boot();
     bindMassModalCloseHandlers();
+    initBrandTooltips();
   });
 
 })();

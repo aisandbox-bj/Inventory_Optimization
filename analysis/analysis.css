@@ -60,8 +60,11 @@
 .pipeline-head .spacer{flex:1;}
 
 .tl-tiles{
-  display:grid;grid-template-columns:repeat(5, 1fr);gap:10px;
+  /* APP-E24 — all six traffic lights (incl. GREY) on one row (was repeat(5),
+     which wrapped GREY to a second row). */
+  display:grid;grid-template-columns:repeat(6, 1fr);gap:10px;
 }
+@media (max-width:1180px){ .tl-tiles{ grid-template-columns:repeat(3, 1fr); } }
 @media (max-width:780px){ .tl-tiles{ grid-template-columns:repeat(2, 1fr); } }
 .tl-tile{
   background:var(--bg-panel-2);border:1px solid var(--border-soft);
@@ -551,26 +554,40 @@
    Excel / JSON / LLM) with a small mono label above each cluster. Reduces
    "which button does what" cognitive load and makes the JSON-download
    addition discoverable rather than buried in a flat row. */
+/* APP-E24 — vertical swim lanes: each output type is its own horizontal lane
+   (label on the left, buttons on the right), lanes stacked so the operator
+   scans by type top-to-bottom rather than hunting across a wrapping button row. */
 .export-actions{
   background:var(--bg-panel);border:1px solid var(--border-soft);
-  border-radius:var(--r-sm);padding:14px 20px;display:flex;gap:16px;
-  align-items:flex-end;flex-wrap:wrap;
+  border-radius:var(--r-sm);padding:14px 20px;display:flex;
+  flex-direction:column;gap:8px;align-items:stretch;
 }
 .export-actions .label{margin-right:auto;}
 .export-group{
-  display:flex;flex-direction:column;gap:5px;
+  display:flex;flex-direction:row;align-items:center;gap:14px;
+  padding:3px 0;border-bottom:1px solid rgba(31,206,216,.06);
 }
+.export-group:last-of-type{ border-bottom:none; }
 .export-group-label{
+  flex:0 0 92px;text-align:right;
   font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.6px;
   text-transform:uppercase;color:var(--text-muted);
-  padding-left:2px;
 }
 .export-group-buttons{
-  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1 1 auto;min-width:0;
 }
 .export-progress{
   font-family:var(--font-mono);font-size:11px;color:var(--accent);
   letter-spacing:.5px;animation:pulse 1.2s ease-in-out infinite;
+}
+
+/* APP-E24 — brand-styled hover tooltip (replaces the browser-default title= box) */
+.brand-tip{
+  position:fixed; z-index:3000; max-width:340px;
+  background:var(--bg-elevated, #0d2a36); border:1px solid var(--accent);
+  color:var(--text-pri); font-family:var(--font-mono); font-size:11px; line-height:1.5;
+  padding:7px 10px; border-radius:6px; box-shadow:0 10px 30px rgba(0,0,0,.55);
+  pointer-events:none; letter-spacing:.2px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

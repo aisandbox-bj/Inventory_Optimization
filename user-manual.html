@@ -212,7 +212,7 @@
   <div class="links">
     <a href="index.html">Dashboard</a>
     <a href="intake/intake.html">Intake</a>
-    <a href="analysis/analysis.html">Analysis</a>
+    <a href="analysis/analysis.html">Trend</a>
     <a href="trace/trace.html">Trace</a>
     <a href="screener/screener.html">Screener</a>
     <a href="settings/settings.html">Settings</a>
@@ -247,7 +247,7 @@
       <a href="#data-files">4 · Data files &amp; SAP exports</a>
       <a href="#scope-selection">5 · Scope selection</a>
       <a href="#parameter-search">6 · Parameter Search</a>
-      <a href="#methodology">7 · Analysis methodology ★</a>
+      <a href="#methodology">7 · Trend methodology ★</a>
       <a class="deep" href="#m-net">7a · Net consumption</a>
       <a class="deep" href="#m-periods">7b · P1 + P2 windows</a>
       <a class="deep" href="#m-soh">7c · Stock-on-hand &amp; stockouts ★</a>
@@ -258,7 +258,7 @@
       <a class="deep" href="#m-tl">7h · Traffic-light tree</a>
       <a class="deep" href="#m-buckets">7i · Buckets &amp; MULTI</a>
       <a href="#chart">8 · Charts</a>
-      <a href="#analysis-ui">9 · Analysis page UI</a>
+      <a href="#analysis-ui">9 · Trend page UI</a>
       <a href="#excel">10 · Excel + PDF deliverables</a>
       <a href="#llm">11 · LLM review surface</a>
       <a href="#settings">12 · Settings reference</a>
@@ -278,14 +278,14 @@
         <ul>
           <li><b>Dashboard</b> (<code>index.html</code>) — recent intakes, per-row delete, "Clear session data".</li>
           <li><b>Intake</b> (<code>intake/intake.html</code>) — upload → schema-map → DQ gate → scope → parameters → review → export.</li>
-          <li><b>Analysis</b> (<code>analysis/analysis.html</code>) — runs the pipeline, surfaces per-material detail + chart, hosts the LLM review, exports Excel / PDF / JSON.</li>
+          <li><b>Trend</b> (<code>analysis/analysis.html</code>) — runs the pipeline, surfaces per-material detail + chart, hosts the LLM review, exports Excel / PDF / JSON.</li>
           <li><b>Trace</b> (<code>trace/trace.html</code>) — <em>Calibre Trace</em>, the procurement-chain timeline, ported in as a sibling page (see §13). Reads PR History + MB51 from the same intake.</li>
           <li><b>Settings</b> (<code>settings/settings.html</code>) — parameter defaults, LLM keys, Operational Context, prompt template, alias overrides, multi-plant toggle, maintenance (see §12).</li>
         </ul>
         <p>Shared engine modules live in <code>shared/</code>: <code>pipeline.js</code> (the deterministic analytical engine), <code>inventory-back-calc.js</code> (stock-on-hand reconstruction), <code>chart.js</code>, <code>excel.js</code>, <code>llm.js</code> / <code>mass-llm.js</code>, <code>parsers.js</code>, <code>canonical-schema.js</code>, <code>client-context.js</code>, <code>config.js</code>, <code>storage.js</code>, <code>locale.js</code>.</p>
         <div class="um-note">
           <span class="lab">The canonical JSON is the contract</span>
-          Intake produces one canonical JSON (schema version <code>1.0.0</code>). Analysis and Trace both consume it. The math deliverable carries <b>no</b> LLM metadata — verdicts, provider info, and client identifiers never touch the canonical JSON by design.
+          Intake produces one canonical JSON (schema version <code>1.0.0</code>). Trend and Trace both consume it. The math deliverable carries <b>no</b> LLM metadata — verdicts, provider info, and client identifiers never touch the canonical JSON by design.
         </div>
       </section>
 
@@ -294,7 +294,7 @@
         <h2><span class="num">02</span>Quick start</h2>
         <ol>
           <li>From the Dashboard, click <b>Intake</b>.</li>
-          <li><b>Assessment name</b> (mandatory ★) — type a name in the header. Saving and "Open in Analysis" both refuse to proceed without one.</li>
+          <li><b>Assessment name</b> (mandatory ★) — type a name in the header. Saving and "Open in Trend" both refuse to proceed without one.</li>
           <li><b>Data-alignment gate</b> — on a fresh assessment a modal asks you to confirm all uploads describe the same plant / date-range / material universe / fleet scope before any upload is accepted (see §3).</li>
           <li><b>Batch mode (optional)</b> — if a previous intake already has the heavy data loaded, use <em>↻ Pick source + datasets…</em> to hydrate MB51 / IW39 / Fleet / Inventory Master without re-uploading.</li>
           <li><b>Step 0 — Assessment type.</b> UNIT/FLOC, User list, or Parameter Search. Non-applicable upload zones grey out.</li>
@@ -304,8 +304,8 @@
           <li><b>Step 4 — Scope.</b> Fleet / Manual / By Classification / By Vendor (or Parameter Search in Step 4b). The Manual list accepts <em>materials OR work orders</em> with auto-detect + override.</li>
           <li><b>Step 5 — Parameters.</b> Per-run override of the saved Settings defaults. Amber cells = overridden. Reset reverts without touching Settings.</li>
           <li><b>Step 6 — Final scope summary.</b> Confirms exactly how many materials will be analysed, bucket-by-bucket, with mismatch advisories.</li>
-          <li><b>Step 7 — Review &amp; Export.</b> Save to local storage, download <code>.json</code>, or "Open in Analysis Engine →".</li>
-          <li>On <b>Analysis</b>: pick a bucket, filter/sort the material list, click a row for the detail panel. <b>Right-click a row</b> to mark for LLM review or PDF print. Export this bucket / Export ALL / PDF Pack / Mass LLM Review.</li>
+          <li><b>Step 7 — Review &amp; Export.</b> Save to local storage, download <code>.json</code>, or "Open in Trend →".</li>
+          <li>On <b>Trend</b>: pick a bucket, filter/sort the material list, click a row for the detail panel. <b>Right-click a row</b> to mark for LLM review or PDF print. Export this bucket / Export ALL / PDF Pack / Mass LLM Review.</li>
           <li>On <b>Trace</b> (if you uploaded PR History): pick a material and read its procurement chain, phase distribution, funnel, and volume views (see §13).</li>
         </ol>
       </section>
@@ -441,8 +441,8 @@
 
       <!-- ═══════════════════════ 7 · METHODOLOGY ═══════════════════════ -->
       <section class="um-section" id="methodology">
-        <h2><span class="num">07</span>Analysis methodology ★</h2>
-        <p>This is the section that matters when an output doesn't match expectations. Every number on the Analysis page and in the deliverables comes from one of the formulas below. The engine is <code>shared/pipeline.js</code> (deterministic, no LLM).</p>
+        <h2><span class="num">07</span>Trend methodology ★</h2>
+        <p>This is the section that matters when an output doesn't match expectations. Every number on the Trend page and in the deliverables comes from one of the formulas below. The engine is <code>shared/pipeline.js</code> (deterministic, no LLM).</p>
 
         <h3 id="m-net">7a · Net consumption</h3>
         <div class="um-formula">
@@ -527,7 +527,7 @@
           <span class="lab">APP-E8 — Min/Max only works under MRP type V1</span>
           Min/Max is computed for <b>every</b> material, including those whose MRP type is <code>PD</code> — <em>especially</em> PD items that are misclassified in SAP, since those are exactly what we need to surface. But Min/Max settings only operate under <code>V1</code>; <b>PD cannot legitimately hold Min/Max</b>. So whenever the engine recommends a Min/Max for a PD material, it also recommends <b>reclassifying the MRP type to V1</b> — never dropping the recommendation to hide the issue.
         </div>
-        <p>Concretely: the <b>Recommended MRP Type</b> resolves to <code>V1</code> when a Min/Max is recommended on a current-PD material (and also for LUMPY / HCE patterns). When that happens the material carries a reclass flag + a plain-English note ("PD cannot hold Min/Max — reclassify MRP type to V1 to apply the recommended Min/Max"). This surfaces as the <b>Reclass</b> column on the Analysis list (filterable — isolate every PD → V1 candidate in one click), a highlighted row + note in the detail panel's MRP comparison, a note in the Excel per-material sheet + PDF page, and a token in the LLM prompt context. The LLM only annotates it — the deterministic math decides.</p>
+        <p>Concretely: the <b>Recommended MRP Type</b> resolves to <code>V1</code> when a Min/Max is recommended on a current-PD material (and also for LUMPY / HCE patterns). When that happens the material carries a reclass flag + a plain-English note ("PD cannot hold Min/Max — reclassify MRP type to V1 to apply the recommended Min/Max"). This surfaces as the <b>Reclass</b> column on the Trend list (filterable — isolate every PD → V1 candidate in one click), a highlighted row + note in the detail panel's MRP comparison, a note in the Excel per-material sheet + PDF page, and a token in the LLM prompt context. The LLM only annotates it — the deterministic math decides.</p>
 
         <h3 id="m-tl">7h · Traffic-light decision tree (priority order)</h3>
         <p>The <code>assess()</code> function evaluates rules top-down; the first match wins. A <b>few-events overlay</b> may then upgrade GREEN/BLUE to ORANGE.</p>
@@ -579,9 +579,9 @@
         <p>The chart caveats explicitly that the SOH line is back-calculated, not pulled from SAP. If a material has only a single posting date, the cumulative series is padded with a synthetic zero-point so the step line still draws; the empty-state ("no consumption transactions found") only triggers on a true data-absence case.</p>
       </section>
 
-      <!-- ───────────── 9 · Analysis page UI ───────────── -->
+      <!-- ───────────── 9 · Trend page UI ───────────── -->
       <section class="um-section" id="analysis-ui">
-        <h2><span class="num">09</span>Analysis page UI</h2>
+        <h2><span class="num">09</span>Trend page UI</h2>
         <h3>Layout</h3>
         <p>Loaded-intake banner → pipeline status + traffic-light summary tiles → bucket tabs → full-width material list → material detail panel (renders when a row is selected) → export actions.</p>
         <h3>Material list table</h3>
