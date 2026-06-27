@@ -125,6 +125,11 @@
       const D = days(gr3pl, siteWH);
       const E = days(siteWH, c261);
       const total = [A, B, C, D, E].reduce((s, x) => s + (x || 0), 0);
+      // APP-FIX-SIGMA-PROC (2026-06-27) — processing timeline only (phases A–D,
+      // "total to site"); excludes phase E (Time to First Use / shelf time).
+      // Sigma outlier-trim keys off this: trim on procurement time, not on how
+      // long the part then sat on the shelf before first use.
+      const totalToSite = (A || 0) + (B || 0) + (C || 0) + (D || 0);
 
       // APP-V03-PORT-1 — PR/PO precedence rule (a PO means the need was approved;
       // a PR with no PO is treated as cancelled). adminCancelled is reporting-only.
@@ -144,7 +149,7 @@
         gr3pl:    fmtISO(gr3pl),
         siteWH:   fmtISO(siteWH),
         c261:     fmtISO(c261),
-        A, B, C, D, E, total,
+        A, B, C, D, E, total, totalToSite,
         releaseBad,
         qty:      qtyAtWH || numOr(r.qtyRequested, 0),
         qtySource: qtyAtWH ? 'MB51-109' : 'PR-requested',
@@ -175,13 +180,15 @@
     const inYear = chains.filter(c => yearFilter === 'All' || getChainYear(c) === yearFilter);
     const drawn  = inYear.filter(c => !!c.siteWH);
     if (drawn.length < 2) return new Set();
-    const totals = drawn.map(c => c.total);
+    // APP-FIX-SIGMA-PROC — outlier trim on processing time to site (A–D),
+    // not the full A–E total (E = Time to First Use / shelf time is excluded).
+    const totals = drawn.map(c => c.totalToSite);
     const n      = totals.length;
     const mean   = totals.reduce((s, v) => s + v, 0) / n;
     const sd     = Math.sqrt(totals.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(n - 1, 1));
     const threshold = mean + sigmaLimit * sd;
     const excl = new Set();
-    drawn.forEach(c => { if (c.total > threshold) excl.add(c.pr); });
+    drawn.forEach(c => { if (c.totalToSite > threshold) excl.add(c.pr); });
     return excl;
   }
 

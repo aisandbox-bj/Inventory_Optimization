@@ -255,7 +255,7 @@
             <button class="mat-copy" id="btnCopyMat" title="Copy material number to clipboard" aria-label="Copy material number">⧉</button>
             ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt" title="Open this material in Calibre Trace">Trace it! &rarr;</button>` : ''}
           </div>
-          <div class="desc">${escapeHtml(mat.description || '')}</div>
+          <div class="desc">${escapeHtml(mat.description || '')}${mat.manufacturer ? ' <span class="desc-mfr">(' + escapeHtml(mat.manufacturer) + ')</span>' : ''}</div>
         </div>
         <div class="detail-head-rec">
           <span class="rec-lab">Algorithmic recommendation</span>

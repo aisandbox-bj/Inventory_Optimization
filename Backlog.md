@@ -3,6 +3,15 @@
 **Updated:** 2026-06-26 (after the Trace deck + operator-feedback fixes + the full doc refresh)
 **Status:** origin/main = `fd47cdc` (will advance by one when this Backlog refresh is pushed). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only.
 
+## Built + verified locally — pending operator validation, NOT yet pushed (2026-06-27)
+- **APP-Y-01** — Trace context banner shows material details (Manufacturer · current MRP/Min/Max/SS · SOH · P2 rate · Last consumption); Trace now runs the pipeline at boot (loads back-calc + pipeline) so values match Trend. All single-material Trace views.
+- **APP-Y-02** — YoY trend indicators back to red/green >10%, blue within ±10%, with directional glyph + %.
+- **APP-E27** — Trend detail: manufacturer in brackets after the description; id/desc column can grow to ~48% and wrap, pushing the Algorithmic Recommendation block right.
+- **APP-FIX-SIGMA-PROC** — sigma outlier-trim keys off `totalToSite` (phases A–D) instead of full A–E; excludes phase E (Time to First Use). ⚠ changes which chains are flagged → exclusion counts + downstream averages may shift (intended). Snapshot: `_rollback/APP-YoY-Trend-pre/`. Verified in preview (5-mat sample, 142 PRs; zero console errors; Screener regression clean).
+
+## Next planned (major feature — planning, not built)
+- **APP-WU-01 — "Where used"** popup per material (consumption destinations). Needs IW39 (order→sortField); enriched by Fleet (sortField→model) for a Model rollup; 261 = WO/sort-field/model usage, 201 = cost-centre usage. Button on graph headers, live only when IW39 is loaded. Always show explicit "Unmapped WO / Unmapped model" buckets (never silently drop). **Operator decisions (2026-06-27):** CC = **single aggregate "Cost centre (CC)" bucket for v1** (per-CC breakdown — needs a new MB51 cost-centre parser alias, additive, no schema bump — deferred); window = **all-time, split into annual buckets** for the data's date range. Still open: reversal (262/202) netting; exact button placement (Trend chart header / Trace views / Screener). No SCHEMA_VERSION bump.
+
 ## Shipped since the last Backlog update (newest first — see RoC for detail)
 
 **2026-06-26 session — Trace deck + feedback fixes + doc refresh (origin `e407b1a` → `fd47cdc`, pending validation):**

@@ -37,7 +37,10 @@
   border-radius:var(--r-sm);
 }
 .detail-head .detail-head-id{
-  flex:0 0 auto;min-width:140px;align-self:center;
+  /* APP-E27 — give the description room (desc up to ~40 chars + manufacturer up
+     to ~30): the id/desc block can grow to ~48% and wrap, pushing the
+     Algorithmic Recommendation block to the right. */
+  flex:0 1 auto;min-width:160px;max-width:48%;align-self:center;
 }
 .detail-head .mat{
   font-family:var(--font-mono);font-size:16px;color:var(--text-pri);
@@ -74,6 +77,11 @@
 .detail-head .desc{
   font-family:var(--font-heading);font-weight:500;font-size:14px;
   color:var(--accent);line-height:1.3;margin-top:2px;
+  overflow-wrap:anywhere;
+}
+/* APP-E27 — manufacturer in brackets after the description, dimmer + lighter. */
+.detail-head .desc-mfr{
+  color:var(--text-muted);font-weight:400;font-size:12.5px;
 }
 .detail-head .detail-head-rec{
   flex:1 1 auto;min-width:0;display:flex;flex-direction:column;

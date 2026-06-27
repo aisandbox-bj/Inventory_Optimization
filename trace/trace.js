@@ -111,6 +111,25 @@
     state.materials.forEach(m => state.matIndex.set(m.material, m));
     state.groupCounts = buildGroupCounts(state.materials);
 
+    // APP-Y-01 (2026-06-27) — run the analysis pipeline once so the context
+    // banner can show the same per-material stats the Trend page shows
+    // (Manufacturer · current MRP/Min/Max/SS · Stock-on-hand · P2 rate · Last
+    // consumption). Pipeline is pure; the (optional) back-calc enriches SOH.
+    // Non-fatal: on any failure the banner simply omits the stats block.
+    state.matStats = new Map();
+    try {
+      if (typeof AppPipeline !== 'undefined') {
+        const res = AppPipeline.runPipeline(json, { runDate: AppLocale.localDateISO() });
+        for (const b of res.buckets) {
+          for (const m of b.materials) {
+            if (!state.matStats.has(m.material)) state.matStats.set(m.material, m);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Trace: pipeline run for banner stats failed — stats omitted.', e);
+    }
+
     // Hydrate persisted view state — silently fall through if anything's stale
     await hydratePersistedState();
 
@@ -530,6 +549,7 @@
           <div class="banner-id">${escapeHtml(mat.material)}</div>
           <div class="banner-desc">${escapeHtml(mat.description || '—')}</div>
         </div>
+        ${renderBannerDetails(mat.material)}
         <div class="banner-mid">
           <span class="banner-lab">Assessment</span>
           <div class="banner-asst">${escapeHtml(j.metadata.assessmentName || '(unnamed)')}</div>
@@ -555,6 +575,26 @@
           <div class="banner-stats">${(counts.prHistory || 0).toLocaleString()} PR · ${(counts.mb51 || 0).toLocaleString()} MB51</div>
         </div>`;
     }
+  }
+
+  // APP-Y-01 — material-details block for the single-material banner. Pulls from
+  // the pipeline result (state.matStats) so the values match the Trend page.
+  // MRP / Min / Max / SS are the CURRENT SAP values (master-data context).
+  function renderBannerDetails(material){
+    const s = state.matStats && state.matStats.get(material);
+    if (!s) return '<div class="banner-details"></div>';
+    const show = v => (v == null || v === '') ? '—' : v;
+    const mrp  = `${s.mrpType || '—'} · ${show(s.cmin)}/${show(s.cmax)} · SS ${show(s.safetyStock)}`;
+    const p2   = (s.p2Flag === 'OK' && typeof s.p2Rate === 'number') ? (s.p2Rate.toFixed(2) + ' /mo') : '—';
+    const soh  = (s.stock == null) ? '—' : s.stock;
+    const cell = (lab, val) => `<div class="bd-cell"><span class="banner-lab">${lab}</span><div class="bd-v">${escapeHtml(String(val))}</div></div>`;
+    return `<div class="banner-details">
+      ${cell('Manufacturer', s.manufacturer || '—')}
+      ${cell('MRP · Min/Max · SS', mrp)}
+      ${cell('Stock on hand', soh)}
+      ${cell('P2 rate', p2)}
+      ${cell('Last consumption', s.lastConsumptionDate || '—')}
+    </div>`;
   }
 
   function describeMultiScope(){
@@ -835,9 +875,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',          title: 'No sigma trim' },
-      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of total LT' },
-      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of total LT' },
-      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -973,9 +1013,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',          title: 'No sigma trim' },
-      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of total LT' },
-      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of total LT' },
-      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -1174,9 +1214,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',         title: 'No sigma trim' },
-      { v: '3',    lab: 'Loose 3σ',    title: 'Drop chains slower than mean + 3·sd of total LT' },
-      { v: '2',    lab: 'Standard 2σ', title: 'Drop chains slower than mean + 2·sd of total LT' },
-      { v: '1.5',  lab: 'Tight 1.5σ',  title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+      { v: '3',    lab: 'Loose 3σ',    title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ', title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',  title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -1256,10 +1296,9 @@
           <span class="yoy-sub">${yrNums.join(' vs ')} · completed chains only (reached site, i.e. received POs) · exclusions respected · the year filter is ignored here</span>
         </div>
         <div class="yoy-legend"><b>Year-on-year direction:</b>
-          <span style="color:#EF4444">▲ slower (worse)</span> ·
-          <span style="color:#FBBF24">▲ mild +5–15%</span> ·
-          <span style="color:#34D399">▼ faster (better)</span> ·
-          <span style="color:#1FCED8">● stable ±5%</span>
+          <span style="color:#EF4444">▲ slower &gt;10% (worse)</span> ·
+          <span style="color:#34D399">▼ faster &gt;10% (better)</span> ·
+          <span style="color:#1FCED8">● within 10% (stable)</span>
         </div>
         ${chevronsHtml}
         ${yoyDq}
@@ -1370,11 +1409,12 @@
         if (dA && dB && dA.n && dB.n && dA.mean > 0) {
           const dPct = (dB.mean - dA.mean) / dA.mean * 100;
           const dDays = Math.abs(dB.mean - dA.mean), aPct = Math.abs(dPct);
+          // APP-Y-02 (2026-06-27) — operator's trend-indicator scheme: red/green
+          // at >10% change, blue within ±10%; directional glyph prefixes the %.
           let cCol, cTxt;
-          if (dPct > 15)      { cCol = '#EF4444'; cTxt = aPct.toFixed(0) + '% slower (+' + dDays.toFixed(1) + 'd)'; }
-          else if (dPct > 5)  { cCol = '#FBBF24'; cTxt = aPct.toFixed(0) + '% slower (+' + dDays.toFixed(1) + 'd)'; }
-          else if (dPct < -5) { cCol = '#34D399'; cTxt = aPct.toFixed(0) + '% faster (-' + dDays.toFixed(1) + 'd)'; }
-          else                { cCol = '#1FCED8'; cTxt = 'stable (within ' + aPct.toFixed(0) + '%)'; }
+          if (dPct > 10)       { cCol = '#EF4444'; cTxt = '▲ ' + aPct.toFixed(0) + '% slower (+' + dDays.toFixed(1) + 'd)'; }
+          else if (dPct < -10) { cCol = '#34D399'; cTxt = '▼ ' + aPct.toFixed(0) + '% faster (-' + dDays.toFixed(1) + 'd)'; }
+          else                 { cCol = '#1FCED8'; cTxt = '● ' + aPct.toFixed(0) + '% (within 10%)'; }
           ctx.fillStyle = cCol; ctx.font = 'bold 9px "JetBrains Mono",monospace'; ctx.textAlign = 'center';
           ctx.fillText(cTxt, slotCenterX, 49);
         }
@@ -1638,9 +1678,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',          title: 'No sigma trim — show every chain' },
-      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of total LT' },
-      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of total LT' },
-      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of total LT' }
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -1767,20 +1807,22 @@
 
   function sigmaExcl(chains){
     // Returns Set<pr> of chains classified as statistical outliers on
-    // `chain.total`. Pre-restricts to year-filtered chains AND chains with
-    // a non-null total (siteWH-gated) so the threshold reflects what the
-    // operator can see on the swimlane.
+    // `chain.totalToSite` (processing time to site, phases A–D). APP-FIX-SIGMA-PROC
+    // (2026-06-27): trims on the procurement timeline only — phase E (Time to
+    // First Use / shelf time) is deliberately excluded. Pre-restricts to
+    // year-filtered chains AND chains with a non-null total (siteWH-gated) so the
+    // threshold reflects what the operator can see on the swimlane.
     if (!state.sigmaLimit) return new Set();
     const inYear = chains.filter(c => state.yearFilter === 'All' || getChainYear(c) === state.yearFilter);
     const drawn  = inYear.filter(c => !!c.siteWH);
     if (drawn.length < 2) return new Set();
-    const totals = drawn.map(c => c.total);
+    const totals = drawn.map(c => c.totalToSite);
     const n      = totals.length;
     const mean   = totals.reduce((s, v) => s + v, 0) / n;
     const sd     = Math.sqrt(totals.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(n - 1, 1));
     const threshold = mean + state.sigmaLimit * sd;
     const excl = new Set();
-    drawn.forEach(c => { if (c.total > threshold) excl.add(c.pr); });
+    drawn.forEach(c => { if (c.totalToSite > threshold) excl.add(c.pr); });
     return excl;
   }
 
