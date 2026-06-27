@@ -109,6 +109,47 @@
 .detail-head.GREY  { border-left-color:var(--text-disabled); }
 .detail-head.PURPLE{ border-left-color:#9B59B6; }
 
+/* ─── APP-OPI-01 · open-procurement 3-lamp indicator + popover ───────────── */
+.detail-head .opi-wrap{ position:relative; align-self:center; flex:0 0 auto; }
+.opi-lamps{ display:flex; gap:4px; cursor:pointer; user-select:none; }
+.opi-lamp{
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 7px; border-radius:11px;
+  border:1px solid var(--border-soft);
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.5px;
+  color:var(--text-muted); background:rgba(255,255,255,.02);
+  transition:all .12s;
+}
+.opi-lamp .opi-dot{ width:7px; height:7px; border-radius:50%; background:var(--text-disabled,#5c6b78); flex:0 0 auto; }
+.opi-lamp .opi-n{ font-weight:700; }
+.opi-lamp.off{ opacity:.5; }
+.opi-lamps:hover .opi-lamp{ border-color:rgba(255,255,255,.25); }
+.opi-lamp.opi-pr.lit{ color:#f4c14a; border-color:rgba(244,193,74,.45); background:rgba(244,193,74,.10); }
+.opi-lamp.opi-pr.lit .opi-dot{ background:#f4c14a; box-shadow:0 0 5px rgba(244,193,74,.7); }
+.opi-lamp.opi-po.lit{ color:#1FCED8; border-color:rgba(31,206,216,.45); background:rgba(31,206,216,.10); }
+.opi-lamp.opi-po.lit .opi-dot{ background:#1FCED8; box-shadow:0 0 5px rgba(31,206,216,.7); }
+.opi-lamp.opi-it.lit{ color:#b07cd8; border-color:rgba(155,89,182,.5); background:rgba(155,89,182,.12); }
+.opi-lamp.opi-it.lit .opi-dot{ background:#b07cd8; box-shadow:0 0 5px rgba(155,89,182,.7); }
+.opi-pop{
+  position:absolute; top:calc(100% + 8px); right:0; z-index:40;
+  width:340px; max-width:80vw;
+  background:var(--bg-panel,#0f1722); border:1px solid var(--border-soft);
+  border-radius:8px; padding:12px 14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);
+}
+.opi-pop.hidden{ display:none; }
+.opi-pop-h{ font-family:var(--font-mono); font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px; }
+.opi-sec{ margin-bottom:10px; }
+.opi-sec-h{ font-size:11px; font-weight:600; color:var(--text-sec); margin-bottom:4px; }
+.opi-sec-n{ color:var(--text-muted); font-family:var(--font-mono); }
+.opi-tbl{ width:100%; border-collapse:collapse; font-size:11px; }
+.opi-tbl th{ text-align:left; font-family:var(--font-mono); font-size:9px; letter-spacing:.4px; text-transform:uppercase; color:var(--text-muted); padding:2px 6px; border-bottom:1px solid rgba(255,255,255,.07); }
+.opi-tbl td{ padding:3px 6px; color:var(--text-pri); border-bottom:1px solid rgba(255,255,255,.04); font-family:var(--font-mono); }
+.opi-tbl td.num, .opi-tbl th.num{ text-align:right; }
+.opi-empty{ font-size:11.5px; color:var(--text-muted); font-style:italic; }
+.opi-im{ margin-top:6px; font-size:11px; color:var(--text-sec); }
+.opi-pop-cav{ margin-top:8px; font-size:10px; color:var(--text-muted); line-height:1.4; }
+
 /* ─── APP-E11 · Chart toolbar (legend toggles + caveat) ────────────────── */
 /* APP-E12 — tighter top/bottom margins; caveat sits flush under chart. */
 .chart-toolbar{

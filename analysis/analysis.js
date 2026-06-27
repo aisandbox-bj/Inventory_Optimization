@@ -613,7 +613,9 @@
       parameters: state.json.parameters,
       llm: state.llmByMaterial[mat.material],
       onLlmResult: (material, out) => { state.llmByMaterial[material] = out; },
-      enableTraceLink: true   // APP-T-07 — "Trace it!" handoff to the Trace page
+      enableTraceLink: true,  // APP-T-07 — "Trace it!" handoff to the Trace page
+      // APP-OPI-01 — open-procurement lamps (PR/PO/In-Transit) from the chains.
+      openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, mat.material) : null
     });
   }
 

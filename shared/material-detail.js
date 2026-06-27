@@ -40,6 +40,62 @@
     return ({ GREEN:'ok', BLUE:'cyan', ORANGE:'warn', RED:'crit', PURPLE:'wr', GREY:'' })[tl] || '';
   }
 
+  /* ─── APP-OPI-01 (2026-06-27) · open-procurement 3-lamp indicator ──────────
+     opts.openProc comes from TracePhase.openProcurement(json, material):
+       { hasPr, openPR[], onOrder[], inTransit[], imOpenPO, imInTransit }
+     Lamps: PR (amber) · PO (cyan) · In Transit (violet). A lamp lights when its
+     state has chain items OR an Inventory-Master snapshot qty. Click any lamp
+     → popover with each item (number · created date · qty · age). Hidden when
+     there's no PR history and no IM open qty. */
+  function opiNum(v){ return (v == null || v === '') ? '—' : Number(v).toLocaleString(); }
+  function opiAge(d){
+    if (!d) return '';
+    const t = Date.parse(String(d).slice(0, 10));
+    if (isNaN(t)) return '';
+    const days = Math.floor((Date.now() - t) / 86400000);
+    return days >= 0 ? days + 'd' : '';
+  }
+  function renderOpenProcLamps(op){
+    if (!op) return '';
+    const prN = (op.openPR || []).length;
+    const poN = (op.onOrder || []).length;
+    const itN = (op.inTransit || []).length;
+    const imPO = (op.imOpenPO   != null && op.imOpenPO   > 0) ? op.imOpenPO   : 0;
+    const imIT = (op.imInTransit != null && op.imInTransit > 0) ? op.imInTransit : 0;
+    if (!op.hasPr && !imPO && !imIT) return '';   // nothing to show
+    const lamps = [
+      { key:'pr', lab:'PR', lit: prN > 0,            n: prN,            title:`Open PR: ${prN}` },
+      { key:'po', lab:'PO', lit: poN > 0 || imPO > 0, n: poN || imPO,   title:`Open PO: ${poN}${imPO ? ` · SAP qty ${imPO}` : ''}` },
+      { key:'it', lab:'IT', lit: itN > 0 || imIT > 0, n: itN || imIT,   title:`In transit: ${itN}${imIT ? ` · SAP qty ${imIT}` : ''}` }
+    ];
+    const lampHtml = lamps.map(l =>
+      `<span class="opi-lamp opi-${l.key} ${l.lit ? 'lit' : 'off'}" title="${escapeAttr(l.title)}">`
+      + `<span class="opi-dot"></span><span class="opi-lab">${l.lab}</span>`
+      + `${l.lit && l.n ? `<span class="opi-n">${l.n}</span>` : ''}</span>`
+    ).join('');
+    return `<div class="opi-wrap"><div class="opi-lamps" id="opiLamps" title="Open procurement — PR / PO / In Transit (click for detail)">${lampHtml}</div>${renderOpiPopover(op)}</div>`;
+  }
+  function renderOpiPopover(op){
+    const fmtDate = d => d ? String(d).slice(0, 10) : '—';
+    const section = (title, items, idFn, dateFn) => {
+      if (!items || !items.length) return '';
+      const rows = items.map(c =>
+        `<tr><td>${escapeHtml(idFn(c))}</td><td>${fmtDate(dateFn(c))}</td><td class="num">${opiNum(c.qty)}</td><td class="num">${opiAge(dateFn(c))}</td></tr>`
+      ).join('');
+      return `<div class="opi-sec"><div class="opi-sec-h">${title} <span class="opi-sec-n">${items.length}</span></div>`
+        + `<table class="opi-tbl"><thead><tr><th>Ref</th><th>Created</th><th class="num">Qty</th><th class="num">Age</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    };
+    const prSec = section('Open PR', op.openPR, c => 'PR ' + c.pr, c => c.prDate);
+    const poSec = section('Open PO · on order', op.onOrder, c => 'PO ' + c.po, c => c.poDate);
+    const itSec = section('In transit · at 3PL', op.inTransit, c => 'PO ' + c.po, c => c.gr3pl);
+    const body = (prSec + poSec + itSec) || '<div class="opi-empty">No open PR / PO / in-transit chains.</div>';
+    const imLine = (op.imOpenPO != null || op.imInTransit != null)
+      ? `<div class="opi-im">SAP snapshot (Inventory Master) — open PO: <b>${opiNum(op.imOpenPO)}</b> · in transit: <b>${opiNum(op.imInTransit)}</b></div>`
+      : '';
+    return `<div class="opi-pop hidden" id="opiPop"><div class="opi-pop-h">Open procurement</div>${body}${imLine}`
+      + `<div class="opi-pop-cav">Ref · created date · qty · days open. PR/PO/in-transit from PR History + MB51 movements; SAP snapshot from Inventory Master.</div></div>`;
+  }
+
   /* ─── MRP Settings Comparison: Current (shaded) vs Recommended (shaded) ─ */
   function renderMrpCompare(mat){
     const hasCurrent = mat.mrpType || mat.cmin != null || mat.cmax != null || mat.safetyStock != null;
@@ -261,6 +317,7 @@
           <span class="rec-lab">Algorithmic recommendation</span>
           <div class="rec-text">${escapeHtml(mat.action)}</div>
         </div>
+        ${renderOpenProcLamps(opts.openProc)}
         <span class="pill ${pillCls(mat.trafficLight)}"><span class="dot"></span>${mat.trafficLight}</span>
       </div>
 
@@ -355,6 +412,21 @@
         traceBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           window.location.href = '../trace/trace.html#mat=' + encodeURIComponent(mat.material);
+        });
+      }
+    }
+
+    // APP-OPI-01 — open-procurement lamps: click a lamp to toggle the detail
+    // popover. One guarded document-level handler closes any open popover.
+    const opiLamps = hostEl.querySelector('#opiLamps');
+    const opiPop   = hostEl.querySelector('#opiPop');
+    if (opiLamps && opiPop) {
+      opiLamps.addEventListener('click', (e) => { e.stopPropagation(); opiPop.classList.toggle('hidden'); });
+      opiPop.addEventListener('click', (e) => e.stopPropagation());
+      if (!window._opiDocCloseWired) {
+        window._opiDocCloseWired = true;
+        document.addEventListener('click', () => {
+          document.querySelectorAll('.opi-pop:not(.hidden)').forEach(p => p.classList.add('hidden'));
         });
       }
     }

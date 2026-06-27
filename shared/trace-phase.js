@@ -485,6 +485,33 @@
     return { chains, act, drawn };
   }
 
+  /* ═════════════════════════════════════════════════════════════════════════
+     openProcurement — APP-OPI-01 (2026-06-27). Per-material open-procurement
+     status for the 3-lamp indicator (PR · PO · In Transit). Chain-derived
+     detail + the Inventory-Master snapshot quantities as a cross-check.
+       openPR    — active PR, no PO, not cancelled             (PR_ONLY)
+       onOrder   — PO raised, not yet received at the 3PL      (IN_FLIGHT && !gr3pl)
+       inTransit — received at 3PL (mvt 107), not yet at site  (IN_FLIGHT && gr3pl)
+     The IM snapshot covers the gap where SAP closes the PO at the 3PL GR
+     (PO lamp dark, In-Transit lamp lit).
+  ═════════════════════════════════════════════════════════════════════════ */
+  function openProcurement(json, material){
+    const chains    = computeChains(json, material);
+    const openPR    = chains.filter(c => c.state === 'PR_ONLY');
+    const onOrder   = chains.filter(c => c.state === 'IN_FLIGHT' && !c.gr3pl);
+    const inTransit = chains.filter(c => c.state === 'IN_FLIGHT' && !!c.gr3pl);
+    // Inventory-Master snapshot quantities (current SAP) for this material, if present.
+    let imOpenPO = null, imInTransit = null;
+    const im  = (json.data && json.data.inventoryMaster) || [];
+    const row = im.find(r => String(r.material || '').trim() === String(material).trim());
+    if (row) {
+      const n = v => { const x = Number(v); return Number.isFinite(x) ? x : null; };
+      imOpenPO    = n(row.openPO);
+      imInTransit = n(row.inTransit);
+    }
+    return { hasPr: chains.length > 0, openPR, onOrder, inTransit, imOpenPO, imInTransit };
+  }
+
   window.TracePhase = {
     PHASE_KEYS, PHASE_LABELS, PHASE_COLORS,
     computeChains,
@@ -493,6 +520,7 @@
     getYearsForChains,
     sigmaExcl,
     activeChains,
+    openProcurement,
     renderBoxPlotSvg,
     renderPhaseEmpty,
     renderPhaseVisual,

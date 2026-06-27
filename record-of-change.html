@@ -380,6 +380,24 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-OPI-01 open-procurement indicator ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-OPI-01 · Open-procurement indicator — 3-lamp PR / PO / In-Transit traffic light on the detail header</h4>
+      <ul>
+        <li><b>What it is.</b> A mini <b>3-lamp</b> indicator on the material detail header (Trend + Screener), just left of the traffic-light classifier pill. One lamp each — <b>PR</b> (amber) · <b>PO</b> (cyan) · <b>In Transit</b> (violet) — lit when that state has open items, dim when none. Click any lamp → a popover listing each item: <b>reference (PR#/PO#) · created date · qty · days open</b>, plus the SAP Inventory-Master snapshot quantities as a cross-check.</li>
+        <li><b>Definitions.</b> <b>Open PR</b> = active PR, no PO, not cancelled (<code>PR_ONLY</code> chain). <b>Open PO</b> = PO raised, not yet at the 3PL (<code>IN_FLIGHT</code> &amp;&amp; no mvt-107). <b>In Transit</b> = received at the 3PL (mvt 107), not yet at site (no mvt 109). A lamp also lights from the Inventory-Master <code>openPO</code> / <code>inTransit</code> snapshot qty — so when SAP closes the PO at the 3PL goods-receipt (PO chain gone) the <b>In-Transit lamp still lights</b>, closing the "low SOH + no open PO but stock inbound" false-alarm gap.</li>
+        <li><b>How it's wired.</b> New shared <code>TracePhase.openProcurement(json, material)</code> → <code>{ hasPr, openPR[], onOrder[], inTransit[], imOpenPO, imInTransit }</code>. The detail render (<code>shared/material-detail.js</code>) draws the lamps from <code>opts.openProc</code>; the callers (<code>analysis.js</code>, <code>screener.js</code>) compute it and pass it in. Analysis page now loads <code>shared/trace-phase.js</code>. Hidden entirely when there's no PR history and no IM open qty; all-dim when there's history but nothing currently open.</li>
+        <li><b>Verified (live preview, 5-material sample).</b> Material 1003380 → PR lit (PR 40085611 · 2026-05-25 · 46 · 33d), In-Transit lit (PO 9600010854 · 7 · 36d), PO lit from the SAP snapshot (open PO 7, no on-order chain — the gap case); popover lists the items + the IM line; lamps sit left of the pill; popover toggles on lamp click and closes on outside click. A material with history but nothing open shows 3 dim lamps. Both Trend and Screener render it. Zero console errors.</li>
+        <li><b>Files.</b> <code>shared/trace-phase.js</code> (<code>openProcurement</code> + export), <code>shared/material-detail.js</code> (lamp render + popover + wiring), <code>shared/material-detail.css</code> (lamp + popover styles), <code>analysis/analysis.html</code> (load trace-phase.js), <code>analysis/analysis.js</code> + <code>screener/screener.js</code> (pass <code>openProc</code>). Snapshot: <code>_rollback/APP-OPI-01-pre/</code>. <b>Not yet on Trace</b> (its banner has no classifier pill) — a fast follow-up.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — Intake reuse fix + cross-reference + dataset date ───────── -->
     <article class="roc-entry dev">
       <div class="head">

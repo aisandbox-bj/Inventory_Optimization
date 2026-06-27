@@ -447,7 +447,9 @@
       parameters:  state.json.parameters,
       enableLlm:   false,
       chartWidth:  936,
-      chartHeight: 320
+      chartHeight: 320,
+      // APP-OPI-01 — open-procurement lamps (PR/PO/In-Transit) from the chains.
+      openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, entry.m.material) : null
     });
 
     // Trace per-material visual — graceful degradation when PR History absent.
