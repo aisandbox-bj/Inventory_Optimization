@@ -112,8 +112,15 @@
       const cancelled = String(r.deletionIndicator || '').toLowerCase() === 'true'
                      && String(r.processingStatus || '').trim().toUpperCase() === 'N';
 
-      const A = days(prDate, relDate);
-      const B = days(relDate, poDate);
+      // APP-FIX-REL-DATE (2026-06-26) — a PR's release must fall between the PR
+      // date and the PO date. A missing release, one dated before the PR, or one
+      // dated after the PO is impossible, so the release date is bad → both phases
+      // that depend on it (A = PR->release, B = release->PO) are not computable
+      // for this chain (null = excluded from those phase stats) rather than
+      // reporting a phantom 0d or a huge phantom (the 719d seen on bad source data).
+      const releaseBad = !relDate || (prDate && relDate < prDate) || (poDate && relDate > poDate);
+      const A = releaseBad ? null : days(prDate, relDate);
+      const B = releaseBad ? null : days(relDate, poDate);
       const C = days(poDate, gr3pl);
       const D = days(gr3pl, siteWH);
       const E = days(siteWH, c261);
@@ -138,6 +145,7 @@
         siteWH:   fmtISO(siteWH),
         c261:     fmtISO(c261),
         A, B, C, D, E, total,
+        releaseBad,
         qty:      qtyAtWH || numOr(r.qtyRequested, 0),
         qtySource: qtyAtWH ? 'MB51-109' : 'PR-requested',
         state:    state_,
@@ -344,6 +352,15 @@
       };
     });
 
+    // APP-FIX-REL-DATE — data-quality note: chains whose release date is missing
+    // or impossible (before PR / after PO) are dropped from PR Approval (A) and
+    // Internal Processing (B). Surface the count so a low n on those plots is
+    // explained, not silent.
+    const relBad = drawn.filter(c => c.releaseBad).length;
+    const dqHtml = relBad
+      ? `<div class="pd-dq-note">Data note · ${relBad} chain${relBad === 1 ? '' : 's'} dropped from PR Approval &amp; Internal Processing — missing or invalid release date (release must fall between the PR and the PO).</div>`
+      : '';
+
     // Total LT chevron — APP-FIX-PD-CHEVRON: flow covers A–D (up to site
     // availability); phase E (Time to First Use) split out as a purple shelf
     // block. totalMean spans A–E and drives the box-plot shared y-scale.
@@ -433,6 +450,7 @@
 
     return `
       ${chevronHtml}
+      ${dqHtml}
       ${plotHtml}
       ${tableHtml}
       <div class="chart-caveat">All five plots share one y-axis = the <b>average total lead time</b> (sum of the phase means; no padding) so phase durations compare directly. Each box is the IQR (Q1–Q3); whiskers reach min and max; the <b>mean</b> is the bold line with its value beside the box; individual completed chains show as faint dots. Durations above the scale are clipped and flagged with <span class="pd-mark">↑</span> (count above the plot). <b>n</b> per plot is the count of <em>completed</em> chains (those that reached Site WH) in the active filter set.</div>

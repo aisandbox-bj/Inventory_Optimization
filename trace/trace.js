@@ -1242,6 +1242,12 @@
     }).join('');
     const chevronsHtml = `<div class="yoy-chevrons"><div class="yoy-chevrons-lab">Total timeline by year — phases A–D to site, plus shelf time (E)</div>${yoyChevrons}</div>`;
 
+    // APP-FIX-REL-DATE — data-quality note (chains dropped from PR Approval / Internal Processing).
+    const relBad = acAll.filter(c => c.releaseBad).length;
+    const yoyDq = relBad
+      ? `<div class="pd-dq-note">Data note · ${relBad} chain${relBad === 1 ? '' : 's'} dropped from PR Approval &amp; Internal Processing — missing or invalid release date.</div>`
+      : '';
+
     host.innerHTML = `
       ${filterToolbar}
       <div class="yoy-host">
@@ -1256,6 +1262,7 @@
           <span style="color:#1FCED8">● stable ±5%</span>
         </div>
         ${chevronsHtml}
+        ${yoyDq}
         <div class="yoy-chart-host"><canvas id="yoyCanvas"></canvas></div>
         <div class="chart-caveat">Each phase A–E shows one box plot per year side by side — mean line labelled, whiskers to min/max, IQR box, jittered points. All boxes share one y-axis (Tukey upper fence across every phase-year; values above the clip render as <b>↑</b> off-chart). The marker between the two most recent years flags the change in <b>mean</b> processing time: <span style="color:#EF4444">red &gt;+15%</span> / <span style="color:#FBBF24">orange +5–15%</span> slower · <span style="color:#34D399">green &lt;−5%</span> faster · <span style="color:#1FCED8">blue ±5%</span> stable. The <b>year filter is ignored</b> here (the view IS the comparison); sigma + manual exclusions are respected.</div>
       </div>`;
@@ -1292,9 +1299,12 @@
     }));
 
     const n = phases.length;
-    const padL = 68, padR = 16, padT = 46, padB = 60;
+    // APP-V03-PORT-6c — more top room for the per-phase title + underline +
+    // comment; less at the bottom (phase labels moved to the top).
+    const padL = 68, padR = 16, padT = 62, padB = 40;
     const plotW = W - padL - padR;
     const slotW = plotW / n;
+    const phaseColors = TracePhase.PHASE_COLORS;   // per-phase title underline (matches Phase Distribution)
 
     // Y scale — max = the total average duration (sum of per-phase pooled means
     // across both years), no padding factor (operator: drop the 1.x factor so
@@ -1346,6 +1356,29 @@
       const row = phYr[pi];
       const slotCenterX = padL + (pi + 0.5) * slotW;
       const subW = slotW * 0.82 / yrNums.length;
+
+      // ── APP-V03-PORT-6c — per-phase top block: name (title) + phase-coloured
+      // underline (the Phase-Distribution card look) + the YoY-change comment
+      // directly under the line (secondary). No A/B/C code.
+      ctx.fillStyle = '#D6DFDE'; ctx.textAlign = 'center'; ctx.font = 'bold 11px "Rajdhani",sans-serif';
+      ctx.fillText(pLabels[ph], slotCenterX, 30);
+      const ulHalf = Math.min(slotW * 0.42, 120);
+      ctx.strokeStyle = phaseColors[pi]; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(slotCenterX - ulHalf, 36); ctx.lineTo(slotCenterX + ulHalf, 36); ctx.stroke();
+      if (yrNums.length >= 2) {
+        const dA = row[yrNums.length - 2].s, dB = row[yrNums.length - 1].s;
+        if (dA && dB && dA.n && dB.n && dA.mean > 0) {
+          const dPct = (dB.mean - dA.mean) / dA.mean * 100;
+          const dDays = Math.abs(dB.mean - dA.mean), aPct = Math.abs(dPct);
+          let cCol, cTxt;
+          if (dPct > 15)      { cCol = '#EF4444'; cTxt = aPct.toFixed(0) + '% slower (+' + dDays.toFixed(1) + 'd)'; }
+          else if (dPct > 5)  { cCol = '#FBBF24'; cTxt = aPct.toFixed(0) + '% slower (+' + dDays.toFixed(1) + 'd)'; }
+          else if (dPct < -5) { cCol = '#34D399'; cTxt = aPct.toFixed(0) + '% faster (-' + dDays.toFixed(1) + 'd)'; }
+          else                { cCol = '#1FCED8'; cTxt = 'stable (within ' + aPct.toFixed(0) + '%)'; }
+          ctx.fillStyle = cCol; ctx.font = 'bold 9px "JetBrains Mono",monospace'; ctx.textAlign = 'center';
+          ctx.fillText(cTxt, slotCenterX, 49);
+        }
+      }
 
       yrNums.forEach((yr, yi) => {
         const cell = row[yi], s = cell.s, col = yrColor[yr];
@@ -1406,45 +1439,6 @@
         }
       });
 
-      // Delta marker between the two most recent years (mean change).
-      if (yrNums.length >= 2) {
-        const sA = row[yrNums.length - 2].s, sB = row[yrNums.length - 1].s;
-        if (sA && sB && sA.n && sB.n && sA.mean > 0) {
-          const deltaPct = (sB.mean - sA.mean) / sA.mean * 100;
-          const absDays  = Math.abs(sB.mean - sA.mean);
-          const absPct   = Math.abs(deltaPct);
-          let bandCol, sentence;
-          if (deltaPct > 15)      { bandCol = '#EF4444'; sentence = 'Processing time up ' + absDays.toFixed(1) + 'd · ' + absPct.toFixed(0) + '% increase'; }
-          else if (deltaPct > 5)  { bandCol = '#FBBF24'; sentence = 'Processing time up ' + absDays.toFixed(1) + 'd · ' + absPct.toFixed(0) + '% increase'; }
-          else if (deltaPct < -5) { bandCol = '#34D399'; sentence = 'Processing time down ' + absDays.toFixed(1) + 'd · ' + absPct.toFixed(0) + '% improvement'; }
-          else                    { bandCol = '#1FCED8'; sentence = 'Stable · within ±' + absPct.toFixed(0) + '% YoY'; }
-
-          ctx.fillStyle = bandCol; ctx.font = 'bold 10.5px "Rajdhani",sans-serif'; ctx.textAlign = 'center';
-          ctx.fillText(sentence, slotCenterX, padT - 8);
-
-          const cxA = subCx(pi, yrNums.length - 2), cxB = subCx(pi, yrNums.length - 1);
-          const midX = (cxA + cxB) / 2;
-          const yA = yScale(Math.min(sA.mean, yMax)), yB = yScale(Math.min(sB.mean, yMax));
-          const midY = (yA + yB) / 2, triH = 22, triW = 22;
-          ctx.fillStyle = bandCol; ctx.beginPath();
-          if (deltaPct > 5)       { ctx.moveTo(midX, midY - triH / 2); ctx.lineTo(midX - triW / 2, midY + triH / 2); ctx.lineTo(midX + triW / 2, midY + triH / 2); ctx.closePath(); }
-          else if (deltaPct < -5) { ctx.moveTo(midX, midY + triH / 2); ctx.lineTo(midX - triW / 2, midY - triH / 2); ctx.lineTo(midX + triW / 2, midY - triH / 2); ctx.closePath(); }
-          else                    { ctx.arc(midX, midY, triW / 2.2, 0, Math.PI * 2); }
-          ctx.fill();
-          ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(8,12,20,.7)'; ctx.stroke();
-
-          const lbl = (deltaPct > 0 ? '+' : '') + deltaPct.toFixed(0) + '%';
-          ctx.textAlign = 'center'; ctx.font = 'bold 11px "JetBrains Mono",monospace';
-          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,12,20,.85)'; ctx.strokeText(lbl, midX, midY + triH / 2 + 13);
-          ctx.fillStyle = bandCol; ctx.fillText(lbl, midX, midY + triH / 2 + 13);
-        }
-      }
-
-      // Phase code + plain-English label below the year pair.
-      ctx.fillStyle = '#D6DFDE'; ctx.textAlign = 'center'; ctx.font = 'bold 12px "Rajdhani",sans-serif';
-      ctx.fillText(ph, slotCenterX, H - padB + 28);
-      ctx.font = '9px "JetBrains Mono",monospace'; ctx.fillStyle = 'rgba(240,244,243,.45)';
-      ctx.fillText(pLabels[ph], slotCenterX, H - padB + 42);
     });
   }
 
@@ -1924,7 +1918,14 @@
                   '─────────'
                 ];
               },
-              label(item) { return ` ${item.dataset.label}: ${item.raw}d`; },
+              label(item) {
+                const c = drawn[item.dataIndex];
+                // APP-FIX-REL-DATE — PR Approval / Internal Processing are not
+                // computable when the release date is bad; show n/a not a phantom.
+                if (c && c.releaseBad && (item.dataset.label === 'PR Approval' || item.dataset.label === 'Internal Processing'))
+                  return ` ${item.dataset.label}: n/a`;
+                return ` ${item.dataset.label}: ${item.raw}d`;
+              },
               afterBody(items) {
                 const c = drawn[items[0].dataIndex];
                 const lines = [
@@ -1943,6 +1944,7 @@
                     : sigSet.has(c.pr) ? `sigma-trim (${state.sigmaLimit}σ)` : 'excluded';
                   lines.push(`Excluded: ${how}`);
                 }
+                if (c.releaseBad) lines.push('Release date invalid - PR Approval / Internal Processing not counted');
                 return lines;
               }
             },

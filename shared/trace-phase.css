@@ -282,6 +282,17 @@
 }
 .pd-mark{ color: #f4c14a; font-weight: 700; }
 
+/* APP-FIX-REL-DATE — data-quality note (bad/missing release dates) */
+.pd-dq-note{
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px; line-height: 1.4;
+  color: #d9a441;
+  background: rgba(217,164,65,.08);
+  border: 1px solid rgba(217,164,65,.25);
+  border-radius: 6px;
+  padding: 6px 10px; margin: 4px 0 10px;
+}
+
 /* Empty state */
 .pd-empty{
   padding: 32px 24px;

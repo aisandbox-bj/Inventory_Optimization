@@ -380,6 +380,42 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — APP-V03-PORT-6c ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-V03-PORT-6c · YoY layout — phase name as the top heading, change comment underneath</h4>
+      <ul>
+        <li><b>Why.</b> Operator: the phase headings were at the bottom and the YoY-change sentence floated at the very top, far from its phase. Move the heading to the top, drop the A/B/C codes, and put the change comment <em>under</em> the heading — mirroring the Phase-Distribution box-plot card the operator likes (name + a coloured underline).</li>
+        <li><b>What changed.</b> In <code>trace/trace.js drawYoYCanvas</code>, each phase column now opens with the phase <b>name</b> (the title, no code), a <b>phase-coloured underline</b> (the card look), and the <b>YoY-change comment directly under the line</b>, colour-coded (red slower &gt;15% · orange mild +5–15% · green faster &lt;−5% · blue stable). The old floating top sentence, the between-box ▲/▼ marker + %, and the bottom phase code/name were removed; the year labels (25 / 26) stay under each box. Top/bottom padding rebalanced for the new heading block.</li>
+        <li><b>Verified (live preview).</b> 1000640: each column shows name + underline + comment (e.g. Vendor Lead Time "66% faster (-11.5d)" green, Internal Processing "22% slower (+1.5d)" red); boxes below with 25/26 labels; same-scale chevrons above (2025 32.6d vs 2026 21.5d); the release-date data-quality note also surfaces on the YoY. Zero console errors.</li>
+        <li><b>Files.</b> <code>trace/trace.js</code> (<code>drawYoYCanvas</code> top block + YoY data-quality note). Rollback: remote backup at the pre-batch commit (see push).</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.3-dev — APP-FIX-REL-DATE ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-REL-DATE · Impossible PR release dates no longer fabricate a PR-Approval time</h4>
+      <ul>
+        <li><b>Symptom (operator).</b> A Procurement-Chain tooltip showed <b>PR Approval = 719d</b> (Total LT 740d) when the PR and PO were created two days apart — impossible. Other materials showed PR Approval = <b>0.0d</b>. Surfaced as a clearly-wrong value (credibility principle) → investigated, not dismissed.</li>
+        <li><b>Root cause.</b> Phase A (PR Approval) = days(PR date → release date) and phase B (Internal Processing) = days(release date → PO date). When the source <b>Release Date is bad</b> — missing, before the PR, or after the PO — those phases compute a phantom: a release ≈2 years out gave A=719d (B floored to 0); a missing release gave A=0d. The app's math was correct; the input was impossible.</li>
+        <li><b>Fix.</b> <code>computeChains</code> now detects an impossible release date (<code>!relDate || relDate &lt; prDate || relDate &gt; poDate</code>) and marks <b>both</b> dependent phases (A and B) as <b>not-computable</b> (<code>null</code>) plus a <code>releaseBad</code> flag — instead of a phantom 0d/719d. The box plots, chevron, YoY and averages already skip nulls, so those chains drop out of the A/B stats; phases C/D/E (which don't depend on the release date) are unaffected. The swimlane bar/axis no longer blow out (no giant phantom segment); its tooltip shows <code>PR Approval: n/a</code> + a "release date invalid" note; Raw Data shows "—".</li>
+        <li><b>Data-quality count.</b> The Phase Distribution shows a note — e.g. "1 chain dropped from PR Approval &amp; Internal Processing — missing or invalid release date" — so a low n on those plots is explained, never silent.</li>
+        <li><b>Verified (live preview).</b> Clean sample: <b>0</b> bad chains (no regression). Fabricated an after-PO release (2099): that chain → A=null, B=null, <code>releaseBad</code>, while C/D stayed valid. Rendered Phase Distribution for 1000640: A &amp; B drop n 24→<b>23</b>, C stays <b>24</b>, the data-quality note appears, swimlane x-axis stays sane (~60d, not ~800). Zero console errors.</li>
+        <li><b>Files.</b> <code>shared/trace-phase.js</code> (<code>computeChains</code> + <code>renderPhaseVisual</code> note), <code>shared/trace-phase.css</code> (<code>.pd-dq-note</code>), <code>trace/trace.js</code> (swimlane tooltip). Screener avg + Raw Data coerce null safely. Snapshot: <code>_rollback/APP-FIX-REL-DATE-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — APP-V03-PORT-6b ───────── -->
     <article class="roc-entry dev">
       <div class="head">
