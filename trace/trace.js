@@ -1216,19 +1216,26 @@
     const yrColor = {}; yrNums.forEach((y, i) => { yrColor[y] = palette[i % palette.length]; });
     const PK = TracePhase.PHASE_KEYS, PL = TracePhase.PHASE_LABELS, PC = TracePhase.PHASE_COLORS;
     const meanPh = (chs, ph) => { const v = chs.map(c => c[ph]).filter(x => x != null && Number.isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; };
-    const yoyChevrons = yrNums.map(yr => {
+    const yrData = yrNums.map(yr => {
       const cc = acAll.filter(c => Number(getChainYear(c)) === yr);
       const m = {}; PK.forEach(ph => { m[ph] = meanPh(cc, ph); });
-      const flowMean = m.A + m.B + m.C + m.D;
+      return { yr, n: cc.length, m, flowMean: m.A + m.B + m.C + m.D };
+    });
+    // Same scale across years (operator): each bar's LENGTH is its total-to-site
+    // relative to the largest year, so overall performance compares visually —
+    // a shorter bar = a shorter total timeline.
+    const sharedMaxFlow = Math.max(1, ...yrData.map(d => d.flowMean));
+    const yoyChevrons = yrData.map(({ yr, n, m, flowMean }) => {
+      const widthPct = (flowMean / sharedMaxFlow * 100).toFixed(1);
       const segs = PK.filter(k => k !== 'E').map((ph, i) => {
         const frac = flowMean > 0 ? m[ph] / flowMean : 0;
         return `<div class="pd-chev-seg" style="flex:${frac || 0.001}; background:${PC[i]}; --pd-chev-fill:${PC[i]};">
-          <div class="pd-chev-inner"><span class="pd-chev-code">${ph}</span><span class="pd-chev-name">${PL[ph]}</span><span class="pd-chev-val">${m[ph].toFixed(1)}d</span></div>
+          <div class="pd-chev-inner"><span class="pd-chev-code">${ph}</span><span class="pd-chev-val">${m[ph].toFixed(1)}d</span></div>
         </div>`;
       }).join('');
       return `<div class="yoy-chev">
-        <span class="yoy-chev-year" style="border-color:${yrColor[yr]}; color:${yrColor[yr]};">${yr}<small>n=${cc.length}</small></span>
-        <div class="pd-chevron-bar">${segs}</div>
+        <span class="yoy-chev-year" style="border-color:${yrColor[yr]}; color:${yrColor[yr]};">${yr}<small>n=${n}</small></span>
+        <div class="yoy-chev-track"><div class="pd-chevron-bar" style="width:${widthPct}%;">${segs}</div></div>
         <div class="pd-chev-total-site" title="Average total processing time to site (phases A–D) for ${yr}."><span class="lab">Total to site</span><span class="v">${flowMean.toFixed(1)}d</span></div>
         <div class="pd-chev-shelf" style="border-color:${PC[4]}; background:${PC[4]}1f;" title="Average shelf time before first use (phase E) for ${yr}."><span class="pd-chev-shelf-lab">then on shelf</span><span class="pd-chev-shelf-name">E · ${PL.E}</span><span class="pd-chev-shelf-val" style="color:${PC[4]};">${m.E.toFixed(1)}d</span></div>
       </div>`;

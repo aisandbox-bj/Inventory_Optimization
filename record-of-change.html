@@ -393,7 +393,8 @@ git -C /tmp/peek push --force-with-lease origin main
         <li><b>Why.</b> Operator enhancement (E): add a chevron for each year so the whole procurement timeline can be compared year-over-year, not just phase by phase.</li>
         <li><b>What shipped.</b> Above the YoY box plots, one chevron per year (e.g. 2025, 2026): phase-coloured A–D segments (proportional to that year's phase means, consistent with the Phase Distribution chevron) + a <b>Total to site</b> readout + a detached <b>shelf (E)</b> block. Each row is labelled with the year + its completed-chain count. Built from the same completed-chain set as the box plots, so the totals reconcile.</li>
         <li><b>Verified (live preview, 1003380).</b> Two rows render — 2025 (n=13) total-to-site <b>32.0d</b> · shelf 4.4d; 2026 (n=6) <b>25.7d</b> · shelf 3.5d — and the totals tie out to the box-plot per-year means (2025 A+B+C+D = 0+7.3+15.8+8.8 ≈ 32.0). Zero console errors.</li>
-        <li><b>Files.</b> <code>trace/trace.js</code> (<code>renderYoY</code> chevron block), <code>trace/trace.css</code> (<code>.yoy-chevrons</code>/<code>.yoy-chev</code>). Snapshot: <code>_rollback/APP-V03-PORT-6b-pre/</code>.</li>
+        <li><b>Same scale across years (operator follow-up).</b> Both year bars now share one scale: each bar's length = its total-to-site ÷ the largest year (with a faint full-width track behind), so a shorter total reads as a visibly shorter bar — e.g. 2025 32.0d fills the track (100%), 2026 25.7d fills ~80%. Without this the bars were each normalised to their own total and looked equal.</li>
+        <li><b>Files.</b> <code>trace/trace.js</code> (<code>renderYoY</code> chevron block + shared-scale), <code>trace/trace.css</code> (<code>.yoy-chevrons</code>/<code>.yoy-chev</code>/<code>.yoy-chev-track</code>). Snapshot: <code>_rollback/APP-V03-PORT-6b-pre/</code>.</li>
       </ul>
     </article>
 

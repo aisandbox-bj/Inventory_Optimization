@@ -1052,7 +1052,11 @@
 .yoy-chevrons{ margin: 4px 0 12px; }
 .yoy-chevrons-lab{ font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
 .yoy-chev{ display: flex; align-items: stretch; gap: 10px; margin-bottom: 8px; }
-.yoy-chev .pd-chevron-bar{ flex: 1 1 auto; min-width: 0; }
+/* Track holds the bar; the bar's inline width = total-to-site ÷ largest year, so
+   bar length is comparable across years. The faint track shows the full scale. */
+.yoy-chev-track{ flex: 1 1 auto; min-width: 0; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.05); border-radius: 6px; padding: 3px; }
+.yoy-chev-track .pd-chevron-bar{ min-width: 0; }
+.yoy-chev .pd-chev-seg{ min-width: 0; }   /* allow segments to shrink (base is 60px) */
 .yoy-chev-year{
   flex: 0 0 auto; min-width: 50px;
   display: flex; flex-direction: column; justify-content: center; line-height: 1.1;
