@@ -615,7 +615,9 @@
       onLlmResult: (material, out) => { state.llmByMaterial[material] = out; },
       enableTraceLink: true,  // APP-T-07 — "Trace it!" handoff to the Trace page
       // APP-OPI-01 — open-procurement lamps (PR/PO/In-Transit) from the chains.
-      openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, mat.material) : null
+      openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, mat.material) : null,
+      // APP-WU-01 — "Where used" button (lazy compute on click). Only when IW39 is loaded.
+      whereUsedFn: (typeof WhereUsed !== 'undefined' && state.json.data && state.json.data.iw39 && state.json.data.iw39.length) ? () => WhereUsed.compute(state.json, mat.material) : null
     });
   }
 

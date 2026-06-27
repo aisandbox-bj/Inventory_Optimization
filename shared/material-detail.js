@@ -325,7 +325,9 @@
         <span class="chart-toolbar-lab">Show:</span>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleConsumption" checked> Consumption</label>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
+        ${opts.whereUsedFn ? '<span class="wu-spacer"></span><button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>' : ''}
       </div>
+      ${opts.whereUsedFn ? '<div class="wu-pop hidden" id="wuPop"></div>' : ''}
       <div class="chart-host" id="chartHost"></div>
       <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
 
@@ -414,6 +416,27 @@
           window.location.href = '../trace/trace.html#mat=' + encodeURIComponent(mat.material);
         });
       }
+    }
+
+    // APP-WU-01 — "Where used" button toggles an inline panel; computed lazily
+    // on first open (full MB51 scan) and cached.
+    const wuBtn = hostEl.querySelector('#wuBtn');
+    const wuPop = hostEl.querySelector('#wuPop');
+    if (wuBtn && wuPop && opts.whereUsedFn) {
+      wuBtn.addEventListener('click', () => {
+        if (wuPop.classList.contains('hidden')) {
+          if (!wuPop._rendered) {
+            try { wuPop.innerHTML = WhereUsed.renderPopup(opts.whereUsedFn(), mat.material); }
+            catch (e) { wuPop.innerHTML = '<div class="wu-empty">Where-used failed to compute.</div>'; console.warn('WhereUsed:', e); }
+            wuPop._rendered = true;
+          }
+          wuPop.classList.remove('hidden');
+          wuBtn.classList.add('active');
+        } else {
+          wuPop.classList.add('hidden');
+          wuBtn.classList.remove('active');
+        }
+      });
     }
 
     // APP-OPI-01 — open-procurement lamps: click a lamp to toggle the detail

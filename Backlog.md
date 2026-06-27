@@ -3,6 +3,9 @@
 **Updated:** 2026-06-27 (after the YoY + Trend enhancements; where-used + open-procurement indicator planned)
 **Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only.
 
+## Shipped + pushed 2026-06-27 (APP-WU-01 where-used) — pending operator validation
+- **APP-WU-01** — "⊞ Where used" button on the Trend + Screener consumption-chart toolbar → inline panel: MB51 261/262 net work-order usage by Sort Field → Fleet model, plus a Cost-centre (CC) row (201/202), bucketed by year, with explicit Unmapped-WO / (unmapped-model) buckets and a grand total. New shared `where-used.js`; button gated on IW39; lazy compute. Verified (1000640 w/ synthesized IW39+Fleet → 639 total ties out). Snapshot: `_rollback/APP-WU-01-pre/`. Follow-ups: per-cost-centre breakdown (needs MB51 cost-centre alias); Trace placement if wanted.
+
 ## Shipped + pushed 2026-06-27 (APP-PD-SPREAD chevron spread) — pending operator validation
 - **APP-PD-SPREAD** — the Phase-Distribution chevron's "Total to site" gains a small +/- (superscript +Q3 / subscript −Q1, anchored on the displayed average) showing the box top/bottom of the per-chain total-to-site (complete-A–D chains). Shared render → shows on Trace + Screener. Verified (1003380 → 30.0d +7.5/−7.5, box 22.5–37.5). Snapshot: `_rollback/APP-PD-SPREAD-pre/`. YoY per-year chevrons = candidate follow-up.
 
@@ -20,10 +23,12 @@
 - **APP-E27** — Trend detail: manufacturer in brackets after the description; id/desc column can grow to ~48% and wrap, pushing the Algorithmic Recommendation block right.
 - **APP-FIX-SIGMA-PROC** — sigma outlier-trim keys off `totalToSite` (phases A–D) instead of full A–E; excludes phase E (Time to First Use). ⚠ changes which chains are flagged → exclusion counts + downstream averages may shift (intended). Snapshot: `_rollback/APP-YoY-Trend-pre/`. Verified in preview (5-mat sample, 142 PRs; zero console errors; Screener regression clean).
 
-## Next planned (major feature — planning, not built)
-- **APP-WU-01 — "Where used"** popup per material (consumption destinations). Needs IW39 (order→sortField); enriched by Fleet (sortField→model) for a Model rollup; 261 = WO/sort-field/model usage, 201 = cost-centre usage. Button on graph headers, live only when IW39 is loaded. Always show explicit "Unmapped WO / Unmapped model" buckets (never silently drop). **Operator decisions (2026-06-27):** CC = **single aggregate "Cost centre (CC)" bucket for v1** (per-CC breakdown — needs a new MB51 cost-centre parser alias, additive, no schema bump — deferred); window = **all-time, split into annual buckets** for the data's date range. Still open: reversal (262/202) netting; exact button placement (Trend chart header / Trace views / Screener). No SCHEMA_VERSION bump.
-- **APP-OPI-01** — ✅ SHIPPED 2026-06-27 (see shipped section above). Follow-ups: add the indicator to the Trace banner (no classifier pill there); decide whether to hide the all-dim indicator when a material has history but nothing open (currently shows 3 dim lamps).
-- **APP-PD-SPREAD** — ✅ SHIPPED 2026-06-27 (see shipped section above). Follow-up: add the same +/- spread to the YoY per-year "Total to site" chevrons.
+## Next planned
+The 3-item build queue (APP-OPI-01 · APP-PD-SPREAD · APP-WU-01) is **all shipped** (see shipped sections above, all 2026-06-27, pending operator validation). Remaining follow-ups carried forward:
+- **APP-WU-01 follow-ups** — per-cost-centre breakdown (needs a new MB51 cost-centre parser alias, additive, no schema bump); "Where used" button on the Trace views if wanted.
+- **APP-OPI-01 follow-ups** — add the 3-lamp indicator to the Trace banner (no classifier pill there); decide whether to hide the all-dim indicator when a material has procurement history but nothing currently open.
+- **APP-PD-SPREAD follow-up** — add the same +/- box spread to the YoY per-year "Total to site" chevrons.
+- Pre-existing queue: **APP-SCR-02** (consolidate detail-panel CSS into `shared/material-detail.css`), **APP-E21b** (lazy `stockOnHandSeries`), **APP-E20** (below-min trigger list), **APP-E23/E5**, **APP-N-01**, **APP-T-05/T-06** (`leadTimes.json` D21).
 
 ## Shipped since the last Backlog update (newest first — see RoC for detail)
 
