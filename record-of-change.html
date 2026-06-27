@@ -380,6 +380,24 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.3-dev — Intake reuse fix + cross-reference + dataset date ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.3</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>Intake — reuse now honours the dataset checkboxes (User-list bug), pasted-list precedence, cross-reference check, dataset date + staleness</h4>
+      <ul>
+        <li><b>APP-FIX-REUSE · the real bug — "Reuse common data" ignored the checkboxes.</b> <b>Root cause:</b> there were TWO <code>hydrateFromSavedIntake</code> definitions; the older 2-arg one shadowed the newer selective 3-arg one (JS function hoisting → the last declaration wins). The active (old) version loaded <b>every</b> source — incl. the <b>User list even when its box was unchecked</b> — and force-inherited the assessment type, which then auto-filled the manual paste box. Renamed the dead shadow out of the way so the selective version runs. <b>Now User list (and any source) loads only if you tick it.</b> Verified: a saved intake carrying 3 User-list rows, loaded with User list <em>unchecked</em> → only the 2 ticked datasets hydrated and the paste box stayed empty.</li>
+        <li><b>APP-FIX-REUSE · pasted list wins.</b> Typing/pasting into the manual list box now marks it user-owned (<code>scope.manual.userEdited</code>); the auto-fill from a (re)loaded User-list file never overwrites it. A list you paste is authoritative.</li>
+        <li><b>APP-INT-XREF · "Check cross-reference" button.</b> Below the manual paste box — cross-checks the pasted <b>materials</b> against the loaded <b>MB51 / Inventory Master / PR History</b> and reports counts + the specific material numbers not found in each (e.g. "MB51: 18/20 · 2 missing", expandable). Work-order lists are flagged N/A. Verified (3 real + 1 bogus → 3/4 each, missing = the bogus number).</li>
+        <li><b>APP-INT-DATE · dataset date + staleness in the reuse picker.</b> The reuse checkbox list now shows the source dataset's date + age and flags it <b>⚠ stale (&gt;90 days)</b> in amber, so reusing aged data is obvious. Verified (a 2026-01-10 dataset showed "167 days ago · ⚠ stale").</li>
+        <li><b>Files.</b> <code>intake/intake.js</code> (dead-shadow rename, auto-fill guard + userEdited flag, <code>renderManualXref</code>, reuse date), <code>intake/intake.html</code> (X-ref button + result), <code>intake/intake.css</code> (X-ref + date styles). Snapshot: <code>_rollback/APP-FIX-REUSE-pre/</code>. The old shadow function is left in place but unreferenced (renamed <code>hydrateFromSavedIntake_deprecated_unused</code>) — safe to delete in a later cleanup.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.3-dev — YoY/Trend enhancements (APP-Y-01 · APP-Y-02 · APP-E27 · APP-FIX-SIGMA-PROC) ───────── -->
     <article class="roc-entry dev">
       <div class="head">

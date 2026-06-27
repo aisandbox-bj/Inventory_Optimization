@@ -498,7 +498,7 @@
     // Auto-populate manual list textarea when user-list type + file uploaded.
     // APP-E22: file can have a Material column OR an Order column. Whichever
     // is populated drives the listType + chooser UI state.
-    if (state.assessmentType === 'userList' && state.parsed.userList) {
+    if (state.assessmentType === 'userList' && state.parsed.userList && !state.scope.manual.userEdited) {
       const rows = state.parsed.userList.canonical;
       const mats = uniq(rows.map(r => String(r.material || '').trim()).filter(Boolean));
       const ords = uniq(rows.map(r => String(r.order    || '').trim()).filter(Boolean));
@@ -1223,11 +1223,61 @@
     renderJsonPreview();
   }
 
+  // APP-INT-XREF (2026-06-27) — cross-check the pasted material list against the
+  // loaded MB51 / Inventory Master / PR History, on demand. Counts + the missing
+  // material numbers per source, so the operator can confirm the list has data
+  // before running. Material lists only (work-order lists are flagged as N/A).
+  function renderManualXref(){
+    const host = $('#manualXrefResult');
+    if (!host) return;
+    host.classList.remove('hidden');
+    const tokens = uniq(parseManualTokens());
+    if (!tokens.length) {
+      host.innerHTML = '<div class="ml-xref-empty">Paste a material list above, then check.</div>';
+      return;
+    }
+    const lt = state.scope.manual.listType || getManualUiMode();
+    if (lt === 'workOrders') {
+      host.innerHTML = '<div class="ml-xref-empty">Cross-reference checks <b>material</b> lists against MB51 / Inventory Master / PR History. This list is currently set to Work Orders.</div>';
+      return;
+    }
+    const sources = [
+      { key: 'mb51',            label: 'MB51' },
+      { key: 'inventoryMaster', label: 'Inventory Master' },
+      { key: 'prHistory',       label: 'PR History' }
+    ];
+    const rows = sources.map(s => {
+      const parsed = state.parsed[s.key];
+      if (!parsed) return Object.assign({ loaded: false }, s);
+      const set = new Set((parsed.canonical || []).map(r => String(r.material || '').trim()).filter(Boolean));
+      const missing = tokens.filter(t => !set.has(t));
+      return Object.assign({ loaded: true, found: tokens.length - missing.length, total: tokens.length, missing }, s);
+    });
+    const pill = r => {
+      if (!r.loaded) return `<span class="ml-xref-pill na">${r.label}: not loaded</span>`;
+      const pct = r.total ? r.found / r.total * 100 : 0;
+      const cls = pct >= 90 ? 'ok' : (pct >= 50 ? 'warn' : 'crit');
+      return `<span class="ml-xref-pill ${cls}">${r.label}: ${r.found}/${r.total}${r.missing.length ? ` &middot; ${r.missing.length} missing` : ''}</span>`;
+    };
+    const missingBlocks = rows.filter(r => r.loaded && r.missing.length).map(r =>
+      `<details class="ml-xref-missing"><summary>${r.missing.length} not found in ${r.label}</summary><div class="ml-xref-missing-list">${r.missing.map(escapeHtml).join(', ')}</div></details>`
+    ).join('');
+    host.innerHTML = `<div class="ml-xref-pills">${rows.map(pill).join('')}</div>${missingBlocks}`;
+  }
+
   function setupManualPaste(){
     const ta = $('#manualPaste');
     if (ta) {
-      ta.addEventListener('input', refreshManualScope);
+      ta.addEventListener('input', () => {
+        // APP-FIX-REUSE — typing/pasting marks the box as user-owned, so the
+        // auto-fill from a (re)loaded user-list file never overwrites it.
+        state.scope.manual.userEdited = true;
+        refreshManualScope();
+      });
     }
+    // APP-INT-XREF — on-demand cross-check of the pasted list vs MB51 / Inv Master / PR.
+    const xrefBtn = $('#manualXref');
+    if (xrefBtn) xrefBtn.addEventListener('click', renderManualXref);
     /* Wire the three list-type chooser buttons. */
     document.querySelectorAll('#manualTypeBar .ml-type').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2246,7 +2296,17 @@
       const host = $('#reuseSourcesHost');
       if (!host || !json) return;
       const data = json.data || {};
+      // APP-INT-DATE — surface the dataset's date + a staleness flag right at the
+      // checkbox list so reusing stale data is obvious.
+      const meta = json.metadata || {};
+      const dRaw = meta.uploadedAt || meta.createdAt || '';
       let html = '';
+      if (dRaw) {
+        const ageDays = Math.floor((Date.now() - new Date(dRaw).getTime()) / 86400000);
+        const ageTxt = ageDays <= 0 ? 'today' : (ageDays === 1 ? '1 day ago' : ageDays + ' days ago');
+        const stale = ageDays > 90;
+        html += `<div class="reuse-date ${stale ? 'stale' : ''}">Dataset date: <b>${escapeHtml(dRaw.replace('T', ' ').slice(0, 16))}</b> &middot; ${ageTxt}${stale ? ' &middot; ⚠ stale (&gt;90 days) — confirm this data is still current' : ''}</div>`;
+      }
       for (const group of REUSE_GROUPS) {
         html += `<div style="margin-top:10px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.6px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">${group.groupLabel}</div>`;
         html += '<div class="reuse-sources">';
@@ -2361,13 +2421,15 @@
     if (step0) step0.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  /**
-   * Hydrate state.parsed.* + state.scope + state.paramsRun from a saved
-   * canonical JSON. After this runs, the operator can skip Steps 1-2-3
-   * and jump straight to Step 0 (pick new assessment type) + Step 4 (scope)
-   * + Step 5 (parameters) + Step 7 (save as a new named intake).
-   */
-  async function hydrateFromSavedIntake(json, sourceName){
+  /* APP-FIX-REUSE (2026-06-27) — DEAD CODE, intentionally not called.
+     This older 2-arg hydrator shadowed the selective 3-arg hydrateFromSavedIntake
+     above (JS function hoisting → the last declaration wins), so the Reuse modal
+     silently IGNORED the per-dataset checkboxes: it loaded EVERY source — incl.
+     userList even when unchecked — and force-inherited the assessment type
+     (which then auto-filled the manual paste box). Renamed so the selective
+     version is the one that runs. Left unreferenced to keep the diff small;
+     safe to delete in a later cleanup. */
+  async function hydrateFromSavedIntake_deprecated_unused(json, sourceName){
     const reusedSources = [];
     for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
       const arr = json.data && json.data[s];

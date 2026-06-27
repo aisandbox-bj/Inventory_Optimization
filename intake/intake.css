@@ -1143,3 +1143,24 @@ body.intake-gated #reuseOpen{ pointer-events:none; opacity:.45; }
   border-color: rgba(100, 181, 246, .30);
   color: #82b8e8;
 }
+
+/* APP-INT-XREF — on-demand cross-reference of the pasted list */
+.ml-xref-bar{ display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
+.ml-xref-btn{ font-size:11.5px; padding:4px 10px; }
+.ml-xref-hint{ font-size:11px; color:var(--text-muted); }
+.ml-xref-result{ margin-top:8px; }
+.ml-xref-result.hidden{ display:none; }
+.ml-xref-empty{ font-size:11.5px; color:var(--text-muted); font-style:italic; }
+.ml-xref-pills{ display:flex; flex-wrap:wrap; gap:6px; }
+.ml-xref-pill{ font-family:var(--font-mono); font-size:11px; padding:3px 9px; border-radius:5px; border:1px solid rgba(255,255,255,.12); color:var(--text-sec); }
+.ml-xref-pill.ok{   background:rgba(90,182,157,.10); border-color:rgba(90,182,157,.35); color:#6fc7a8; }
+.ml-xref-pill.warn{ background:rgba(251,191,36,.10); border-color:rgba(251,191,36,.40); color:#f4c14a; }
+.ml-xref-pill.crit{ background:rgba(239,68,68,.10);  border-color:rgba(239,68,68,.40);  color:#ef6b6b; }
+.ml-xref-pill.na{   color:var(--text-muted); font-style:italic; }
+.ml-xref-missing{ margin-top:6px; font-size:11px; }
+.ml-xref-missing summary{ cursor:pointer; color:var(--text-sec); }
+.ml-xref-missing-list{ margin-top:4px; font-family:var(--font-mono); font-size:10.5px; color:var(--text-muted); word-break:break-word; line-height:1.5; }
+
+/* APP-INT-DATE — dataset date + staleness flag in the reuse source list */
+.reuse-date{ font-size:11px; color:var(--text-muted); margin-bottom:8px; font-family:var(--font-mono); }
+.reuse-date.stale{ color:#f4c14a; }
