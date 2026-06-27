@@ -295,6 +295,21 @@
         : '';
     }
 
+    // APP-TREND-PEC — per-event consumption (units issued per consumptive event).
+    const pes = mat.perEventStats || null;
+    let perEventDisp = '—', perEventTitle = '';
+    if (pes && pes.n > 0 && pes.mean != null) {
+      const m = pes.mean.toFixed(1);
+      if (pes.std != null) {
+        perEventDisp  = `${m} <small>± ${pes.std.toFixed(1)} ea</small>`;
+        perEventTitle = `Mean ± sample std of units issued per consumptive event, across ${pes.n} events (full window)`;
+      } else {
+        perEventDisp  = `${m} <small>ea · 1 event</small>`;
+        perEventTitle = `Units issued in the single consumptive event (full window)`;
+      }
+    }
+    const perEventCell = `<div class="stat-cell"${perEventTitle ? ` title="${escapeHtml(perEventTitle)}"` : ''}><span class="lab">Per event cons</span><div class="v">${perEventDisp}</div></div>`;
+
     const llmActionsHtml = enableLlm
       ? `
       <div class="actions-row">
@@ -346,6 +361,7 @@
         <div class="stat-cell"><span class="lab">Adj P2 (HCE excl)</span><div class="v">${adjDisp} <small>${mat.hceP2 && mat.hceP2.length ? '/ mo' : ''}</small></div></div>
         <div class="stat-cell"><span class="lab">Total (window)</span><div class="v">${mat.totalNet}</div></div>
         ${stockoutsCell}
+        ${perEventCell}
         ${dropCauseCell}
       </div>
 
@@ -360,7 +376,13 @@
 
     // APP-E11 — chart 30% wider (was 720). Caveat caption + legend toggles
     // wired right after render so toggle state applies to the freshly drawn SVG.
-    AppChart.render(hostEl.querySelector('#chartHost'), mat, { width: chartWidth, height: chartHeight });
+    // APP-TREND-HOV — per-event hover movements (lazy; only for the open material).
+    let chartMovements = null;
+    if (typeof opts.chartMovementsFn === 'function') {
+      try { chartMovements = opts.chartMovementsFn(); }
+      catch (e) { console.warn('chartMovements:', e); }
+    }
+    AppChart.render(hostEl.querySelector('#chartHost'), mat, { width: chartWidth, height: chartHeight, movements: chartMovements });
     wireChartToggles(hostEl);
 
     // Bind LLM (only when the run button is present)

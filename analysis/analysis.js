@@ -620,6 +620,8 @@
       whereUsedFn: (typeof WhereUsed !== 'undefined' && state.json.data && state.json.data.iw39 && state.json.data.iw39.length) ? () => WhereUsed.compute(state.json, mat.material) : null,
       // APP-WU-02 — per-cell drill into the underlying work orders.
       whereUsedDrillFn: (typeof WhereUsed !== 'undefined') ? (sel) => WhereUsed.drill(state.json, mat.material, sel) : null,
+      // APP-TREND-HOV — per-event movement detail for the chart hover tooltips.
+      chartMovementsFn: (typeof MovementDetail !== 'undefined') ? () => MovementDetail.forMaterial(state.json, mat.material) : null,
       // APP-FIX-SNAPSHOT-ALIGN — chart caption when the stock snapshot ≠ MB51 cut-off.
       snapshotAlign: state.result && state.result.snapshotAlign
     });

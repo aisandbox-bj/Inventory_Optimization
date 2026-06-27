@@ -380,6 +380,25 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-TREND-PEC + APP-TREND-HOV ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-TREND-PEC + APP-TREND-HOV · Trend — "Per event cons" stat + per-event chart hover</h4>
+      <ul>
+        <li><b>APP-TREND-PEC — "Per event cons" stat.</b> A new cell in the material-detail stat grid (Trend + Screener) showing the typical consumption draw size: <b>mean ± sample std</b> of the units issued per consumptive event. An "event" is the SAME unit the event-count screen uses — a work-order issue (261, keyed by its order) or a cost-centre issue (201 / order-less, keyed by posting date) — over the <b>full analysis window</b> (operator decision). Returns (262/202) are not events and don't shrink an event. New <code>perEventStats {mean, std, n}</code> on the pipeline result; a hover title states the event count.</li>
+        <li><b>APP-TREND-HOV — per-event hover on the chart.</b> Faint dots sit on each line at every date that has movements; hovering one shows a tooltip of that date's movements: <b>date · movement type (code + plain-English description) · qty</b>. The <b>orange</b> (consumption) line shows goods issues + reversals (261/201/262/202); the <b>violet</b> (stock) line shows every movement that actually moves the back-calc Stock-on-Hand line — and adds the resulting "Stock after" level. Quantities are <b>absolute</b> (operator decision) with direction conveyed by the description.</li>
+        <li><b>Ties to the lines (credibility).</b> The stock-line hover reuses <code>InventoryBackCalc</code>'s OWN classification (<code>MVT_SIGN</code> + <code>DIRECTIONAL_MVTS</code>) as the single source of truth, so it shows exactly the movements that moved the violet line — this site's non-standard rules (3PL / 101 / 107 excluded, 109 = the site receipt) are honoured, and excluded movements never appear. Hover dots carry the line's toggle class, so turning a line off hides its dots too.</li>
+        <li><b>Plumbing.</b> New shared module <code>shared/movement-detail.js</code> (<code>MovementDetail.forMaterial</code> + <code>describe</code>); the chart accepts <code>opts.movements</code> and draws the dots + an HTML tooltip in the chart host; <code>material-detail.js</code> calls a lazy <code>chartMovementsFn</code> so movements are built only for the open material (no per-material payload growth — respects the APP-E21b memory concern). Loaded in <code>analysis.html</code> + <code>screener.html</code> after <code>inventory-back-calc.js</code>.</li>
+        <li><b>Verified two ways.</b> (1) <b>Engine harness</b> (<code>_patch_tmp/trend-test.html</code>): 22/22 checks — MovementDetail splits consumption vs stock correctly, excludes the 3PL 101, includes 109/711/309 (directional row-signed), absolute qty, correct descriptions; chart renders the right dot counts; simulated hovers produce the right tooltip text incl. "Stock after". (2) <b>Real app</b> on material 1001220 (LV case study): "Per event cons" = <b>1.1 ± 1.1 ea across 817 events</b> — matched an independent Python recompute exactly (n=817, mean 1.1, sample std 1.11); 307 consumption + 151 stock hover dots; real hovers show e.g. "2026-06-26 · 261 GI for order ·1 · Stock after: 89"; dots hide with their toggled-off line; Trend + Screener identical; zero console errors.</li>
+        <li><b>Files.</b> NEW <code>shared/movement-detail.js</code>; <code>shared/pipeline.js</code> (<code>perEventStats</code>), <code>shared/material-detail.js</code> (stat cell + <code>chartMovementsFn</code> wiring), <code>shared/material-detail.css</code> (tooltip + hit-dot styles), <code>shared/chart.js</code> (hover dots + tooltip), <code>analysis/analysis.{js,html}</code> + <code>screener/screener.{js,html}</code> (pass <code>chartMovementsFn</code> + load the module). No SCHEMA_VERSION change. Snapshot: <code>_rollback/APP-TREND-EVT-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-WU-02 where-used modal + drill ───────── -->
     <article class="roc-entry dev">
       <div class="head">

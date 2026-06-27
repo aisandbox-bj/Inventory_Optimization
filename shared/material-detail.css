@@ -243,6 +243,27 @@
 .chart-host.hide-cum .chart-cumulative-line{ display:none; }
 .chart-host.hide-soh .chart-grp-soh{ display:none; }
 
+/* APP-TREND-HOV — per-event hover dots + tooltip on the Trend chart */
+.chart-host .chart-hit{ cursor:pointer; transition:fill-opacity .08s; }
+.chart-host .chart-hit:hover{ fill-opacity:0.95 !important; stroke:#fff; stroke-width:1; }
+.chart-tip{
+  position:absolute; z-index:30; pointer-events:none;
+  min-width:172px; max-width:300px;
+  background:rgba(8,26,34,.97); border:1px solid var(--border-soft,#1d4e59);
+  border-radius:6px; padding:7px 9px; box-shadow:0 8px 24px rgba(0,0,0,.45);
+  font-family:var(--font-mono,monospace); font-size:11px; line-height:1.35; color:var(--text-pri,#d6dfde);
+}
+.chart-tip.hidden{ display:none; }
+.chart-tip .ct-date{ font-weight:700; letter-spacing:.5px; margin-bottom:5px; padding-bottom:4px; border-bottom:1px solid rgba(255,255,255,.10); }
+.chart-tip .ct-date.cum{ color:#FBBF24; }
+.chart-tip .ct-date.soh{ color:#A78BFA; }
+.chart-tip .ct-row{ display:flex; align-items:baseline; gap:7px; padding:1.5px 0; }
+.chart-tip .ct-mt{ color:var(--text-muted,#9baba8); min-width:26px; }
+.chart-tip .ct-desc{ flex:1 1 auto; color:var(--text-sec,#b9c6c4); }
+.chart-tip .ct-q{ font-weight:700; color:var(--text-pri,#e7efee); }
+.chart-tip .ct-more{ color:var(--text-muted,#9baba8); font-style:italic; margin-top:3px; }
+.chart-tip .ct-foot{ margin-top:5px; padding-top:4px; border-top:1px solid rgba(255,255,255,.10); color:#A78BFA; }
+
 .chart-caveat{
   font-family:var(--font-body);font-size:10.5px;font-style:italic;
   color:var(--text-muted);line-height:1.35;

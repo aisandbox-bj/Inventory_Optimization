@@ -796,6 +796,38 @@
         }
         const lastConsumptionDate = _lastIssueDate || null;
 
+        // APP-TREND-PEC — per-event consumption distribution (units issued per
+        // consumptive event). An "event" is the SAME unit the event-count screen
+        // uses: a work-order issue (261, keyed by its order) or a cost-centre
+        // issue (201 / order-less, keyed by posting date). Per-event qty = the
+        // gross issued units for that event; we report mean ± sample std over the
+        // full analysis window (operator decision 2026-06-27). Returns (262/202)
+        // are NOT events and don't reduce an event's size.
+        const _evQty = new Map();
+        for (const r of tx) {
+          const mt = String(r.movementType || '').trim();
+          if (!ISSUE_TYPES.has(mt)) continue;
+          const qv = Math.abs(parseFloat(r.quantity) || 0);
+          const o  = String(r.order || '').trim();
+          const key = o ? ('WO|' + o) : ('CC|' + String(r.postingDate || '').trim());
+          _evQty.set(key, (_evQty.get(key) || 0) + qv);
+        }
+        const _evVals = [..._evQty.values()];
+        let perEventStats = { mean: null, std: null, n: _evVals.length };
+        if (_evVals.length) {
+          const _mean = _evVals.reduce((s, v) => s + v, 0) / _evVals.length;
+          let _std = null;
+          if (_evVals.length > 1) {
+            const _var = _evVals.reduce((s, v) => s + (v - _mean) * (v - _mean), 0) / (_evVals.length - 1);
+            _std = Math.sqrt(_var);
+          }
+          perEventStats = {
+            mean: Math.round(_mean * 100) / 100,
+            std:  _std == null ? null : Math.round(_std * 100) / 100,
+            n:    _evVals.length
+          };
+        }
+
         // ── APP-E1 · Back-calc SOH series (pulled up — APP-E11 needs ──────
         // stockoutWindows to make the P2 anchoring decision below).
         let stockOnHandSeries = [];
@@ -1017,6 +1049,7 @@
           mrpRecFlag,                              // APP-E8 — display token ('PD → V1') for list column + set filter, or null
           runway,                                  // months of cover at P2 rate
           woCount,                                 // unique issuing work orders in window
+          perEventStats,                           // APP-TREND-PEC — {mean, std, n} units issued per consumptive event (full window)
           fewEvents:    !!tl.fewEvents,            // true if few-events overlay tripped
           // v2.1.0 signal fields — additive, used by LLM prompt context
           netSign,                                 // 'POSITIVE' | 'NEGATIVE (returns dominate)' | 'MIXED' | 'NO_DATA'

@@ -410,6 +410,86 @@
       svg.appendChild(text(legX + 24, legY + 3, 'STOCKOUT', { fill: PAL.text, size: 9, tracking: 1 }));
     }
 
+    // ─── APP-TREND-HOV · per-event hover tooltips (consumption + SOH lines) ──
+    // opts.movements = { consumption:[{date,mt,mtDesc,qty}], stock:[…] } (built
+    // by MovementDetail). A faint hit dot sits on each line at every date that
+    // has movements; hovering it shows that date's movements (code · descr · qty,
+    // absolute — direction is in the description). Tagged with the same toggle
+    // classes so a hidden line's dots disappear (and stop receiving hover) too.
+    if (opts.movements && (opts.movements.consumption || opts.movements.stock)) {
+      const groupByDate = (arr) => {
+        const m = new Map();
+        for (const mv of (arr || [])) { if (!m.has(mv.date)) m.set(mv.date, []); m.get(mv.date).push(mv); }
+        return m;
+      };
+      const consByDate  = groupByDate(opts.movements.consumption);
+      const stockByDate  = groupByDate(opts.movements.stock);
+      const sohByDate = new Map();
+      for (const p of sohSeries) sohByDate.set(p.date, p.soh);
+
+      target.style.position = 'relative';
+      const tip = document.createElement('div');
+      tip.className = 'chart-tip hidden';
+      target.appendChild(tip);
+
+      const fmtQ = (q) => (Math.round(q * 100) / 100).toLocaleString();
+      function tipHtml(date, movs, line, sohFoot){
+        const MAXR = 8;
+        let rows = movs.slice(0, MAXR).map(mv =>
+          `<div class="ct-row"><span class="ct-mt">${mv.mt}</span><span class="ct-desc">${mv.mtDesc}</span><span class="ct-q">${fmtQ(mv.qty)}</span></div>`
+        ).join('');
+        if (movs.length > MAXR) rows += `<div class="ct-more">+${movs.length - MAXR} more…</div>`;
+        const foot = (sohFoot != null) ? `<div class="ct-foot">Stock after: ${fmtQ(sohFoot)}</div>` : '';
+        return `<div class="ct-date ${line === 'soh' ? 'soh' : 'cum'}">${date}</div>${rows}${foot}`;
+      }
+      function positionTip(e){
+        const r = target.getBoundingClientRect();
+        let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+        const tw = tip.offsetWidth, th = tip.offsetHeight;
+        if (x + tw > r.width)  x = (e.clientX - r.left) - tw - 14;
+        if (y + th > r.height) y = Math.max(2, (e.clientY - r.top) - th - 14);
+        tip.style.left = Math.max(2, x) + 'px';
+        tip.style.top  = Math.max(2, y) + 'px';
+      }
+      svg.addEventListener('mouseover', (e) => {
+        const t = e.target;
+        if (!t || !t.classList || !t.classList.contains('chart-hit')) return;
+        const line = t.getAttribute('data-line');
+        const date = t.getAttribute('data-date');
+        const movs = (line === 'soh' ? stockByDate : consByDate).get(date);
+        if (!movs) return;
+        const sohFoot = (line === 'soh' && sohByDate.has(date)) ? sohByDate.get(date) : null;
+        tip.innerHTML = tipHtml(date, movs, line, sohFoot);
+        tip.classList.remove('hidden');
+        positionTip(e);
+      });
+      svg.addEventListener('mousemove', (e) => { if (!tip.classList.contains('hidden')) positionTip(e); });
+      svg.addEventListener('mouseout', (e) => {
+        const t = e.target;
+        if (t && t.classList && t.classList.contains('chart-hit')) tip.classList.add('hidden');
+      });
+
+      const gCum = el('g', { class: 'chart-cumulative-line chart-hit-grp' });
+      for (const p of cum) {
+        const movs = consByDate.get(p.date);
+        if (!movs) continue;
+        const x = xScale(new Date(p.date).getTime());
+        const y = yScale(p.cum);
+        gCum.appendChild(el('circle', { cx: x, cy: y, r: 6, class: 'chart-hit', fill: PAL.cumLine, 'fill-opacity': 0.08, 'data-line': 'cum', 'data-date': p.date }));
+      }
+      svg.appendChild(gCum);
+
+      if (hasSohOverlay && yScaleSOH) {
+        const gSohHit = el('g', { class: 'chart-grp-soh chart-hit-grp' });
+        for (const [date] of stockByDate) {
+          const tt = new Date(date).getTime();
+          if (tt < xMin || tt > xMax || !sohByDate.has(date)) continue;
+          gSohHit.appendChild(el('circle', { cx: xScale(tt), cy: yScaleSOH(sohByDate.get(date)), r: 6, class: 'chart-hit', fill: PAL.sohLine, 'fill-opacity': 0.08, 'data-line': 'soh', 'data-date': date }));
+        }
+        svg.appendChild(gSohHit);
+      }
+    }
+
     // ─── Pattern marker (LUMPY badge top-left) ────────────────────────────
     if (material.pattern === 'LUMPY') {
       const bx = MARGIN.left + 4, by = MARGIN.top - 14;
