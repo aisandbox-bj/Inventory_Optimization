@@ -46,7 +46,8 @@
       { key:'wrSoftMonths',        label:'WR soft months',  type:'number', step:1 },
       { key:'wrHardMonths',        label:'WR hard months',  type:'number', step:1 },
       { key:'wrMrpTypes',          label:'WR MRP types',    type:'list',   placeholder:'PD, ZE' },
-      { key:'socBackCalcMonths',   label:'Stock history window (months)', type:'number', step:1 }
+      { key:'socBackCalcMonths',   label:'Stock history window (months)', type:'number', step:1 },
+      { key:'p2StockoutDomFraction', label:'Stockout-dominance fraction (P2)', type:'number', step:0.05 }
     ];
 
     const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};

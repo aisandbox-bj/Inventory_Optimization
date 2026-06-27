@@ -129,8 +129,16 @@
     name:     '',
     assessmentType: null,                            // 'unitFloc' | 'userList' | 'paramSearch'
     psFilters: [],                                   // Parameter-Search filter cards
-    alignmentAck: null                               // APP-E6 · { acknowledgedAt, dimensions } once operator confirms scope alignment
+    alignmentAck: null,                              // APP-E6 · { acknowledgedAt, dimensions } once operator confirms scope alignment
+    inventoryMasterDate: null                        // APP-FIX-SNAPSHOT-ALIGN · SAP extract date of the Inventory Master (yyyy-mm-dd)
   };
+
+  /* APP-FIX-SNAPSHOT-ALIGN — pull a yyyy-mm-dd (or yyyymmdd / yyyy_mm_dd) date out
+     of an uploaded filename so the extract-date field can pre-fill. Returns ISO or null. */
+  function detectDateInFilename(name){
+    const m = String(name || '').match(/(20\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\d|3[01])/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  }
 
   /* ─── Parameter-Search dimension catalogue ──────────────────────────────── */
   /* Each dimension declares its data source, value type, and pickers. */
@@ -261,6 +269,43 @@
         if (e.target.files.length) handleFile(source, e.target.files[0]);
       });
     });
+    // APP-FIX-SNAPSHOT-ALIGN — Inventory Master extract-date field.
+    const imDate = document.querySelector('#imDateInput');
+    if (imDate) {
+      imDate.addEventListener('change', () => {
+        state.inventoryMasterDate = imDate.value || null;
+        syncInventoryMasterDateInput();
+        onParseUpdated();   // re-run the DQ gate so the alignment warning refreshes live
+      });
+    }
+    syncInventoryMasterDateInput();
+  }
+
+  // APP-FIX-SNAPSHOT-ALIGN — reflect state.inventoryMasterDate into the field + a
+  // small inline note showing whether it matches the last MB51 posting date.
+  function syncInventoryMasterDateInput(){
+    const inp  = document.querySelector('#imDateInput');
+    const note = document.querySelector('#imDateNote');
+    if (!inp) return;
+    if (state.inventoryMasterDate && inp.value !== state.inventoryMasterDate) inp.value = state.inventoryMasterDate;
+    if (!state.inventoryMasterDate && inp.value) inp.value = '';
+    if (!note) return;
+    const mb51 = state.parsed.mb51?.canonical || [];
+    const lastMb51 = mb51.length ? (mb51.map(r => r.postingDate).filter(Boolean).sort().pop() || null) : null;
+    if (!state.inventoryMasterDate) {
+      note.textContent = 'SAP run date of the stock snapshot — set it so the Stock-on-Hand line lines up with MB51.';
+      note.className = 'im-date-note';
+    } else if (lastMb51 && lastMb51 !== state.inventoryMasterDate) {
+      const gap = Math.abs(Math.round((Date.parse(lastMb51) - Date.parse(state.inventoryMasterDate)) / 86400000));
+      note.textContent = `⚠ Differs from the last MB51 movement (${lastMb51}) by ${gap} day${gap === 1 ? '' : 's'} — the Stock-on-Hand line will be offset.`;
+      note.className = 'im-date-note warn';
+    } else if (lastMb51) {
+      note.textContent = `✓ Matches the MB51 cut-off (${lastMb51}).`;
+      note.className = 'im-date-note ok';
+    } else {
+      note.textContent = 'SAP run date of the stock snapshot.';
+      note.className = 'im-date-note';
+    }
   }
 
   async function handleFile(source, file){
@@ -274,6 +319,13 @@
       state.parsed[source] = result;
       const sheetTxt = result.sheet ? ` · sheet: "${result.sheet}"` : '';
       drop.querySelector('.file').textContent = `${file.name} · ${result.rowCount.toLocaleString()} rows${sheetTxt}`;
+      // APP-FIX-SNAPSHOT-ALIGN — when the Inventory Master lands, pre-fill its
+      // extract date from the filename if detectable + the field is still empty.
+      if (source === 'inventoryMaster' && !state.inventoryMasterDate) {
+        const guess = detectDateInFilename(file.name);
+        if (guess) state.inventoryMasterDate = guess;
+      }
+      if (source === 'inventoryMaster') syncInventoryMasterDateInput();
       // Re-render every drop so cross-file reconciliation chips refresh too
       renderAllDropStats();
       onParseUpdated();
@@ -780,6 +832,29 @@
       });
       const dupes = Object.values(lower).filter(a => uniq(a).length > 1);
       if (dupes.length) issues.push({ code:'master_case_dupe', sev:'crit', msg:`${dupes.length} material case-conflict(s) in Inventory Master` });
+    }
+
+    // ── APP-FIX-SNAPSHOT-ALIGN — Inventory Master extract date vs MB51 cut-off ──
+    // The SOH back-calc anchors today's Inventory Master stock and walks MB51
+    // backward; it assumes the snapshot is AS AT the MB51 cut-off. If they differ,
+    // every reconstructed SOH line + stockout flag is offset by the net of the gap
+    // movements. Strict same-day; warn-and-proceed (does not block the run).
+    if (master.length) {
+      if (state.inventoryMasterDate && mb51.length) {
+        const lastMb51 = mb51.map(r => r.postingDate).filter(Boolean).sort().pop() || null;
+        if (lastMb51 && lastMb51 !== state.inventoryMasterDate) {
+          const gap = Math.round((Date.parse(lastMb51) - Date.parse(state.inventoryMasterDate)) / 86400000);
+          const n = Math.abs(gap), d = n === 1 ? 'day' : 'days';
+          const dir = gap > 0
+            ? `${n} ${d} of movements occurred after the stock snapshot`
+            : `the stock snapshot is ${n} ${d} after the last MB51 movement`;
+          warnings.push({ code:'snapshot_align', sev:'warn',
+            msg:`Inventory Master dated ${state.inventoryMasterDate}, MB51 runs to ${lastMb51} — ${dir}. The reconstructed Stock-on-Hand line and stockout flags will be offset by the net of those movements. Re-extract both on the same SAP run date.` });
+        }
+      } else if (!state.inventoryMasterDate) {
+        warnings.push({ code:'snapshot_nodate', sev:'warn',
+          msg:`No Inventory Master extract date set — can't confirm the stock snapshot lines up with the MB51 cut-off, so the Stock-on-Hand line may be offset. Set the extract date (Step 1, under the Inventory Master upload).` });
+      }
     }
 
     state.dq = {
@@ -1938,6 +2013,9 @@
     // field is always present going forward.
     json.metadata.createdAt      = now;
     json.metadata.uploadedAt     = state.uploadedAt || now;
+    // APP-FIX-SNAPSHOT-ALIGN — the SAP run date the Inventory Master was extracted
+    // (the stock snapshot the SOH back-calc anchors to). Additive; null if unset.
+    json.metadata.inventoryMasterDate = state.inventoryMasterDate || null;
     json.metadata.assessmentType = state.assessmentType;
     json.scope                   = JSON.parse(JSON.stringify(state.scope));
     // For userList type: scope.manual.{materials|workOrders} is already maintained
@@ -2084,6 +2162,7 @@
         // the next save keeps it. Pre-APP-E15 JSONs have no uploadedAt; fall
         // back to createdAt as the closest honest proxy.
         state.uploadedAt = json.metadata.uploadedAt || json.metadata.createdAt || null;
+        state.inventoryMasterDate = (json.metadata && json.metadata.inventoryMasterDate) || null;  // APP-FIX-SNAPSHOT-ALIGN
         // Stuff data into parsed slots so downstream UI works
         for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
           if (json.data[s] && json.data[s].length) {
@@ -2360,6 +2439,7 @@
     // field, fall back to createdAt (their last-save date is the closest
     // honest proxy we have for "when this dataset entered the system").
     state.uploadedAt = (json.metadata && (json.metadata.uploadedAt || json.metadata.createdAt)) || null;
+    state.inventoryMasterDate = (json.metadata && json.metadata.inventoryMasterDate) || state.inventoryMasterDate || null;  // APP-FIX-SNAPSHOT-ALIGN
     for (const s of sources) {
       const arr = json.data && json.data[s];
       if (Array.isArray(arr) && arr.length > 0) {

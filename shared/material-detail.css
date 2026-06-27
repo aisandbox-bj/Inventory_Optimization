@@ -215,6 +215,13 @@
   color:var(--text-muted);line-height:1.35;
   padding:0 4px;margin-bottom:9px;
 }
+/* APP-FIX-SNAPSHOT-ALIGN — misalignment caption travels with the purple line */
+.chart-caveat.soh-misalign{
+  font-style:normal; color:#f4c14a;
+  background:rgba(244,193,74,.08); border:1px solid rgba(244,193,74,.28);
+  border-radius:6px; padding:6px 9px; margin:0 2px 9px;
+}
+.chart-caveat.soh-misalign b{ color:#f4c14a; }
 
 /* key stats grid
    APP-E18 (2026-05-16) — single-line cells per Graph visuals deck.

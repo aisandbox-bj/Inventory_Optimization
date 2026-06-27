@@ -2,7 +2,7 @@
 
 Paste this into a fresh Claude Code session to bring me up to speed on the project state. Don't edit — copy verbatim. Claude will read this, check the listed files, and confirm before doing anything.
 
-> **Note:** This file ships at the repo root (it mirrors `v2.1.3-dev/`). The richer, project-level session-start protocol lives in `CLAUDE.md` and `_Hand-over docs/` in the working folder — prefer those when the full project folder is available. This file is the orientation for a repo-only context.
+> **Note:** This file ships at the repo root (it mirrors `v2.1.4-dev/`). The richer, project-level session-start protocol lives in `CLAUDE.md` and `_Hand-over docs/` in the working folder — prefer those when the full project folder is available. This file is the orientation for a repo-only context.
 
 ---
 
@@ -18,27 +18,27 @@ I'm continuing work on **Calibre Tune** (the Inventory Optimization App) — a b
 
 **Project lives at:** `C:\Users\Test_Home\Documents\ClaudeCode\Projects\2026_05_12 - Inventory Optimization\`
 
-**Active working directory:** `4 - Build Output\Inventory Optimization App\v2.1.3-dev\` (current development). Frozen — do NOT edit: `archive\v1 (frozen)`, `archive\v1.0.0`, `archive\v1.1.0`. Rollback snapshot of the last released tag: `4 - Build Output\Inventory Optimization App\v2.1.1\`.
+**Active working directory:** `4 - Build Output\Inventory Optimization App\v2.1.4-dev\` (current development). Frozen — do NOT edit: `archive\v1 (frozen)`, `archive\v1.0.0`, `archive\v1.1.0`. Rollback snapshot of the last released tag: `4 - Build Output\Inventory Optimization App\v2.1.1\`.
 
-**GitHub repo:** [aisandbox-bj/Inventory_Optimization](https://github.com/aisandbox-bj/Inventory_Optimization) — repo root content mirrors `v2.1.3-dev/` (excludes `_rollback/`). Tags `v1.0.0` / `v1.1.0` preserve prior releases for rollback. `gh` CLI authenticated as `aisandbox-bj`.
+**GitHub repo:** [aisandbox-bj/Inventory_Optimization](https://github.com/aisandbox-bj/Inventory_Optimization) — repo root content mirrors `v2.1.4-dev/` (excludes `_rollback/`). Tags `v1.0.0` / `v1.1.0` preserve prior releases for rollback. `gh` CLI authenticated as `aisandbox-bj`.
 
-**Current version:** `v2.1.3-dev`. The current origin/main tip is the **newest entry in `v2.1.3-dev\record-of-change.html`** — don't hard-pin a SHA here, it goes stale (as of the 2026-06-26 doc refresh the tip was the Backlog/doc-refresh commit on top of APP-DOC-SCREENER). Last released tag: `v2.1.1`.
+**Current version:** `v2.1.4-dev`. The current origin/main tip is the **newest entry in `v2.1.4-dev\record-of-change.html`** — don't hard-pin a SHA here, it goes stale (as of the 2026-06-26 doc refresh the tip was the Backlog/doc-refresh commit on top of APP-DOC-SCREENER). Last released tag: `v2.1.1`.
 
 ## Before doing anything
 
 1. Read these in order — they are the source of truth:
-   - `v2.1.3-dev\record-of-change.html` — full changelog with rollback steps (newest entry = current origin/main tip)
-   - `v2.1.3-dev\user-manual.html` — operator manual with the analytical methodology
-   - `v2.1.3-dev\PLAN_v2.1.0.md` ★ — the LLM-boundary plan: threat model + durable LLM data-security principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
-   - `v2.1.3-dev\shared\canonical-schema.js` — JSON contract + parameter defaults (SCHEMA_VERSION 1.0.0)
-   - `v2.1.3-dev\shared\pipeline.js` — the analytical engine (deterministic, no LLM)
+   - `v2.1.4-dev\record-of-change.html` — full changelog with rollback steps (newest entry = current origin/main tip)
+   - `v2.1.4-dev\user-manual.html` — operator manual with the analytical methodology
+   - `v2.1.4-dev\PLAN_v2.1.0.md` ★ — the LLM-boundary plan: threat model + durable LLM data-security principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
+   - `v2.1.4-dev\shared\canonical-schema.js` — JSON contract + parameter defaults (SCHEMA_VERSION 1.0.0)
+   - `v2.1.4-dev\shared\pipeline.js` — the analytical engine (deterministic, no LLM)
 2. Project memory (if present on this machine) is at `C:\Users\Test_Home\.claude\projects\C--Users-Test-Home-Documents-ClaudeCode-Projects-2026-05-12---Inventory-Optimization\memory\MEMORY.md`. It records the GitHub push pattern, the "act, don't narrate" and "never hide issues" feedback rules, and "read source, don't rebuild from doc-comments". **Note: as of 2026-06-25 this memory store was not present at that path on the working machine — don't assume it loaded.**
 3. After reading the above, **summarise what you found in one short paragraph** and ask what I want to work on next — do not start editing files until I've confirmed direction.
 
 ## Architectural sketch (so you don't need to reverse-engineer)
 
 ```
-v2.1.3-dev/
+v2.1.4-dev/
 ├── index.html                  Dashboard (recent intakes + per-row delete, "Clear session data")
 ├── record-of-change.html       The RoC — every release entry, rollback steps
 ├── user-manual.html            Operator manual ★
@@ -63,7 +63,7 @@ v2.1.3-dev/
                                          phase distribution, procurement-flow funnel, volume cumulative
 ```
 
-## Headline features as of v2.1.3-dev
+## Headline features as of v2.1.4-dev
 
 - **Stockout-aware consumption drop detection** (APP-E1): SOH back-calc, violet SOH line, red stockout wash bands, last-consumption marker, P2 stockout-anchored math, cause-aware LLM prompt.
 - **Inventory Master migration to standard SAP Material Master (Fiori)** (APP-T-01) + plant as a real canonical field; multi-plant infrastructure phases 1–3 (detect / cross-file consistency / Settings opt-in, default OFF per D25).
@@ -76,7 +76,7 @@ v2.1.3-dev/
 ## Push protocol (DO NOT DEVIATE)
 
 - **NEVER** run `git init` in the working folder. It is a plain folder, not a repo.
-- Clone to `/tmp/push-Inventory_Optimization`, copy files from `v2.1.3-dev/`, commit with explicit identity flags, push:
+- Clone to `/tmp/push-Inventory_Optimization`, copy files from `v2.1.4-dev/`, commit with explicit identity flags, push:
   ```
   git -C /tmp/push-Inventory_Optimization -c user.name='aisandbox-bj' -c user.email='aisandbox-bj@users.noreply.github.com' commit -am "..."
   ```

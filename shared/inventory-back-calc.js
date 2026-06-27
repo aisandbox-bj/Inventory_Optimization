@@ -3,7 +3,7 @@
    movements backwards from the current SOH (from Inventory Master).
 
    Used by:
-     - Calibre Tune APP-E1 (stockout-aware drop detection — v2.1.3-dev)
+     - Calibre Tune APP-E1 (stockout-aware drop detection — v2.1.4-dev)
      - Calibre Trace D14 (Progression-tab inventory overlay — planned)
    The math lives here once; both tools call it.
 
@@ -407,6 +407,35 @@
   }
 
   /**
+   * Sum the stockout DAYS that fall within [rangeStart, rangeEnd], clipping each
+   * window to the range (inclusive day count, matching window.days = daysBetween+1).
+   * APP-E11b — a single long stockout suppresses the P2 rate as badly as several
+   * short ones, so stockout-dominance is judged by DURATION, not just window count.
+   *
+   * @param {Array}  stockoutWindows
+   * @param {string} rangeStart — ISO date inclusive
+   * @param {string} rangeEnd   — ISO date inclusive
+   * @returns {number} total stockout days within the range
+   */
+  function stockoutDaysInRange(stockoutWindows, rangeStart, rangeEnd) {
+    if (!Array.isArray(stockoutWindows) || stockoutWindows.length === 0) return 0;
+    const rsMs = toMs(rangeStart);
+    const reMs = toMs(rangeEnd);
+    if (rsMs == null || reMs == null) return 0;
+    const DAY = 86400000;
+    let total = 0;
+    for (const w of stockoutWindows) {
+      const ws = toMs(w.start);
+      const we = toMs(w.end);
+      if (ws == null || we == null) continue;
+      const lo = Math.max(ws, rsMs);
+      const hi = Math.min(we, reMs);
+      if (hi >= lo) total += Math.round((hi - lo) / DAY) + 1;
+    }
+    return total;
+  }
+
+  /**
    * Choose the P2 (recent-rate) comparison window.
    *
    * Default behaviour: anchor at runDate, step back p2Months.
@@ -453,6 +482,7 @@
     buildWindow,
     isTailInOngoingStockout,
     countStockoutsInRange,
+    stockoutDaysInRange,
     chooseP2Window,
     MVT_SIGN,
     DIRECTIONAL_MVTS,        // APP-E16 — exposed so callers can introspect / audit

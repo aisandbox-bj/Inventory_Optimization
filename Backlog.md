@@ -1,7 +1,12 @@
-# Calibre Tune v2.1.3-dev — Deferred items / next-version backlog
+# Calibre Tune v2.1.4-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-06-27 (after the YoY + Trend enhancements; where-used + open-procurement indicator planned)
+**Updated:** 2026-06-27 (version bump v2.1.3-dev → v2.1.4-dev; two SOH back-calc changes)
 **Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only.
+
+## Shipped + pushed 2026-06-27 (v2.1.4-dev — SOH back-calc) — pending operator validation
+- **APP-FIX-SNAPSHOT-ALIGN** — capture Inventory Master extract date at intake (`metadata.inventoryMasterDate`, pre-filled from filename), warn-and-proceed if it ≠ the last MB51 posting date (validation issue + live note + amber chart caption), and root-fix the back-calc to anchor `runDate` to the extract date. Verified on LV (gap 2 days → re-anchor + warning + caption).
+- **APP-E11b** — stockout-dominance now also triggers by DURATION: `stockoutDaysInRange` + new `p2StockoutDomFraction` (default 0.25) force GREY on a single long P2 stockout. Verified on LV: 1017248 (41%) + 1020332 (52%) flip BLUE→GREY; multi-window stay GREY; 0%-stockout materials unchanged.
+- **Version bump** — v2.1.3-dev copied to v2.1.4-dev (live folder + repo mirror); v2.1.3-dev frozen as rollback. Both new fields additive; no SCHEMA_VERSION bump.
 
 ## Shipped + pushed 2026-06-27 (APP-WU-01 where-used) — pending operator validation
 - **APP-WU-01** — "⊞ Where used" button on the Trend + Screener consumption-chart toolbar → inline panel: MB51 261/262 net work-order usage by Sort Field → Fleet model, plus a Cost-centre (CC) row (201/202), bucketed by year, with explicit Unmapped-WO / (unmapped-model) buckets and a grand total. New shared `where-used.js`; button gated on IW39; lazy compute. Verified (1000640 w/ synthesized IW39+Fleet → 639 total ties out). Snapshot: `_rollback/APP-WU-01-pre/`. Follow-ups: per-cost-centre breakdown (needs MB51 cost-centre alias); Trace placement if wanted.

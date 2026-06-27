@@ -6,7 +6,7 @@ Calibre Tune is one of three tools in the **Calibre Suite** (Tune · Trace · Co
 
 ## Status
 
-**v2.1.3-dev** — current dev tip; last released tag `v2.1.1` (roll back with a clone + `git checkout v2.1.1`). Canonical `SCHEMA_VERSION` = `1.0.0`. The current origin/main commit + full history + rollback steps live in [`record-of-change.html`](record-of-change.html) (newest entry = current tip); operator manual in [`user-manual.html`](user-manual.html).
+**v2.1.4-dev** — current dev tip; last released tag `v2.1.1` (roll back with a clone + `git checkout v2.1.1`). Canonical `SCHEMA_VERSION` = `1.0.0`. The current origin/main commit + full history + rollback steps live in [`record-of-change.html`](record-of-change.html) (newest entry = current tip); operator manual in [`user-manual.html`](user-manual.html).
 
 Highlights since v1.x:
 - **Stockout-aware drop detection** (APP-E1) — stock-on-hand back-calc from MB51, violet SOH line + red stockout wash bands on the chart, and a stockout-driven-vs-genuine-demand-drop classifier.
@@ -33,7 +33,7 @@ user-manual.html        Operator + engineering manual
 ## Shared engine (`shared/`)
 
 ```
-canonical-schema.js   Schema, FACTORY_DEFAULTS, PARAMETER_DESCRIPTIONS (SCHEMA_VERSION 1.0.0, APP_VERSION 2.1.3-dev)
+canonical-schema.js   Schema, FACTORY_DEFAULTS, PARAMETER_DESCRIPTIONS (SCHEMA_VERSION 1.0.0, APP_VERSION 2.1.4-dev)
 storage.js            localStorage + IndexedDB transparent fallback
 locale.js             Local-time display helpers + CAD currency
 parsers.js            XLSX/CSV parsers + column-alias map (MB51 / IW39 / Fleet / Inventory Master Fiori / PR History)
@@ -83,7 +83,7 @@ A material qualifies for analysis only if net consumption ≥ `threshold` (defau
 Serve over HTTP (CORS for LLM model-list fetch + multi-page features):
 
 ```bash
-cd "4 - Build Output/Inventory Optimization App/v2.1.3-dev"
+cd "4 - Build Output/Inventory Optimization App/v2.1.4-dev"
 python -m http.server 8000
 # open http://localhost:8000/intake/intake.html
 ```
@@ -92,7 +92,7 @@ CDN-loaded SheetJS + PapaParse parse XLSX/CSV; jsPDF + autoTable for the PDF Pac
 
 ## Repo / rollback
 
-Pushes to GitHub `aisandbox-bj/Inventory_Optimization` (this repo root mirrors `v2.1.3-dev/`, excluding `_rollback/`). Per-change rollback snapshots live in `_rollback/`; the last released tag is `v2.1.1`. Push protocol (clone-to-tmp, identity flags) is documented in `HANDOVER.md`.
+Pushes to GitHub `aisandbox-bj/Inventory_Optimization` (this repo root mirrors `v2.1.4-dev/`, excluding `_rollback/`). Per-change rollback snapshots live in `_rollback/`; the last released tag is `v2.1.1`. Push protocol (clone-to-tmp, identity flags) is documented in `HANDOVER.md`.
 
 ## Design references
 

@@ -13,7 +13,7 @@
   'use strict';
 
   const SCHEMA_VERSION = '1.0.0';
-  const APP_VERSION    = '2.1.3-dev';
+  const APP_VERSION    = '2.1.4-dev';
 
   /* ─── Factory defaults — seeded from the existing Python skill ──────────── */
   const FACTORY_DEFAULTS = Object.freeze({
@@ -35,7 +35,8 @@
     wrSoftMonths:           6,                      // Stock-runway ≥ this AND mt ∈ wrMrpTypes → PURPLE soft (Possible WR)
     wrHardMonths:           9,                      // Stock-runway ≥ this → PURPLE hard (Likely WR). Lowered from 12 in v2.0.1.
     wrMrpTypes:             ['PD'],                 // MRP types that trigger the WR check at all. PD-only is the safe default (V1 self-corrects via draw-down).
-    socBackCalcMonths:      6                       // APP-E1 (v2.1.3): SOH back-calc window in months, anchored at lastConsumptionDate. Must be ≥ p2Months. Diagnostic for stockout-driven vs genuine demand drops.
+    socBackCalcMonths:      6,                      // APP-E1 (v2.1.3): SOH back-calc window in months, anchored at lastConsumptionDate. Must be ≥ p2Months. Diagnostic for stockout-driven vs genuine demand drops.
+    p2StockoutDomFraction:  0.25                    // APP-E11b (v2.1.4): if a material is in stockout for ≥ this fraction of its P2 window, force GREY ("verify supply continuity") even if it's a single window. The existing >1-window trigger is kept. 0 = duration trigger off (count-only).
   });
 
   const SCOPE_MODES = ['fleet', 'manual', 'byClassification', 'byVendor', 'parameterSearch'];
@@ -76,6 +77,7 @@
     wrSoftMonths:           'Stock-runway threshold (months at P2 rate) above which a material on a watched MRP type is flagged as <b>Possible Working Redundant</b> (PURPLE soft). Default 6 mo.',
     wrHardMonths:           'Stock-runway threshold (months at P2 rate) above which a material on a watched MRP type is flagged as <b>Likely Working Redundant</b> (PURPLE hard — write-down review). Default 9 mo (lowered from 12 in v2.0.1).',
     wrMrpTypes:             'MRP types that trigger the Working Redundant check. Comma-separated. Default <code>PD</code> only; V1 is consumption-driven and self-corrects via draw-down. Add codes (e.g. <code>ZE</code>) if the site uses non-standard MRP types that should also be evaluated.',
+    p2StockoutDomFraction:  'How much of the recent (P2) window a material can be <b>out of stock</b> before its recent-consumption rate is considered unreliable. If stockout days reach this share of the P2 window, the material is forced <b>GREY</b> ("verify supply continuity before changing Min/Max") instead of getting a rate-based recommendation — because a material sitting empty can\'t show its true demand. Applies even to a <em>single</em> long stockout (the previous rule only caught two or more separate stockouts). Default <b>0.25</b> (a quarter of the window). Set to 0 to disable the duration trigger and keep only the multi-stockout rule.',
     socBackCalcMonths:      'How far back to reconstruct your <b>site stock-on-hand level</b> for each material — drives the new stock line + stockout bands on the material chart. The window starts on the date someone last consumed the material and extends backward this many months (then forward to today), so the chart shows the supply and consumption behaviour that led up to any stockout. For materials still consuming regularly the window naturally covers the most recent months; for materials whose consumption stopped, it stretches back to the run-up <em>before</em> they stopped — letting you see whether the drop was because <b>replenishment failed</b> (stockout-driven) or because <b>demand genuinely stopped</b> while stock was healthy. Default <b>6 months</b>. Must be at least as long as the P2 period above.'
   });
 

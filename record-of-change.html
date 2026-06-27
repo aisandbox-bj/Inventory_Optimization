@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="2.1.3-dev" />
+<meta name="app-version" content="2.1.4-dev" />
 <meta name="app-released" content="2026-05-16" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
@@ -379,6 +379,40 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- ───────── v2.1.4-dev — APP-FIX-SNAPSHOT-ALIGN + APP-E11b ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>Version bump → v2.1.4-dev · two scoped Stock-on-Hand back-calc changes</h4>
+      <ul>
+        <li><b>New version folder.</b> v2.1.3-dev was copied to <b>v2.1.4-dev</b> (now the live dev folder + repo mirror); v2.1.3-dev is frozen as the rollback snapshot. Version labels (nav, <code>&lt;meta app-version&gt;</code>, <code>APP_VERSION</code>) relabelled to 2.1.4-dev; historical RoC entries kept at their original versions.</li>
+
+        <li><b>APP-FIX-SNAPSHOT-ALIGN · Inventory Master ↔ MB51 same-day guard + root fix.</b>
+          <ul>
+            <li><b>Problem.</b> The SOH back-calc anchors today's Inventory Master stock and walks MB51 backward — assuming the snapshot is <em>as at</em> the MB51 cut-off. Nothing recorded or enforced that, and the run anchored to <code>new Date()</code>, so the purple line drifted whenever the analysis ran days after the extract or the two files had different cut-offs.</li>
+            <li><b>Capture.</b> Intake now has an <b>Inventory Master extract date</b> field (Step 1, under the Inventory Master drop), pre-filled from a date in the filename when detectable. Stored as <code>metadata.inventoryMasterDate</code> (additive; no SCHEMA_VERSION bump).</li>
+            <li><b>Compare (warn-and-proceed, strict same-day).</b> If the extract date ≠ the last MB51 posting date, a validation warning is raised (e.g. <em>"Inventory Master dated 2026-06-25, MB51 runs to 2026-06-27 — 2 days of movements after the stock snapshot…"</em>) plus a live inline note by the date field. Does not block the run.</li>
+            <li><b>Surface on the chart.</b> When misaligned, an amber caption sits under the Stock-on-Hand caveat on the Trend (and Screener) chart, so the risk travels with the purple line.</li>
+            <li><b>Root fix.</b> The pipeline now anchors <code>runDate</code> to <code>metadata.inventoryMasterDate</code> when present (both the back-calc anchor and the IW39 cutoff), falling back to the caller's date then today — so the curve stops drifting. Also exposes <code>result.snapshotAlign</code>.</li>
+            <li><b>Verified (LV case study).</b> Extract date 2026-06-25 vs MB51 cut-off 2026-06-27 → run re-anchored to 2026-06-25; <code>snapshotAlign</code> = {gapDays 2, aligned false}; intake validation warning + inline note + chart caption all render the gap. Files: <code>intake/intake.{js,html,css}</code>, <code>shared/pipeline.js</code>, <code>shared/material-detail.{js,css}</code>, <code>analysis/analysis.js</code>, <code>screener/screener.js</code>.</li>
+          </ul>
+        </li>
+
+        <li><b>APP-E11b · Stockout-dominance by DURATION, not just window count.</b>
+          <ul>
+            <li><b>Problem.</b> The GREY gate forced GREY only when <em>more than one</em> stockout window fell in P2. A <em>single long</em> stockout suppresses the P2 rate just as badly, so a material that sat empty got BLUE "lower Min/Max" — wrong advice.</li>
+            <li><b>Change.</b> New <code>InventoryBackCalc.stockoutDaysInRange()</code> (clips windows to P2, inclusive days, matching <code>window.days</code>). The flag is broadened: <code>stockoutDominated = (countStockoutsInRange &gt; 1) || (stockoutDays / p2Days ≥ p2StockoutDomFraction)</code> — the original count trigger is kept, so nothing previously GREY becomes non-GREY. New parameter <b><code>p2StockoutDomFraction</code></b> (default <b>0.25</b>, operator decision), in Settings + the schema (additive).</li>
+            <li><b>Verified (LV case study, default 0.25).</b> 1017248 (P2 stockout 41%, single window) and 1020332 (52%) flipped BLUE → <b>GREY</b>; 2002223 (3 windows) + 1003442 (2 windows) stayed GREY; the nine 0%-stockout materials (1014958, 1011148, 1001220/1/7, 1007195, 1003737, 1001215, 1003195) unchanged. Files: <code>shared/inventory-back-calc.js</code>, <code>shared/pipeline.js</code>, <code>shared/canonical-schema.js</code>, <code>settings/settings.js</code>.</li>
+          </ul>
+        </li>
+        <li><b>Guardrails honoured.</b> 107/101/561 exclusions + the 109 = site-receipt rule untouched; math stays deterministic (LLM annotates only); no SCHEMA_VERSION bump (both fields additive). Baseline snapshot = the frozen v2.1.3-dev folder.</li>
+      </ul>
+    </article>
 
     <!-- ───────── v2.1.3-dev — APP-WU-01 where-used ───────── -->
     <article class="roc-entry dev">

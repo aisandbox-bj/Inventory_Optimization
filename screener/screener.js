@@ -451,7 +451,9 @@
       // APP-OPI-01 — open-procurement lamps (PR/PO/In-Transit) from the chains.
       openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, entry.m.material) : null,
       // APP-WU-01 — "Where used" button (lazy compute on click). Only when IW39 is loaded.
-      whereUsedFn: (typeof WhereUsed !== 'undefined' && state.json.data && state.json.data.iw39 && state.json.data.iw39.length) ? () => WhereUsed.compute(state.json, entry.m.material) : null
+      whereUsedFn: (typeof WhereUsed !== 'undefined' && state.json.data && state.json.data.iw39 && state.json.data.iw39.length) ? () => WhereUsed.compute(state.json, entry.m.material) : null,
+      // APP-FIX-SNAPSHOT-ALIGN — chart caption when the stock snapshot ≠ MB51 cut-off.
+      snapshotAlign: state.result && state.result.snapshotAlign
     });
 
     // Trace per-material visual — graceful degradation when PR History absent.

@@ -513,7 +513,7 @@
 
   /* ─── Fleet bucketing + multi-model detection ───────────────────────────── */
   function bucketsFleet(json, mb51, iw39, fleet){
-    const runDate = new Date().toISOString().slice(0, 10);
+    const runDate = (json.metadata && json.metadata.inventoryMasterDate) || new Date().toISOString().slice(0, 10);  // APP-FIX-SNAPSHOT-ALIGN — anchor IW39 cutoff to extract date
     const threshold = json.parameters.threshold;
     const models = (json.scope.fleet && json.scope.fleet.models) || [];
 
@@ -701,7 +701,11 @@
   ═════════════════════════════════════════════════════════════════════════ */
   function runPipeline(json, options){
     options = options || {};
-    const runDate    = options.runDate || new Date().toISOString().slice(0, 10);
+    // APP-FIX-SNAPSHOT-ALIGN (v2.1.4) — anchor the analysis "as of" the Inventory
+    // Master extract date when present (the snapshot the SOH back-calc walks back
+    // from), so the purple line + P2 window stop drifting when the analysis runs
+    // days after the extract. Falls back to the caller's runDate, then today.
+    const runDate    = (json.metadata && json.metadata.inventoryMasterDate) || options.runDate || new Date().toISOString().slice(0, 10);
     const params     = json.parameters;
     const threshold  = params.threshold;
     const minMonths  = params.minMonths;
@@ -719,7 +723,7 @@
       masterIdx.set(String(r.material || '').trim(), r);
     }
 
-    // APP-E1 (v2.1.3-dev FIX-1) — Pre-group the FULL MB51 by material for the
+    // APP-E1 (v2.1.4-dev FIX-1) — Pre-group the FULL MB51 by material for the
     // stock-on-hand back-calc. Bucket-filtered transactions (`bucket.transactions`)
     // are restricted to consumption-related movement types {261,201,262,202} —
     // they DO NOT include goods receipts (109/101) or their reversals (102).
@@ -879,10 +883,19 @@
         // inside assess()), and rateDropFlag / rateRiseFlag / rateChange
         // are suppressed below.
         let p2StockoutCount = 0;
+        let p2StockoutDays  = 0;
+        let p2StockoutFrac  = 0;
         let stockoutDominated = false;
         if (typeof InventoryBackCalc !== 'undefined' && stockoutWindows.length) {
           p2StockoutCount = InventoryBackCalc.countStockoutsInRange(stockoutWindows, p2Start, p2End);
-          stockoutDominated = p2StockoutCount > 1;
+          // APP-E11b — dominance by DURATION as well as count. A single long stockout
+          // suppresses the P2 rate just as badly as several short ones, so a high
+          // stockout-day fraction also forces GREY (keeps the original count trigger).
+          p2StockoutDays  = InventoryBackCalc.stockoutDaysInRange(stockoutWindows, p2Start, p2End);
+          const p2Days    = Math.max(1, Math.round((Date.parse(p2End) - Date.parse(p2Start)) / 86400000) + 1);
+          p2StockoutFrac  = p2StockoutDays / p2Days;
+          const domFrac   = (params.p2StockoutDomFraction != null) ? params.p2StockoutDomFraction : 0.25;
+          stockoutDominated = (p2StockoutCount > 1) || (p2StockoutFrac >= domFrac);
         }
 
         const pattern = classifyPattern(tx, params);
@@ -1020,7 +1033,9 @@
           // APP-E11 (v2.1.3) — P2 anchor + stockout-dominated diagnostic
           p2AnchorMode,                            // 'runDate' | 'lastConsumption' — where P2 window was anchored for this material
           p2StockoutCount,                         // integer — number of distinct stockout windows overlapping the chosen P2 window
-          stockoutDominated,                       // boolean — true when p2StockoutCount > 1 (P2 too unreliable for verdict)
+          p2StockoutDays,                          // APP-E11b — total stockout days inside the chosen P2 window
+          p2StockoutFrac,                          // APP-E11b — p2StockoutDays / P2 days (0..1)
+          stockoutDominated,                       // boolean — GREY-forcing: >1 window OR stockout-day fraction ≥ p2StockoutDomFraction
           trafficLight: tl.code,
           action:       tl.action,
           // Multi-model is filled in post-bucketing (see below). Defaults to 'Single'.
@@ -1042,6 +1057,22 @@
       });
     }
 
+    // APP-FIX-SNAPSHOT-ALIGN — Inventory Master extract date vs last MB51 posting.
+    // Strict same-day check. If misaligned, every reconstructed SOH line is offset
+    // by the net of the gap movements; the flag drives the chart caption + the
+    // intake validation issue. No imDate (older assessments) → can't check → aligned.
+    const _imDate    = (json.metadata && json.metadata.inventoryMasterDate) || null;
+    const _mb51Dates = (json.data.mb51 || []).map(r => r.postingDate).filter(Boolean);
+    const _lastMb51  = _mb51Dates.length ? _mb51Dates.reduce((a, b) => (a > b ? a : b)) : null;
+    const _gapDays   = (_imDate && _lastMb51) ? Math.round((Date.parse(_lastMb51) - Date.parse(_imDate)) / 86400000) : null;
+    const snapshotAlign = {
+      hasImDate:    !!_imDate,
+      imDate:       _imDate,
+      lastMb51Date: _lastMb51,
+      gapDays:      _gapDays,
+      aligned:      (_imDate && _lastMb51) ? (_imDate === _lastMb51) : true
+    };
+
     return {
       runDate,
       parameters: params,
@@ -1049,6 +1080,7 @@
       p1Start, p1End,
       buckets: bucketResults,
       summary,
+      snapshotAlign,                               // APP-FIX-SNAPSHOT-ALIGN — extract-date vs MB51 cutoff
       invAdjAnalysis,                              // { sigmaN, mean, stddev, threshold, dayCount, candidates[] }
       invAdjConfirmedDates: confirmedInvAdjDates   // currently-applied exclusion list
     };
