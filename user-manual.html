@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Calibre Tune (Inventory Optimization App) · v2.1.3-dev
+     Calibre Tune (Inventory Optimization App) · v2.1.4-dev
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      RoC  : record-of-change.html
      This document is a deep-dive operator + engineering manual — not for
-     client distribution. Rebuilt 2026-06-25 to cover the full v2.1.3-dev
+     client distribution. Rebuilt 2026-06-25 to cover the full v2.1.4-dev
      surface: Inventory Master (Fiori) migration, PR History intake,
      multi-plant infrastructure, stock-on-hand back-calc + stockout-aware
      drop detection (APP-E1), MRP-type reclass recommendation (APP-E8),
@@ -207,7 +207,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v2.1.3-dev · Manual</a>
+    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v2.1.4-dev · Manual</a>
   </div>
   <div class="links">
     <a href="index.html">Dashboard</a>
@@ -224,7 +224,7 @@
 <main class="um-shell">
 
   <section class="um-hero">
-    <div class="pre">Operator + engineering manual · internal · v2.1.3-dev</div>
+    <div class="pre">Operator + engineering manual · internal · v2.1.4-dev</div>
     <h1>Calibre Tune · User Manual</h1>
     <div class="sub">
       A complete walkthrough of the tool — from drag-and-drop intake to the Excel / PDF deliverables, the
@@ -298,7 +298,7 @@
           <li><b>Assessment name</b> (mandatory ★) — type a name in the header. Saving and "Open in Trend" both refuse to proceed without one.</li>
           <li><b>Data-alignment gate</b> — on a fresh assessment a modal asks you to confirm all uploads describe the same plant / date-range / material universe / fleet scope before any upload is accepted (see §3).</li>
           <li><b>Batch mode (optional)</b> — if a previous intake already has the heavy data loaded, use <em>↻ Pick source + datasets…</em> to hydrate MB51 / IW39 / Fleet / Inventory Master without re-uploading.</li>
-          <li><b>Step 0 — Assessment type.</b> UNIT/FLOC, User list, or Parameter Search. Non-applicable upload zones grey out.</li>
+          <li><b>Step 0 — Assessment type.</b> UNIT/FLOC, User list, or Parameter Search. Each upload zone is then flagged <b>★ required</b>, <b>☆ optional</b> (loadable — unlocks a feature), or <b>— not used</b> for that type (APP-INT-NEEDS-01). Nothing is blocked: you can still load IW39 / Fleet Master on a User-list run to feed "Where used".</li>
           <li><b>Step 1 — Upload.</b> Drag SAP exports onto the highlighted drop zones. Each card shows row counts, a plant chip, and cross-file match percentages.</li>
           <li><b>Step 2 — Schema mapping.</b> Confirm auto-mapped headers; override any unmatched columns.</li>
           <li><b>Step 3 — Data Quality gate.</b> Green = continue, amber = warnings shown but continue, red = halt and fix.</li>
@@ -323,6 +323,15 @@
             <tr><td><b>Parameter search</b></td><td>MB51 · Inventory Master</td><td>Parameter Search panel (Step 4b)</td><td>Discovering a set by Inv-Master attributes (Mat Group, Manufacturer, Value, Qty, Inventory Type, MRP indicator) + MB51 movement.</td></tr>
           </tbody>
         </table>
+
+        <h3>Upload flags — required vs optional (APP-INT-NEEDS-01)</h3>
+        <p>Picking a type no longer greys-out and rejects the uploads it doesn't strictly need. Every drop zone stays loadable; the type just <b>flags</b> each one, with a legend above the grid:</p>
+        <ul>
+          <li><b>★ Required</b> — part of the type's required set; the Data-Quality gate (Step 3) waits for it. MB51 + Inventory Master are required for every type; IW39 + Fleet Master are required for UNIT/FLOC; Material → Vendor is required under By-Vendor scope.</li>
+          <li><b>☆ Optional</b> — loadable, and it unlocks a feature, with a short reason on the card. IW39 / Fleet Master "enable Where used" (and the model rollup); PR History "enables Calibre Trace + the open-procurement lamps"; Lead Times "enables lead-time-based Min/Max".</li>
+          <li><b>— Not used</b> — has no effect on that assessment type.</li>
+        </ul>
+        <p>Only the <b>required</b> set drives the DQ gate — an absent optional source never blocks the run. So a User-list assessment passes on MB51 + Inventory Master + (the list, pasted or uploaded) even with IW39 / Fleet Master loaded purely to light up "Where used".</p>
 
         <h3>Data-alignment acknowledgement gate (APP-E6)</h3>
         <p>On a fresh assessment, a <b>"Data alignment check"</b> modal fires before any upload is accepted. It is gated — only the <em>"I confirm the uploads are aligned"</em> button dismisses it. You confirm four things:</p>
@@ -576,7 +585,9 @@
           <li><b>WO annotations</b> — top HCE events get a marker + leader + label (WO / description / equipment / qty).</li>
           <li><b>Purple dashed verticals</b> — confirmed Inventory-Adjustment dates (§7d).</li>
           <li><b>LUMPY badge</b> — top-left when the material is LUMPY.</li>
+          <li><b>Per-event hover dots (APP-TREND-HOV)</b> — a faint dot sits on each line at every date that has movements. Hover one for a tooltip of that date's movements: <b>date · movement type (code + plain-English description) · quantity</b>. The amber line shows goods issues + reversals (261 / 201 / 262 / 202); the violet line shows every movement that actually moves the back-calc stock line, and adds the resulting <b>"Stock after"</b> level. Quantities are absolute — direction is in the description (GI = out, GR = in, reversal = back). Toggling a line off (the Consumption / Stock-on-Hand checkboxes) also removes its hover dots.</li>
         </ul>
+        <p>The violet-line hover reuses the back-calc's own movement classification, so it shows exactly what moved the line — this site's non-standard rules apply (the 3PL / 101 / 107 flow is excluded; 109 is the site receipt), so those excluded movements don't appear on the hover.</p>
         <p>The chart caveats explicitly that the SOH line is back-calculated, not pulled from SAP. If a material has only a single posting date, the cumulative series is padded with a synthetic zero-point so the step line still draws; the empty-state ("no consumption transactions found") only triggers on a true data-absence case.</p>
       </section>
 
@@ -595,7 +606,14 @@
         </ul>
         <p>Filters AND together with the TL pill filters and the toolbar search. Switching bucket clears column filters. Footer reads "X of Y materials shown".</p>
         <h3>Material detail panel</h3>
-        <p>Traffic-light pill + recommendation banner; the chart with its toolbar toggles + caveat; a stat grid (stock + value, P1/P2 rates, runway, last-consumption date, P1→P2 change, pattern, adjusted P2, total, plus stockout-window count and rate-drop cause from APP-E1); the <b>MRP Settings · Current vs Recommended</b> table (rows differing from current highlight yellow — the MRP-type row shows <code>PD → V1</code> with a reclass note when applicable); Inv-Adj table; HCE table; and the LLM review button + result.</p>
+        <p>Traffic-light pill + recommendation banner; the chart with its toolbar toggles + caveat; a stat grid (stock + value, P1/P2 rates, runway, last-consumption date, P1→P2 change, pattern, adjusted P2, total, stockout-window count and rate-drop cause from APP-E1, plus <b>Per event cons</b> — mean ± sample std of the units issued per consumptive event over the window, APP-TREND-PEC); the <b>MRP Settings · Current vs Recommended</b> table (rows differing from current highlight yellow — the MRP-type row shows <code>PD → V1</code> with a reclass note when applicable); Inv-Adj table; HCE table; and the LLM review button + result.</p>
+        <h3>Where used (APP-WU-01 / APP-WU-02)</h3>
+        <p>A <b>⊞ Where used</b> button on the chart toolbar (shown when IW39 is loaded) opens a pop-up modal answering <em>where did this material's consumption actually go?</em> Rows are <b>Fleet model → Sort Field</b> (work-order issues, from MB51 261/262 → IW39 order → Fleet Master), plus an <b>Unmapped WO</b> row (orders with no IW39 match), an <b>(unmapped model)</b> group (Sort Fields with no Fleet match), and a <b>Cost centre (CC)</b> row (201/202). Columns are each year + a total; everything is <b>net of reversals</b> and the grand total ties to the sum of destinations. Without Fleet Master it shows Sort Field only (no model rollup).</p>
+        <p>Click any <b>yearly number</b> to drill into the work orders behind it — a list of <b>Fleet · Unit · Date (yyyy-Mmm) · WO# · WO description · Qty</b> that sums to the number you clicked (the Cost-centre, Unmapped-WO and unmapped-model rows drill too). Close the modal with ✕, the backdrop, or Esc. The button and modal are identical on the Screener detail.</p>
+
+        <h3>Per-event chart hover</h3>
+        <p>Hover any point on the consumption (amber) or stock-on-hand (violet) chart line to read that date's movements — see §8 "Per-event hover dots". Pairs with the <b>Per event cons</b> stat above for a quick read of how big a typical draw is and what made it up.</p>
+
         <h3>Export actions</h3>
         <ul>
           <li><b>Export this bucket</b> · <b>Export ALL (combined)</b> · <b>Export all (separate files)</b> — Excel (§10).</li>
@@ -794,7 +812,7 @@
       <!-- ───────────── 15 · Versions ───────────── -->
       <section class="um-section" id="versions">
         <h2><span class="num">16</span>Versions &amp; rollback</h2>
-        <p>Full release history with per-version change notes + root causes: <a href="record-of-change.html">Record of Change</a>. The current dev tip is <b>v2.1.3-dev</b> (last released tag v2.1.1). Every release is tagged on the GitHub repo for rollback:</p>
+        <p>Full release history with per-version change notes + root causes: <a href="record-of-change.html">Record of Change</a>. The current dev tip is <b>v2.1.4-dev</b> (last released tag v2.1.1). Every release is tagged on the GitHub repo for rollback:</p>
         <pre>
 # Inspect any release (read-only)
 git clone https://github.com/aisandbox-bj/Inventory_Optimization.git /tmp/peek
