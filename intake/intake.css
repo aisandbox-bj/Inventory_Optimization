@@ -83,17 +83,41 @@
 .im-date-note.ok{ color:var(--status-ok,#34d399); }
 
 .drop-cond{ position:relative; }
-.drop-cond::after{
-  content:"OPTIONAL · CONDITIONAL";
-  position:absolute; top:12px; right:14px;
-  font-family:var(--font-mono);
-  font-size:9px;
-  letter-spacing:1.2px;
-  color:var(--text-muted);
-  background:rgba(31,206,216,0.08);
-  padding:2px 7px;
-  border-radius:var(--r-sm);
+
+/* ─── APP-INT-NEEDS-01 — per-assessment-type data-needs flag + legend ─────── */
+.upload-legend{
+  display:flex; flex-wrap:wrap; gap:8px 20px;
+  margin-bottom:14px; padding:9px 13px;
+  border:1px dashed var(--border-soft); border-radius:var(--r-sm);
+  background:rgba(255,255,255,.02);
+  font-family:var(--font-mono); font-size:10.5px; letter-spacing:.4px;
+  color:var(--text-sec);
 }
+.upload-legend .ul-item{ display:inline-flex; align-items:center; gap:6px; }
+.upload-legend .ul-mark{ font-size:13px; line-height:1; }
+.upload-legend .ul-mark.req{ color:var(--accent-green,#34d399); }
+.upload-legend .ul-mark.opt{ color:var(--accent,#1fced8); }
+.upload-legend .ul-mark.na { color:var(--text-muted); }
+
+.drop-flag{
+  display:block;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  margin-bottom:9px;
+  line-height:1.35;
+}
+.drop-flag:empty{ display:none; }
+.drop-flag .df-mark{ font-size:12px; margin-right:5px; }
+.drop-flag .df-lab{ font-weight:700; }
+.drop-flag .df-reason{
+  text-transform:none; letter-spacing:.3px;
+  color:var(--text-muted); margin-left:7px;
+}
+.drop-flag.req{ color:var(--accent-green,#34d399); }
+.drop-flag.opt{ color:var(--accent,#1fced8); }
+.drop-flag.na { color:var(--text-muted); }
 
 /* ─── Per-drop key-parameter stats (shown after parse) ──────────────────── */
 .drop-stats{
@@ -639,31 +663,9 @@
 }
 .atype-card .atype-needs b{ color:var(--accent); font-weight:500; }
 
-/* ─── Drop-zone disabled state (Assessment-type driven) ─────────────────── */
-.drop.atype-disabled{
-  opacity:.35;
-  pointer-events:none;
-  background:repeating-linear-gradient(45deg,
-    transparent 0,
-    transparent 6px,
-    rgba(155,171,168,0.05) 6px,
-    rgba(155,171,168,0.05) 12px);
-  position:relative;
-}
-.drop.atype-disabled::after{
-  content:"NOT REQUIRED FOR THIS ASSESSMENT TYPE";
-  position:absolute;
-  top:50%; left:50%;
-  transform:translate(-50%,-50%);
-  font-family:var(--font-mono);
-  font-size:9.5px;
-  letter-spacing:1.5px;
-  color:var(--text-muted);
-  background:var(--bg-panel);
-  padding:4px 10px;
-  border:1px solid var(--border-soft);
-  white-space:nowrap;
-}
+/* (APP-INT-NEEDS-01) Drop zones are no longer disabled by assessment type —
+   the old .drop.atype-disabled grey-out was replaced by the .drop-flag
+   required/optional/not-used flags above. */
 
 /* ─── Parameter Search filter panel ─────────────────────────────────────── */
 .ps-dim-bar{

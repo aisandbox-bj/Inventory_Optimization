@@ -141,7 +141,7 @@
       </div>
       <div class="step-body">
         <div class="panel-sub" style="margin-bottom:14px;">
-          The assessment type determines which inputs you need to upload and which scope strategies are available downstream. Pick one — non-applicable upload zones will grey out and reject drops.
+          The assessment type determines which inputs you need to upload and which scope strategies are available downstream. Pick one — each upload zone is then flagged <b>required</b>, <b>optional</b> (loadable, unlocks a feature), or <b>not used</b> for that type. Nothing is blocked: you can still load an optional file (e.g. IW39 / Fleet Master for "Where used") on any assessment.
         </div>
         <div class="atype-grid">
           <label class="atype-card" data-atype="unitFloc">
@@ -188,26 +188,35 @@
         <div class="step-status" id="step1Status">awaiting assessment type</div>
       </div>
       <div class="step-body">
+        <div class="upload-legend" id="uploadLegend">
+          <span class="ul-item"><span class="ul-mark req">★</span> Required</span>
+          <span class="ul-item"><span class="ul-mark opt">☆</span> Optional — loadable, unlocks a feature</span>
+          <span class="ul-item"><span class="ul-mark na">—</span> Not used for this assessment type</span>
+        </div>
         <div class="upload-grid">
           <label class="drop" data-source="mb51" data-needed-by="unitFloc,userList,paramSearch">
+            <span class="drop-flag" aria-hidden="true"></span>
             <div class="name">MB51</div>
             <div class="hint">Material movements · Posting Date, Order, Material, Movement Type, Quantity. ≥ 12 months.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
           <label class="drop" data-source="iw39" data-needed-by="unitFloc">
+            <span class="drop-flag" aria-hidden="true"></span>
             <div class="name">IW39</div>
             <div class="hint">Work orders · Order, Sort Field, Basic start date, Description.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
           <label class="drop" data-source="fleetMaster" data-needed-by="unitFloc">
+            <span class="drop-flag" aria-hidden="true"></span>
             <div class="name">Fleet Master</div>
             <div class="hint">Equipment list · Model number, Sort Field, Unit Type, Manufacturer, FunctLoc.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
           <label class="drop" data-source="inventoryMaster" data-needed-by="unitFloc,userList,paramSearch">
+            <span class="drop-flag" aria-hidden="true"></span>
             <div class="name">Inventory Master</div>
             <div class="hint">Stock &amp; MRP &amp; classification · Material, Qty OH, Value OH, Material Group, Manufacturer, MRP Ind, MRP Min/Max, Inventory Type.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>
@@ -220,6 +229,7 @@
             <span class="im-date-note" id="imDateNote">SAP run date of the stock snapshot — should match the MB51 cut-off date so the Stock-on-Hand line lines up.</span>
           </div>
           <label class="drop drop-cond" data-source="userList" data-needed-by="userList" data-conditional="userList">
+            <span class="drop-flag" aria-hidden="true"></span>
             <div class="name">User list <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional · materials or work orders)</em></div>
             <div class="hint">Convenience input for User-list assessment. One <b>material</b> or <b>work order</b> per row — or comma/tab-delimited. File can have a <code>Material</code> column OR an <code>Order</code> column (not both).<br><b>Or skip this and paste directly in Step 4 (Manual) below.</b></div>
             <span class="file">drag .xlsx / .csv / .txt here, or click</span>
@@ -227,6 +237,7 @@
           </label>
           <div class="hidden">
             <label class="drop drop-cond" data-source="materialVendor">
+              <span class="drop-flag" aria-hidden="true"></span>
               <div class="name">Material — Vendor mapping</div>
               <div class="hint">Required for By Vendor scope. Material → Vendor → Vendor Name.</div>
               <span class="file">drag .xlsx / .csv here, or click</span>
@@ -235,6 +246,7 @@
           </div>
           <div class="hidden">
             <label class="drop drop-cond" data-source="leadTimes">
+              <span class="drop-flag" aria-hidden="true"></span>
               <div class="name">Lead Times (optional)</div>
               <div class="hint">Per-material trigger-to-GR + safety stock. Enables leadTimeBased Min/Max.</div>
               <span class="file">drag .xlsx / .csv here, or click</span>
@@ -246,6 +258,7 @@
                always drop a PR History file when they want Trace to have
                real data. Required-for-Trace, optional-for-Tune. -->
           <label class="drop drop-cond" data-source="prHistory">
+            <span class="drop-flag" aria-hidden="true"></span>
             <div class="name">PR History <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional — required for Trace)</em></div>
             <div class="hint">Procurement requisition history. Adds <b>PR-to-PO chains</b>, cancellation flags, and creation-indicator (B = MRP-generated · R = manual) to the canonical JSON. Tune doesn't read it; Trace consumes this to render procurement-chain timelines.</div>
             <span class="file">drag .xlsx / .csv here, or click</span>

@@ -327,7 +327,6 @@
         <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
         ${opts.whereUsedFn ? '<span class="wu-spacer"></span><button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>' : ''}
       </div>
-      ${opts.whereUsedFn ? '<div class="wu-pop hidden" id="wuPop"></div>' : ''}
       <div class="chart-host" id="chartHost"></div>
       <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
       ${(opts.snapshotAlign && opts.snapshotAlign.hasImDate && !opts.snapshotAlign.aligned) ? `<div class="chart-caveat soh-misalign">⚠ Stock snapshot dated <b>${escapeHtml(opts.snapshotAlign.imDate)}</b> but MB51 runs to <b>${escapeHtml(opts.snapshotAlign.lastMb51Date)}</b> — ${Math.abs(opts.snapshotAlign.gapDays)} day${Math.abs(opts.snapshotAlign.gapDays) === 1 ? '' : 's'} of movements ${opts.snapshotAlign.gapDays > 0 ? 'after' : 'before'} the stock snapshot. The Stock-on-Hand line and stockout flags are offset by the net of those movements — re-extract both on the same SAP run date.</div>` : ''}
@@ -419,25 +418,12 @@
       }
     }
 
-    // APP-WU-01 — "Where used" button toggles an inline panel; computed lazily
-    // on first open (full MB51 scan) and cached.
+    // APP-WU-02 — "Where used" button opens a modal (was an inline panel in
+    // APP-WU-01). The table is computed lazily on open; clicking any year cell
+    // drills into the underlying work orders.
     const wuBtn = hostEl.querySelector('#wuBtn');
-    const wuPop = hostEl.querySelector('#wuPop');
-    if (wuBtn && wuPop && opts.whereUsedFn) {
-      wuBtn.addEventListener('click', () => {
-        if (wuPop.classList.contains('hidden')) {
-          if (!wuPop._rendered) {
-            try { wuPop.innerHTML = WhereUsed.renderPopup(opts.whereUsedFn(), mat.material); }
-            catch (e) { wuPop.innerHTML = '<div class="wu-empty">Where-used failed to compute.</div>'; console.warn('WhereUsed:', e); }
-            wuPop._rendered = true;
-          }
-          wuPop.classList.remove('hidden');
-          wuBtn.classList.add('active');
-        } else {
-          wuPop.classList.add('hidden');
-          wuBtn.classList.remove('active');
-        }
-      });
+    if (wuBtn && opts.whereUsedFn) {
+      wuBtn.addEventListener('click', () => openWhereUsedModal(mat, opts));
     }
 
     // APP-OPI-01 — open-procurement lamps: click a lamp to toggle the detail
@@ -454,6 +440,76 @@
         });
       }
     }
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-WU-02 — "Where used" modal. Self-contained overlay (appended to body,
+     removed on close) so it works identically on Trend + Screener without
+     depending on either page's modal CSS. Two views inside one dialog:
+     the destination×year table, and the per-cell work-order drill.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function openWhereUsedModal(mat, opts){
+    if (typeof WhereUsed === 'undefined' || !opts.whereUsedFn) return;
+
+    let data;
+    try { data = opts.whereUsedFn(); }
+    catch (e){ data = { available: false }; console.warn('WhereUsed:', e); }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'wu-modal';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.innerHTML = `
+      <div class="wu-modal-backdrop"></div>
+      <div class="wu-dialog">
+        <div class="wu-modal-head">
+          <div class="wu-modal-title">
+            <span class="lab">Where used</span>
+            <h3>${escapeHtml(mat.material)}${mat.description ? ' <span class="wu-h-desc">' + escapeHtml(mat.description) + '</span>' : ''}</h3>
+          </div>
+          <button type="button" class="wu-close" id="wuClose" title="Close (Esc)" aria-label="Close">✕</button>
+        </div>
+        <div class="wu-modal-body" id="wuBody"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const body = overlay.querySelector('#wuBody');
+
+    function showTable(){
+      body.innerHTML = WhereUsed.renderPopup(data, mat.material);
+      body.scrollTop = 0;
+      body.querySelectorAll('.wu-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+          const sel = { year: cell.dataset.wuYear };
+          if (cell.dataset.wuSf)     sel.sortField = cell.dataset.wuSf;
+          if (cell.dataset.wuModel)  sel.model     = cell.dataset.wuModel;
+          if (cell.dataset.wuBucket) sel.bucket    = cell.dataset.wuBucket;
+          showDrill(sel);
+        });
+      });
+    }
+    function showDrill(sel){
+      if (!opts.whereUsedDrillFn){ return; }
+      let dd;
+      try { dd = opts.whereUsedDrillFn(sel); }
+      catch (e){ console.warn('WhereUsed drill:', e); body.innerHTML = '<div class="wu-empty">Drill failed to compute.</div>'; return; }
+      body.innerHTML = WhereUsed.renderDrill(dd, mat.material);
+      body.scrollTop = 0;
+      const back = body.querySelector('#wuBack');
+      if (back) back.addEventListener('click', showTable);
+    }
+
+    function close(){
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e){ if (e.key === 'Escape') close(); }
+
+    overlay.querySelector('.wu-modal-backdrop').addEventListener('click', close);
+    overlay.querySelector('#wuClose').addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+
+    showTable();
   }
 
   window.MaterialDetail = { render, pillCls };

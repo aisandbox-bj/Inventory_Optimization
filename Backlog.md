@@ -3,6 +3,10 @@
 **Updated:** 2026-06-27 (version bump v2.1.3-dev → v2.1.4-dev; two SOH back-calc changes)
 **Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only.
 
+## Shipped 2026-06-27 (this session: Where-used + intake flags) — NOT yet pushed · pending operator validation
+- **APP-INT-NEEDS-01** — Intake now **flags** each upload (★ Required · ☆ Optional-enables-a-feature · — Not used) per assessment type instead of greying-out + rejecting drops. Any source is loadable on any type, so a User-list run can load IW39/Fleet to feed "Where used". DQ gate unchanged (still `ASSESSMENT_TYPE_REQUIRES`). Material→Vendor flips to ★ under By-Vendor scope. Verified in preview (userList / unitFloc / byVendor; inputs enabled; legend + colours). Snapshot: `_rollback/APP-INT-NEEDS-01-pre/`.
+- **APP-WU-02** — "Where used" inline panel → **centred modal** (✕ / backdrop / Esc) with **click-to-drill on year cells** into the underlying work orders (columns: Fleet · Unit · Date yyyy-Mmm · WO# · WO description · Qty; description from IW39). CC / Unmapped-WO / (unmapped-model) rows all drill (best-effort). Same net-of-reversal math, re-derived via new `WhereUsed.drill`; `compute` shape (and APP-WU-01 totals) unchanged. Verified two ways: engine harness 18/18 tie-out checks, and real app on 1001220 (grand 877 ties out; SF-100/2025 drill = 217; Trend + Screener; zero console errors). Snapshot: `_rollback/APP-WU-02-pre/`.
+
 ## Shipped + pushed 2026-06-27 (v2.1.4-dev — SOH back-calc) — pending operator validation
 - **APP-FIX-SNAPSHOT-ALIGN** — capture Inventory Master extract date at intake (`metadata.inventoryMasterDate`, pre-filled from filename), warn-and-proceed if it ≠ the last MB51 posting date (validation issue + live note + amber chart caption), and root-fix the back-calc to anchor `runDate` to the extract date. Verified on LV (gap 2 days → re-anchor + warning + caption).
 - **APP-E11b** — stockout-dominance now also triggers by DURATION: `stockoutDaysInRange` + new `p2StockoutDomFraction` (default 0.25) force GREY on a single long P2 stockout. Verified on LV: 1017248 (41%) + 1020332 (52%) flip BLUE→GREY; multi-window stay GREY; 0%-stockout materials unchanged.
@@ -30,7 +34,7 @@
 
 ## Next planned
 The 3-item build queue (APP-OPI-01 · APP-PD-SPREAD · APP-WU-01) is **all shipped** (see shipped sections above, all 2026-06-27, pending operator validation). Remaining follow-ups carried forward:
-- **APP-WU-01 follow-ups** — per-cost-centre breakdown (needs a new MB51 cost-centre parser alias, additive, no schema bump); "Where used" button on the Trace views if wanted.
+- **APP-WU-01/02 follow-ups** — the modal + per-cell drill shipped (APP-WU-02). Still open: per-cost-centre breakdown (needs a new MB51 cost-centre parser alias, additive, no schema bump); "Where used" button on the Trace views if wanted. Possible polish: the drill is "year cells only" per operator — revisit if row/total drill is later wanted; the user-manual §Where-used screenshots/wording aren't updated yet (manual touch deferred).
 - **APP-OPI-01 follow-ups** — add the 3-lamp indicator to the Trace banner (no classifier pill there); decide whether to hide the all-dim indicator when a material has procurement history but nothing currently open.
 - **APP-PD-SPREAD follow-up** — add the same +/- box spread to the YoY per-year "Total to site" chevrons.
 - Pre-existing queue: **APP-SCR-02** (consolidate detail-panel CSS into `shared/material-detail.css`), **APP-E21b** (lazy `stockOnHandSeries`), **APP-E20** (below-min trigger list), **APP-E23/E5**, **APP-N-01**, **APP-T-05/T-06** (`leadTimes.json` D21).
@@ -73,6 +77,7 @@ The 3-item build queue (APP-OPI-01 · APP-PD-SPREAD · APP-WU-01) is **all shipp
 ## Environment notes (machine-specific)
 - Auto-memory store (`~/.claude/projects/.../memory/`) and master plan (`~/.claude/plans/please-read-this-handover-iterative-falcon.md`) referenced by CLAUDE.md are **absent on this machine** — operator chose to leave them; orientation runs from CLAUDE.md + handovers + RoC instead.
 - No Node in this environment → product-dev Gate 1 (`node --check`) substituted by a clean browser load; Python 3.12 available for corruption/JSON checks.
+- **Preview tooling quirk (this session):** in the headless preview instance the viewport can be 0×0, `preview_screenshot` times out, and `preview_click` reports "success" but dispatches **no DOM click event** (verified: a capture-phase body listener saw 0 clicks). Verify interactions via `preview_eval` + DOM event dispatch / `element.click()` (geometry-independent, fires the same handlers) and read state back from the DOM. `preview_resize` to an explicit W×H (not the "desktop" preset, which reset to native 0×0) restores normal element geometry for measurements.
 
 ## Snapshots in this version folder
 ```

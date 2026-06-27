@@ -178,24 +178,14 @@
     state.assessmentType = type;
     $$('.atype-card').forEach(c => c.classList.toggle('selected', c.dataset.atype === type));
 
-    // Grey out drop zones not OFFERED by this type. A drop is "offered" if its
-    // data-needed-by attribute includes the current type. This is a superset
-    // of ASSESSMENT_TYPE_REQUIRES — e.g. userList file is offered (optional)
-    // for the userList type even though it's not required for DQ pass.
-    $$('.drop[data-source]').forEach(drop => {
-      const source = drop.dataset.source;
-      // Free-floating optional sources — NOT gated by assessment type:
-      //   materialVendor / leadTimes — managed by scope / method toggles.
-      //   prHistory (APP-FIX-T-03a, 2026-05-17) — Trace input; operator may
-      //     want to upload it regardless of which Tune assessment type they
-      //     picked, since Trace is a sibling tool on the same canonical JSON.
-      if (source === 'materialVendor' || source === 'leadTimes' || source === 'prHistory') return;
-      const neededBy = (drop.getAttribute('data-needed-by') || '').split(',').map(s => s.trim());
-      const offered = neededBy.includes(type);
-      drop.classList.toggle('atype-disabled', !offered);
-      const inp = drop.querySelector('input[type=file]');
-      if (inp) inp.disabled = !offered;
-    });
+    // APP-INT-NEEDS-01 — flag (don't blank) each upload for this assessment
+    // type. Nothing is disabled: every source stays loadable so an operator can
+    // feed the optional inputs (IW39 / Fleet Master → "Where used", PR History
+    // → Calibre Trace) on ANY run. The DQ gate still keys off the REQUIRED set
+    // only (currentRequiredSources → ASSESSMENT_TYPE_REQUIRES) — unchanged, so
+    // a User-list run still passes on MB51 + Inventory Master + (file or paste)
+    // without IW39/Fleet, while those now read "optional" instead of greyed.
+    refreshUploadFlags();
 
     // Scope tab visibility — restrict to scope modes valid for this assessment type
     const allowedScopes = new Set(CanonicalSchema.ASSESSMENT_TYPE_SCOPE[type] || []);
@@ -236,6 +226,57 @@
     return { unitFloc:'UNIT/FLOC', userList:'User list', paramSearch:'Parameter search' }[t] || t;
   }
 
+  /* APP-INT-NEEDS-01 — what each upload "means" for the selected assessment
+     type + scope: required (drives the DQ gate), optional (loadable, unlocks a
+     feature), or not-used. Purely informational — it never blocks a drop and
+     never changes the DQ required set (that stays ASSESSMENT_TYPE_REQUIRES). */
+  function uploadFlagFor(source, type, scopeMode){
+    // MB51 + Inventory Master are required for every assessment type.
+    if (source === 'mb51' || source === 'inventoryMaster') return { level:'req' };
+    switch (source){
+      case 'iw39':
+        return type === 'unitFloc'
+          ? { level:'req' }
+          : { level:'opt', reason:'enables "Where used"' };
+      case 'fleetMaster':
+        return type === 'unitFloc'
+          ? { level:'req' }
+          : { level:'opt', reason:'adds the model rollup to "Where used"' };
+      case 'userList':
+        // Not in the DQ required set — operator can paste the list in Step 4
+        // instead — so it's an optional-but-expected input for a User-list run.
+        return type === 'userList'
+          ? { level:'opt', reason:'provide here, or paste in Step 4' }
+          : { level:'na' };
+      case 'prHistory':
+        return { level:'opt', reason:'enables Calibre Trace + the open-procurement lamps' };
+      case 'materialVendor':
+        return scopeMode === 'byVendor'
+          ? { level:'req', reason:'required for By-Vendor scope' }
+          : { level:'na' };
+      case 'leadTimes':
+        return { level:'opt', reason:'enables lead-time-based Min/Max' };
+      default:
+        return { level:'na' };
+    }
+  }
+
+  function refreshUploadFlags(){
+    const type  = state.assessmentType;
+    const scope = state.scope && state.scope.mode;
+    const MARK = { req:'★', opt:'☆', na:'—' };
+    const LAB  = { req:'Required', opt:'Optional', na:'Not used' };
+    $$('.drop[data-source]').forEach(drop => {
+      const flagEl = drop.querySelector('.drop-flag');
+      if (!flagEl) return;
+      if (!type){ flagEl.textContent = ''; flagEl.className = 'drop-flag'; return; }
+      const f = uploadFlagFor(drop.dataset.source, type, scope);
+      flagEl.className = 'drop-flag ' + f.level;
+      flagEl.innerHTML = `<span class="df-mark">${MARK[f.level]}</span><span class="df-lab">${LAB[f.level]}</span>`
+        + (f.reason ? `<span class="df-reason">${f.reason}</span>` : '');
+    });
+  }
+
   /* Helper to swap the active scope tab + pane programmatically */
   function switchScopeMode(mode){
     state.scope.mode = mode;
@@ -243,6 +284,7 @@
     $$('.scope-pane').forEach(p => p.classList.toggle('hidden', p.dataset.mode !== mode));
     const mv = document.querySelector('.drop[data-source="materialVendor"]');
     if (mv) mv.parentElement.classList.toggle('hidden', mode !== 'byVendor');
+    refreshUploadFlags();   // APP-INT-NEEDS-01 — Material→Vendor flips to required under By-Vendor scope
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -254,13 +296,11 @@
       const drop = document.querySelector(`.drop[data-source="${source}"]`);
       if (!drop) return;
       const input = drop.querySelector('input[type="file"]');
-      drop.addEventListener('dragover',  (e) => {
-        if (drop.classList.contains('atype-disabled')) return;
-        e.preventDefault(); drop.classList.add('dragover');
-      });
+      // APP-INT-NEEDS-01 — drops are never disabled now; any source is loadable
+      // on any assessment type (the type only changes its required/optional flag).
+      drop.addEventListener('dragover',  (e) => { e.preventDefault(); drop.classList.add('dragover'); });
       drop.addEventListener('dragleave', ()  => drop.classList.remove('dragover'));
       drop.addEventListener('drop',      (e) => {
-        if (drop.classList.contains('atype-disabled')) { e.preventDefault(); return; }
         e.preventDefault();
         drop.classList.remove('dragover');
         if (e.dataTransfer.files.length) handleFile(source, e.dataTransfer.files[0]);
@@ -910,6 +950,7 @@
         $$('.scope-pane').forEach(p => p.classList.toggle('hidden', p.dataset.mode !== mode));
         // show/hide conditional drops
         document.querySelector('.drop[data-source="materialVendor"]').parentElement.classList.toggle('hidden', mode !== 'byVendor');
+        refreshUploadFlags();   // APP-INT-NEEDS-01 — Material→Vendor flips to required under By-Vendor scope
         renderScopePreview();
         renderJsonPreview();
       });

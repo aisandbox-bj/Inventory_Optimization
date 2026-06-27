@@ -380,6 +380,44 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-WU-02 where-used modal + drill ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-WU-02 · "Where used" — pop-up modal + click-to-drill into the work orders</h4>
+      <ul>
+        <li><b>What changed.</b> The "⊞ Where used" view (APP-WU-01) was an inline panel that expanded under the chart toolbar — cramped on Trend, a little better on the Screener. It now opens as a <b>clean centred modal</b> (header = material number + description; the Model → Sort Field × year table with the grand-total row and the net-of-reversal caveat). Closes via <b>✕ / backdrop / Esc</b>.</li>
+        <li><b>Click-to-drill (operator decision: year cells only).</b> Every <b>destination × year</b> number is clickable; the grand-total row and the per-row Total column are not. Clicking a cell swaps the modal to the underlying <b>work orders</b> for that destination + year, with a "‹ Back to where-used" link. Drill columns (operator-specified): <b>Fleet · Unit · Date (yyyy-Mmm) · WO# · WO description · Qty</b>. Date is the MB51 posting month (range if the order spans months); description is joined from IW39.</li>
+        <li><b>Same net-of-reversal math, re-derived.</b> The drill re-derives from MB51 (it does <em>not</em> read the table's compute output), grouping by work order — or, for the cost-centre bucket, by posting month — keeping the identical 261−262 / 201−202 net so the rows <b>sum to the number clicked</b>. <code>WhereUsed.compute</code>'s return shape is unchanged, so the APP-WU-01 totals are untouched. New <code>WhereUsed.drill</code> + <code>renderDrill</code>; callers pass a lazy <code>whereUsedDrillFn</code>.</li>
+        <li><b>Special rows drill too (operator decision: all three, best-effort).</b> <b>Cost centre (CC)</b> → the 201/202 movements grouped by month (Fleet/Unit/WO# show "—"); <b>Unmapped WO</b> → the orders with no IW39 match ("(no IW39 match)" in the description); <b>(unmapped model)</b> → its Sort-Field work orders as normal. Nothing dead-ends.</li>
+        <li><b>Credibility note.</b> A drilled CC month can show a <b>negative</b> net (e.g. 1001220 CC 2025: +27 in Apr, <b>−18</b> in May → net 9). That is a real net-of-reversal value (a month whose 202 reversals exceeded its 201 issues), shown as-is — not dimmed or floored. Nothing was suppressed in this change.</li>
+        <li><b>Verified two ways.</b> (1) <b>Engine harness</b> (<code>_patch_tmp/wu-test.html</code>, synthetic data, grand = 37): 18/18 tie-out checks pass — grand = sum of destinations, every drill cell (Sort Field / model-aggregate / Unmapped / CC) equals its table cell, net-of-reversal confirmed (SF-100 2025 = 6 = 8 issues − 2 reversal). (2) <b>Real app</b> (LV case study + synthesized IW39/Fleet) on material <b>1001220</b>: modal table 793F/SF-100 425 · (unmapped model)/SF-200 425 · Unmapped WO 18 · CC 9 · <b>grand 877</b> (ties out); SF-100/2025 drill = 187 work orders summing to <b>217</b> = the clicked cell; CC + Unmapped drills tie out; ✕/backdrop/Esc all close; dialog fits and scrolls at 1024-px laptop width; Trend + Screener identical (shared module); zero console errors.</li>
+        <li><b>Files.</b> <code>shared/where-used.js</code> (clickable cells + <code>drill</code> + <code>renderDrill</code>), <code>shared/material-detail.js</code> (inline panel → <code>openWhereUsedModal</code>; removed <code>#wuPop</code>), <code>shared/material-detail.css</code> (modal grammar + drill/cell styles; removed dead <code>.wu-pop</code>), <code>analysis/analysis.js</code> + <code>screener/screener.js</code> (pass <code>whereUsedDrillFn</code>). No SCHEMA_VERSION change. Snapshot: <code>_rollback/APP-WU-02-pre/</code>.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.4-dev — APP-INT-NEEDS-01 intake data-needs flags ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-INT-NEEDS-01 · Intake — flag (don't blank) the uploads each assessment type can use</h4>
+      <ul>
+        <li><b>Problem.</b> Picking an assessment type greyed-out and <b>rejected drops</b> on the upload zones it didn't strictly need. On a <b>User-list</b> run that disabled <b>IW39</b> and <b>Fleet Master</b> — which are exactly what "Where used" needs — so the operator couldn't load the data that lights the feature up.</li>
+        <li><b>Fix — separate "required" from "loadable".</b> No source is disabled any more; <b>any file is loadable on any assessment type</b>. Per selected type each zone is flagged <b>★ Required</b>, <b>☆ Optional</b> (loadable — with a short "enables…" reason), or <b>— Not used</b>, with a small legend (operator chose stars + legend). The DQ gate is unchanged — it still keys only off <code>ASSESSMENT_TYPE_REQUIRES</code> via <code>currentRequiredSources()</code>.</li>
+        <li><b>The flag map.</b> MB51 + Inventory Master = ★ required everywhere. IW39 = ★ required for UNIT/FLOC, else ☆ "enables Where used". Fleet Master = ★ required for UNIT/FLOC, else ☆ "adds the model rollup to Where used". User list = ☆ "provide here, or paste in Step 4" (User-list run) else —. PR History = ☆ "enables Calibre Trace + the open-procurement lamps". Lead Times = ☆ "enables lead-time-based Min/Max". Material→Vendor = ★ required only under By-Vendor scope (refreshed when the scope tab changes), else —.</li>
+        <li><b>Verified (live preview).</b> User-list: IW39/Fleet show ☆ Optional and their file inputs are <b>enabled</b> (not greyed); DQ still reads "awaiting mb51 · inventoryMaster" (passes without IW39/Fleet). UNIT/FLOC: mb51/iw39/fleet/invMaster all ★; DQ reads all four. By-Vendor scope: Material→Vendor flips to ★ Required and back to —/hidden under fleet. Required = green, Optional = cyan, with reasons; legend renders; zero console errors.</li>
+        <li><b>Files.</b> <code>intake/intake.html</code> (per-drop <code>.drop-flag</code> spans + legend; intro copy), <code>intake/intake.js</code> (<code>uploadFlagFor</code> + <code>refreshUploadFlags</code>; removed the <code>.atype-disabled</code> grey-out and the now-dead drag/drop guards; refresh on type + scope change), <code>intake/intake.css</code> (flag + legend styles; removed the orphaned <code>.drop.atype-disabled</code> + static <code>.drop-cond::after</code> rules). No SCHEMA_VERSION change. Snapshot: <code>_rollback/APP-INT-NEEDS-01-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-FIX-SNAPSHOT-ALIGN + APP-E11b ───────── -->
     <article class="roc-entry dev">
       <div class="head">
