@@ -74,6 +74,21 @@
     const stockoutSummary = _swCount === 0
       ? 'no stockouts in back-calc window'
       : `${_swCount} stockout window${_swCount === 1 ? '' : 's'} totalling ${_swDays} day${_swDays === 1 ? '' : 's'}`;
+    // ── Batched-consumption signals (for the enhanced "v" prompt) ───────────
+    // Per-event draw distribution + whether the recommended Min covers a single
+    // typical batch (median draw). Pure pipeline-derived — no client identifiers.
+    const _pe = material.perEventStats || {};
+    const _batch = (_pe.median != null) ? _pe.median : null;
+    const perEventMedian = (_batch != null) ? _batch : '—';
+    const perEventMean   = (_pe.mean   != null) ? _pe.mean : '—';
+    const perEventStd    = (_pe.std    != null) ? _pe.std  : '—';
+    const perEventN      = (_pe.n      != null) ? _pe.n    : 0;
+    let batchCoverage;
+    if (material.recMin == null)      batchCoverage = 'n/a (no recommended Min)';
+    else if (_batch == null || _batch <= 0) batchCoverage = 'n/a (no consumption events)';
+    else if (material.recMin <  _batch)       batchCoverage = `BELOW a single batch — a single ${_batch}-unit draw cannot be filled from Min ${material.recMin}`;
+    else if (material.recMin <  _batch * 1.2) batchCoverage = `THIN — Min ${material.recMin} covers <1.2× the ${_batch}-unit typical batch`;
+    else                                       batchCoverage = `OK — Min ${material.recMin} covers the ${_batch}-unit typical batch`;
     return {
       customerContext: (customerContext == null || customerContext === '') ? '(none)' : String(customerContext),
       material:     material.material,
@@ -113,7 +128,9 @@
       // APP-E11 tokens — P2 anchor + stockout-dominated state
       p2AnchorMode:        material.p2AnchorMode || 'runDate',
       stockoutDominated:   !!material.stockoutDominated,
-      p2StockoutCount:     (material.p2StockoutCount != null) ? material.p2StockoutCount : 0
+      p2StockoutCount:     (material.p2StockoutCount != null) ? material.p2StockoutCount : 0,
+      // Batched-consumption tokens (enhanced "v" prompt)
+      perEventMedian, perEventMean, perEventStd, perEventN, batchCoverage
     };
   }
 
@@ -231,7 +248,7 @@
     if (!cfg.model)  throw new Error(`No model selected for ${provider} — open Settings and Fetch + pick a model.`);
 
     const png    = await AppChart.toPng(svgEl, 2);
-    const prompt = await buildPrompt(material, bucketName, parameters);
+    const prompt = await buildPrompt(material, bucketName, parameters, opts.template);   // opts.template = enhanced "v" prompt when present
     const startedAt = performance.now();
     let raw;
     if (provider === 'anthropic')   raw = await callAnthropic(cfg.apiKey, cfg.model, prompt, png);
@@ -239,7 +256,7 @@
     else throw new Error(`Unknown provider: ${provider}`);
     const latencyMs = Math.round(performance.now() - startedAt);
 
-    return Object.assign({ provider, model: cfg.model, latencyMs, source:'single' }, parseJsonResponse(raw));
+    return Object.assign({ provider, model: cfg.model, latencyMs, source:'single', variant: opts.variant || 'base' }, parseJsonResponse(raw));
   }
 
   /* ─── Public: review one material from an arbitrary PNG (mass-loop entry) ─ */

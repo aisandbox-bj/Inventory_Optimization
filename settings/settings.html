@@ -152,8 +152,8 @@
     <!-- ─── LLM PROMPT TEMPLATE ─── -->
     <section class="set-section">
       <div class="set-head">
-        <h3>04 · LLM prompt template</h3>
-        <div class="desc">Shared between Single review (per-graph) and Mass LLM review. Placeholders like <code>{material}</code> and <code>{customerContext}</code> are resolved at call-time with per-material data. Edit freely — your override is stored locally only.</div>
+        <h3>04 · LLM prompt template (base)</h3>
+        <div class="desc">Used by the <b>"LLM review (base)"</b> button and Mass LLM review. Placeholders like <code>{material}</code> and <code>{customerContext}</code> are resolved at call-time with per-material data. Edit freely — your override is stored locally only.</div>
       </div>
       <div class="set-body">
         <textarea id="promptTemplate" class="prompt-textarea" spellcheck="false" wrap="off"></textarea>
@@ -166,6 +166,28 @@
             <span class="hash-line">hash: <code id="promptHash">—</code></span>
             <button id="promptReset" class="ghost">↺ Reset to factory</button>
             <button id="promptSave"  class="primary">Save template</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- APP-LLM-V — enhanced variant prompt, used by the "(v)" review button -->
+    <section class="set-section">
+      <div class="set-head">
+        <h3>04b · LLM prompt template (v · experimental)</h3>
+        <div class="desc">Used by the <b>"LLM review (v)"</b> button only (single review, per graph). The factory default reframes the ask to <b>"why now / what to check"</b> and adds the batched-consumption signals (<code>{perEventMedian}</code>, <code>{batchCoverage}</code>). Tune it here and compare against (base) on the same chart.</div>
+      </div>
+      <div class="set-body">
+        <textarea id="promptTemplateV" class="prompt-textarea" spellcheck="false" wrap="off"></textarea>
+        <div class="prompt-meta">
+          <div class="placeholders">
+            <span class="lab">Available placeholders</span>
+            <span class="ph-list" id="promptPlaceholdersV"></span>
+          </div>
+          <div class="prompt-actions">
+            <span class="hash-line">hash: <code id="promptHashV">—</code></span>
+            <button id="promptResetV" class="ghost">↺ Reset to factory</button>
+            <button id="promptSaveV"  class="primary">Save (v) template</button>
           </div>
         </div>
       </div>

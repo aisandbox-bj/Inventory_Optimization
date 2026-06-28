@@ -117,33 +117,59 @@
       return `${head}<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="20">no consumption events</text></svg>`;
     }
     const st  = describe(qtys);
-    const max = st.max;
-    const bins = Math.max(1, Math.min(20, Math.ceil(Math.sqrt(qtys.length))));
-    const binW = (max || 1) / bins;
+    // APP-FIX-HISTO-BUCKETS — nice round buckets (5–20 of them) instead of
+    // ceil(sqrt(n)), which collapsed to a single bucket on few/clustered events.
+    // Edges snap to 1/2/5×10^k, bars get gaps, and each edge is labelled.
+    const dataMin = st.min, dataMax = st.max;
+    function niceStep(x){
+      if (!(x > 0)) return 1;
+      const exp = Math.floor(Math.log10(x)), base = Math.pow(10, exp), f = x / base;
+      const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
+      return nf * base;
+    }
+    const MINB = 5, MAXB = 20, TARGET = 10;
+    let width = Math.max(1, niceStep((dataMax - dataMin) / TARGET || 1));   // ~TARGET buckets over the data range; integer-floored
+    // start at 0 when the min sits inside the first bucket of zero; else snap a nice floor below the min (zoom to a tight cluster)
+    const loFor = w => (dataMin >= 0 && dataMin < w) ? 0 : Math.floor(dataMin / w) * w;
+    let lo = loFor(width);
+    let bins = Math.max(1, Math.ceil((dataMax - lo + 1e-9) / width));
+    while (bins > MAXB) { width = niceStep(width * 1.5); lo = loFor(width); bins = Math.max(1, Math.ceil((dataMax - lo + 1e-9) / width)); }
+    bins = Math.max(MINB, bins);                 // never fewer than 5 buckets
+    const hi = lo + bins * width;
     const counts = new Array(bins).fill(0);
-    for (const q of qtys){ let bi = Math.floor(q / binW); if (bi >= bins) bi = bins - 1; if (bi < 0) bi = 0; counts[bi]++; }
+    for (const q of qtys){ let bi = Math.floor((q - lo) / width); if (bi >= bins) bi = bins - 1; if (bi < 0) bi = 0; counts[bi]++; }
     const cmax = Math.max(...counts, 1);
     const col  = opts.color || '#5DD9E2';
-    const bwpx = iw / bins;
-    const mx   = v => M.left + (Math.min(v, max) / (max || 1)) * iw;
+    const xAt  = v => M.left + ((v - lo) / (hi - lo)) * iw;       // value → px
+    const clampX = v => Math.max(M.left, Math.min(M.left + iw, xAt(v)));
+    const fmtEdge = v => (Math.round(v * 100) / 100).toLocaleString();
+    const GAP = 0.16;                                            // gap each side of a bar (operator: "spaces in between")
     let bars = '';
     for (let i = 0; i < bins; i++){
-      const h = (counts[i] / cmax) * ih;
-      const x = M.left + (i / bins) * iw + 1.5, y = M.top + ih - h, w = Math.max(2, bwpx - 3);
-      bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${col}" fill-opacity="0.6" stroke="${col}" stroke-opacity="0.9"/>`;
-      if (counts[i] > 0) bars += `<text x="${(x + w / 2).toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" fill="#D6DFDE" font-family="monospace" font-size="${FS.bar}">${counts[i]}</text>`;
+      const x0 = xAt(lo + i * width), x1 = xAt(lo + (i + 1) * width);
+      const bw = x1 - x0, pad = bw * GAP;
+      const h = (counts[i] / cmax) * ih, y = M.top + ih - h;
+      bars += `<rect x="${(x0 + pad).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 2 * pad).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${col}" fill-opacity="0.62" stroke="${col}" stroke-opacity="0.95"/>`;
+      if (counts[i] > 0) bars += `<text x="${((x0 + x1) / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle" fill="#D6DFDE" font-family="monospace" font-size="${FS.bar}">${counts[i]}</text>`;
     }
-    const axis = `<line x1="${M.left}" y1="${M.top + ih}" x2="${M.left + iw}" y2="${M.top + ih}" stroke="#9BABA8" stroke-width="1.4"/>`;
-    const xlab = `<text x="${M.left}" y="${M.top + ih + 22}" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}">0</text>`
-               + `<text x="${M.left + iw}" y="${M.top + ih + 22}" text-anchor="end" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}">${Math.round(max).toLocaleString()}</text>`
-               + `<text x="${M.left + iw / 2}" y="${H - 8}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}" letter-spacing="1.5">UNITS PER EVENT</text>`;
+    const axisY = M.top + ih;
+    const axis = `<line x1="${M.left}" y1="${axisY}" x2="${M.left + iw}" y2="${axisY}" stroke="#9BABA8" stroke-width="1.4"/>`;
+    const everyN = Math.ceil((bins + 1) / 11);                   // ≤ ~11 edge labels so they don't collide
+    let edges = '';
+    for (let i = 0; i <= bins; i++){
+      if (i % everyN !== 0 && i !== bins) continue;
+      const xe = xAt(lo + i * width);
+      edges += `<line x1="${xe.toFixed(1)}" y1="${axisY}" x2="${xe.toFixed(1)}" y2="${(axisY + 5).toFixed(1)}" stroke="#9BABA8" stroke-width="1"/>`
+             + `<text x="${xe.toFixed(1)}" y="${(axisY + 22).toFixed(1)}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}">${fmtEdge(lo + i * width)}</text>`;
+    }
+    const xtitle = `<text x="${M.left + iw / 2}" y="${H - 6}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}" letter-spacing="1.5">UNITS PER EVENT (bucket ${fmtEdge(width)})</text>`;
     const ylab = `<text x="10" y="${M.top + 12}" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}">${cmax}</text>`
                + `<text transform="rotate(-90 18 ${M.top + ih / 2})" x="18" y="${M.top + ih / 2}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}" letter-spacing="1.5">EVENTS</text>`;
-    const meanLine = `<line x1="${mx(st.mean).toFixed(1)}" y1="${M.top}" x2="${mx(st.mean).toFixed(1)}" y2="${M.top + ih}" stroke="#FBBF24" stroke-width="2.4"/>`
-                   + `<text x="${(mx(st.mean) + 5).toFixed(1)}" y="${M.top + 16}" fill="#FBBF24" font-family="monospace" font-size="${FS.marker}">mean ${Math.round(st.mean * 10) / 10}</text>`;
-    const medLine  = `<line x1="${mx(st.median).toFixed(1)}" y1="${M.top}" x2="${mx(st.median).toFixed(1)}" y2="${M.top + ih}" stroke="#7CDDB2" stroke-width="2.4" stroke-dasharray="4 3"/>`
-                   + `<text x="${(mx(st.median) + 5).toFixed(1)}" y="${M.top + 38}" fill="#7CDDB2" font-family="monospace" font-size="${FS.marker}">med ${Math.round(st.median * 10) / 10}</text>`;
-    return `${head}${axis}${bars}${meanLine}${medLine}${xlab}${ylab}</svg>`;
+    const meanLine = `<line x1="${clampX(st.mean).toFixed(1)}" y1="${M.top}" x2="${clampX(st.mean).toFixed(1)}" y2="${axisY}" stroke="#FBBF24" stroke-width="2.4"/>`
+                   + `<text x="${(clampX(st.mean) + 5).toFixed(1)}" y="${M.top + 16}" fill="#FBBF24" font-family="monospace" font-size="${FS.marker}">mean ${Math.round(st.mean * 10) / 10}</text>`;
+    const medLine  = `<line x1="${clampX(st.median).toFixed(1)}" y1="${M.top}" x2="${clampX(st.median).toFixed(1)}" y2="${axisY}" stroke="#7CDDB2" stroke-width="2.4" stroke-dasharray="4 3"/>`
+                   + `<text x="${(clampX(st.median) + 5).toFixed(1)}" y="${M.top + 38}" fill="#7CDDB2" font-family="monospace" font-size="${FS.marker}">med ${Math.round(st.median * 10) / 10}</text>`;
+    return `${head}${axis}${edges}${bars}${meanLine}${medLine}${xtitle}${ylab}</svg>`;
   }
 
   global.ConsumptionProfile = { eventQtys, woQtys, describe, calcANumbers, calcB, renderHistogram };

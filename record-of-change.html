@@ -380,6 +380,30 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-LLM-V + APP-FIX-HISTO-BUCKETS ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-28</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-LLM-V · Second LLM review button — "(base)" vs "(v)" enhanced prompt, with the analysis surfaced</h4>
+      <ul>
+        <li><b>Why.</b> The single LLM review gave "grade-5 obvious" feedback. Operator wants to A/B a richer prompt without losing the current one — so the detail panel now has <b>two</b> review buttons: <b>"LLM review (base)"</b> (current factory prompt) and <b>"LLM review (v)"</b> (enhanced). Run either on the same chart and compare; the result panel is tagged <code>· base</code> / <code>· v</code>.</li>
+        <li><b>What the "(v)" prompt adds.</b> It reframes the ask from "is the recommendation right" to <b>"WHY does this need attention TODAY + WHAT to check"</b>, and surfaces analysis the base prompt never had: the <b>per-event draw distribution</b> (median / mean ± std) and a <b>batch-coverage</b> line ("rec Min vs a single typical batch — BELOW / THIN / OK"), plus a stockout-distorted-rate reminder and new signals <code>batchedMinShort</code> / <code>replenishmentGap</code>. It forces the model to carry a number through to a consequence.</li>
+        <li><b>New data plumbed.</b> <code>perEventStats</code> now also carries the <b>median</b> (the typical batch); <code>buildContext</code> exposes <code>{perEventMedian}</code>, <code>{perEventMean}</code>, <code>{perEventStd}</code>, <code>{perEventN}</code>, <code>{batchCoverage}</code> to <em>both</em> templates. All pipeline-derived — no client identifiers (clears the prompt-widening guardrails). <b>LLM-annotation-only; the deterministic Min/Max is untouched.</b></li>
+        <li><b>Editable.</b> Settings §04 is relabelled <b>(base)</b>; a new <b>§04b (v · experimental)</b> editor lets the operator tune the variant prompt independently (own storage slot, own factory reset). Verified: both editors render, the (v) save/reset round-trips, the base template stays independent, the (v) prompt resolves with no leftover placeholders.</li>
+        <li><b>Scope.</b> Single (per-graph) review only. <b>Mass LLM review still uses the base prompt</b> (a follow-up if the (v) prompt proves out). Files: <code>shared/material-detail.js</code> (two buttons + handler), <code>shared/llm.js</code> (tokens + template override + variant tag), <code>shared/config.js</code> (the (v) factory template + getters + placeholders), <code>shared/pipeline.js</code> (perEventStats median), <code>settings/settings.{html,js}</code> (the (v) editor).</li>
+      </ul>
+
+      <h4>APP-FIX-HISTO-BUCKETS · Sandbox histogram — nice round buckets instead of a single stretched bar</h4>
+      <ul>
+        <li><b>Symptom (operator).</b> "Sometimes all I see is 1 bucket stretching from 1 to 88." The old bin count was <code>ceil(√n)</code>, which collapsed to a single bucket on few/clustered events.</li>
+        <li><b>Fix.</b> <b>5–20 buckets</b> with <b>round edges</b> (snapped to 1/2/5×10<sup>k</sup>), a labelled edge at every boundary (every-other when crowded), and a <b>gap between bars</b> so each is distinct; the bucket width is shown in the axis title. Starts at 0 when the min is near zero, else snaps a nice floor below the min to zoom a tight cluster. Verified: wide 1–88 → 9 buckets of 10; cluster (all 86) → 5 buckets of 1; nuts 8–340 → 7 of 50 (shows the bimodal batch pattern). Files: <code>shared/consumption-profile.js</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-FIX-OPI-RECON + APP-SBX-BATCHMIN + APP-FIX-HISTO-LEGIBLE ───────── -->
     <article class="roc-entry dev">
       <div class="head">

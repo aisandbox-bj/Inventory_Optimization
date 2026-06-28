@@ -19,6 +19,7 @@
   const KEY_PARAMS     = 'settings.parameters';
   const KEY_ALIASES    = 'settings.columnAliases';
   const KEY_PROMPT     = 'settings.llm.promptTemplate';
+  const KEY_PROMPT_V   = 'settings.llm.promptTemplateV';   // APP-LLM-V — enhanced "(v)" variant prompt
   const KEY_LLM        = (provider) => `settings.llm.${provider}`;
   const KEY_MULTIPLANT = 'settings.multiPlant';                       /* APP-T-01d — multi-plant opt-in toggle (default OFF per D25) */
 
@@ -114,6 +115,70 @@ signals is an array of zero or more from:
 
 suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|action", "newValue":<value>, "rationale":"<why>" }.`;
 
+  /* ─── APP-LLM-V · Enhanced "(v)" variant prompt ───────────────────────────
+     The "(v)" review button uses this. Reframes the ask from "is the rec right"
+     to "WHY does this need attention TODAY + WHAT to check", surfaces the
+     batched-consumption + batch-coverage analysis, and forces the model to
+     carry a number through to a consequence. Operator-editable separately. */
+  const FACTORY_PROMPT_TEMPLATE_V =
+`You are an MRO inventory planner reviewing a consumption chart and the algorithm's Min/Max recommendation. Do NOT describe the chart. Your job is to tell the planner WHY THIS MATERIAL NEEDS ATTENTION TODAY (or confirm it does not) and WHAT TO CHECK to make the recommendation right.
+
+CUSTOMER CONTEXT:
+{customerContext}
+
+Material:       {material} — {description}
+Bucket:         {bucket}
+Pattern:        {pattern}
+
+STATISTICS
+  Total consumed (analysis window):       {totalNet}
+  Consumption sign:                       {netSign}
+  P1 rate (baseline, 5 mo):               {p1Rate} / mo  [{p1Flag}]
+  P2 rate (current, {p2Months} mo):       {p2Rate} / mo  [{p2Flag}]
+  P1 → P2 rate change:                    {rateChange}  {rateChangeFlag}
+  Adjusted P2 (HCE excluded):             {adjP2}
+  Per-event draw (batch size):            median {perEventMedian}, mean {perEventMean} ± {perEventStd} over {perEventN} events
+  Batch coverage vs recommended Min:      {batchCoverage}
+  HCE events (P2):                        {hceText}
+  Inv-Adj dates excluded (operator-confirmed): {invAdjCount}
+  Days since last issue:                  {daysSinceLastIssue}
+  Issuing WO count (analysis window):     {woCount}
+  Last consumption date:                  {lastConsumptionDate}
+  Stockouts in back-calc window:          {stockoutSummary}
+  Drop cause (algorithmic):               {rateDropCause}
+
+CURRENT MRP STATE
+  MRP type:  {mrpType}   Stock on hand: {stock}   Current Min: {cmin}   Current Max: {cmax}   Runway @ P2: {runway} months
+
+RECOMMENDATION (algorithmic)
+  Recommended Min: {recMin}   Recommended Max: {recMax}   Recommended MRP: {recMrpType}
+  Traffic light:   {trafficLight}   Action: {action}
+
+Chart: orange step = cumulative consumption; cyan dashed = P1 trend; green dashed = P2 trend; amber dots = HCE work orders; violet line = back-calculated stock on hand (RIGHT axis); red wash bands = stockout windows (stock ≤ 0); orange dashed vertical = last-consumption marker.
+
+WATCH FOR — name the signal AND carry its number through to a consequence:
+  • STOCKOUT-DISTORTED RATE — if there are stockouts in the window, the P2 rate is UNDERSTATED (consumption stopped because stock ran out, not because demand fell). True demand is higher than {p2Rate}/mo. Do NOT recommend lowering Min/Max. signal "stockoutDriven".
+  • BATCHED DEMAND — drawn in batches, not smoothly (compare per-event MEDIAN {perEventMedian} vs MEAN {perEventMean}, and the step sizes). The rate-based Min assumes smooth withdrawal; if "Batch coverage" says BELOW or THIN, a single legitimate draw cannot be filled even though the average looks fine — recommend raising Min to cover at least one typical batch. signal "batchedMinShort".
+  • IMMINENT STOCKOUT — Runway @ P2 short ({runway} mo): "stock runs out in ~{runway} months at the current rate". signal "replenishmentGap".
+  • NEGATIVE / FLOWING-BACK — net ≤ 0, returns exceed issues. signal "negativeNet".
+  • GENUINE DEMAND DROP — Drop cause GENUINE_DEMAND_DROP, stock available throughout: possible obsolescence / fleet change. signal "sharpDrop".
+  • Also: SPIKE without HCE, LONG FLAT TAIL, FEW EVENTS (woCount ≤ 2 → rate unreliable), WORKING REDUNDANT.
+
+Reply with ONLY a JSON object on a single line — no prose, no markdown fences:
+{"verdict":"ok"|"tweak"|"review","signals":[<signal names>],"notes":"<see below>","suggestedEdits":[<optional>]}
+
+In "notes", answer in this order, each tied to a NUMBER from the data:
+  1. WHY NOW — the single most time-relevant reason to look at this today (imminent stockout, a stockout distorting the rate, a batch the Min cannot cover, a genuine demand shift). If nothing is time-relevant, say "no action needed this cycle".
+  2. WHAT TO CHECK — the one thing to look at or change to make the recommendation right.
+Lead with the consequence, not the description. Do NOT restate the obvious ("consumption is steady", "normal part").
+
+verdict: "ok" = right and nothing time-critical · "tweak" = a parameter change improves it (often raise Min to cover a batch) · "review" = a planner must look manually (stockout-distorted rate, negative net, demand collapse).
+
+signals is zero or more from:
+  ["stockoutDriven","batchedMinShort","replenishmentGap","negativeNet","sharpDrop","sharpRise","spikeNoHce","flatTail","fewEvents","workingRedundant","seasonal","other"]
+
+suggestedEdits is optional. Each: { "field":"recMin|recMax|trafficLight|action", "newValue":<value>, "rationale":"<why>" }.`;
+
   /* ─── Legacy v2.0.x factory template, for auto-upgrade detection ──────────
      If a saved template matches this string EXACTLY, the operator was on the
      previous default and never customised. We silently upgrade to the new
@@ -178,7 +243,9 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     'mrpType', 'stock', 'cmin', 'cmax', 'recMin', 'recMax', 'recMrpType', 'runway',
     'trafficLight', 'action',
     // APP-E1 (v2.1.3) — stockout-aware drop diagnostic tokens
-    'lastConsumptionDate', 'rateDropCause', 'stockoutSummary'
+    'lastConsumptionDate', 'rateDropCause', 'stockoutSummary',
+    // APP-LLM-V — batched-consumption tokens (enhanced "v" prompt)
+    'perEventMedian', 'perEventMean', 'perEventStd', 'perEventN', 'batchCoverage'
   ];
 
   /* ─── Parameter defaults (read with factory fallback) ───────────────────── */
@@ -254,6 +321,19 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     return true;
   }
 
+  /* ─── APP-LLM-V · the "(v)" variant prompt (own slot, factory fallback) ──── */
+  async function getPromptTemplateV(){
+    const saved = await AppStorage.get(KEY_PROMPT_V);
+    if (!saved || typeof saved !== 'string' || !saved.trim().length) return FACTORY_PROMPT_TEMPLATE_V;
+    return saved;
+  }
+  async function savePromptTemplateV(text){ return AppStorage.set(KEY_PROMPT_V, String(text || '')); }
+  async function resetPromptTemplateV(){ return AppStorage.del(KEY_PROMPT_V); }
+  async function isPromptTemplateVCustomised(){
+    const saved = await AppStorage.get(KEY_PROMPT_V);
+    return !!(saved && typeof saved === 'string' && saved.trim().length && saved !== FACTORY_PROMPT_TEMPLATE_V);
+  }
+
   /* ─── Column alias overrides ────────────────────────────────────────────── */
   async function getAliases(){
     const v = await AppStorage.get(KEY_ALIASES);
@@ -268,6 +348,7 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     await resetDefaults();
     await AppStorage.del(KEY_ALIASES);
     await resetPromptTemplate();
+    await resetPromptTemplateV();
     for (const p of ['anthropic', 'openai']) await deleteLlm(p);
   }
 
@@ -290,11 +371,13 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
   /* ─── Public API ────────────────────────────────────────────────────────── */
   global.AppConfig = Object.freeze({
     FACTORY_PROMPT_TEMPLATE,
+    FACTORY_PROMPT_TEMPLATE_V,
     LEGACY_FACTORY_PROMPT_TEMPLATE,
     PROMPT_PLACEHOLDERS,
     getDefaults, saveDefaults, resetDefaults,
     getLlm, saveLlm, deleteLlm,
     getPromptTemplate, savePromptTemplate, resetPromptTemplate, isPromptTemplateCustomised,
+    getPromptTemplateV, savePromptTemplateV, resetPromptTemplateV, isPromptTemplateVCustomised,
     getAliases, saveAliases,
     getMultiPlant, setMultiPlant,                                     /* APP-T-01d */
     factoryReset,

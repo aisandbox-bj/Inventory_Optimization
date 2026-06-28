@@ -513,6 +513,7 @@
     await renderCtxPanel();
     renderAliases();
     await renderPromptEditor();
+    await renderPromptEditorV();                                      /* APP-LLM-V */
     await renderMultiPlant();                                         /* APP-T-01d */
     await renderAbout();
   }
@@ -539,18 +540,38 @@
     await refreshPromptHash(tpl);
   }
 
-  function insertAtCursor(textarea, text){
+  /* APP-LLM-V — the "(v)" variant editor (own slot, own factory fallback) */
+  async function renderPromptEditorV(){
+    const ta = document.querySelector('#promptTemplateV');
+    if (!ta) return;
+    ta.value = await AppConfig.getPromptTemplateV();
+    const phHost = document.querySelector('#promptPlaceholdersV');
+    if (phHost) {
+      phHost.innerHTML = '';
+      (AppConfig.PROMPT_PLACEHOLDERS || []).forEach(p => {
+        const chip = document.createElement('span');
+        chip.className = 'ph-chip';
+        chip.textContent = '{' + p + '}';
+        chip.title = 'Click to insert at cursor';
+        chip.addEventListener('click', () => insertAtCursor(ta, '{' + p + '}', '#promptHashV'));
+        phHost.appendChild(chip);
+      });
+    }
+    await refreshPromptHash(ta.value, '#promptHashV');
+  }
+
+  function insertAtCursor(textarea, text, hashSel){
     const start = textarea.selectionStart;
     const end   = textarea.selectionEnd;
     const v     = textarea.value;
     textarea.value = v.slice(0, start) + text + v.slice(end);
     textarea.selectionStart = textarea.selectionEnd = start + text.length;
     textarea.focus();
-    refreshPromptHash(textarea.value);
+    refreshPromptHash(textarea.value, hashSel);
   }
 
-  async function refreshPromptHash(text){
-    const out = document.querySelector('#promptHash');
+  async function refreshPromptHash(text, sel){
+    const out = document.querySelector(sel || '#promptHash');
     if (!out || typeof AppLlm === 'undefined') return;
     const h = await AppLlm.hashTemplate(text);
     out.textContent = h || '(unavailable)';
@@ -558,19 +579,36 @@
 
   function setupPromptButtons(){
     const ta = document.querySelector('#promptTemplate');
-    if (!ta) return;
-    ta.addEventListener('input', () => refreshPromptHash(ta.value));
-    document.querySelector('#promptSave').addEventListener('click', async () => {
-      await AppConfig.savePromptTemplate(ta.value);
-      toast('Prompt template saved', 'ok');
-      refreshPromptHash(ta.value);
-    });
-    document.querySelector('#promptReset').addEventListener('click', async () => {
-      if (!confirm('Reset prompt to the factory default? Your edits will be lost.')) return;
-      await AppConfig.resetPromptTemplate();
-      await renderPromptEditor();
-      toast('Prompt template reset to factory', 'ok');
-    });
+    if (ta) {
+      ta.addEventListener('input', () => refreshPromptHash(ta.value));
+      document.querySelector('#promptSave').addEventListener('click', async () => {
+        await AppConfig.savePromptTemplate(ta.value);
+        toast('Prompt template (base) saved', 'ok');
+        refreshPromptHash(ta.value);
+      });
+      document.querySelector('#promptReset').addEventListener('click', async () => {
+        if (!confirm('Reset the (base) prompt to the factory default? Your edits will be lost.')) return;
+        await AppConfig.resetPromptTemplate();
+        await renderPromptEditor();
+        toast('Prompt template (base) reset to factory', 'ok');
+      });
+    }
+    // APP-LLM-V — the "(v)" variant editor
+    const taV = document.querySelector('#promptTemplateV');
+    if (taV) {
+      taV.addEventListener('input', () => refreshPromptHash(taV.value, '#promptHashV'));
+      document.querySelector('#promptSaveV').addEventListener('click', async () => {
+        await AppConfig.savePromptTemplateV(taV.value);
+        toast('Prompt template (v) saved', 'ok');
+        refreshPromptHash(taV.value, '#promptHashV');
+      });
+      document.querySelector('#promptResetV').addEventListener('click', async () => {
+        if (!confirm('Reset the (v) prompt to the factory default? Your edits will be lost.')) return;
+        await AppConfig.resetPromptTemplateV();
+        await renderPromptEditorV();
+        toast('Prompt template (v) reset to factory', 'ok');
+      });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', async () => {

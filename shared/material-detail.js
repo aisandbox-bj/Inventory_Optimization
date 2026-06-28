@@ -217,7 +217,7 @@
     return `
       <div class="llm-panel ${llm.verdict}">
         <div class="llm-head">
-          <h4>LLM review</h4>
+          <h4>LLM review${llm.variant ? ` · ${escapeHtml(llm.variant)}` : ''}</h4>
           <span class="verdict ${llm.verdict}">${llm.verdict}</span>
           <span class="spacer"></span>
           <span class="provider">${escapeHtml(llm.provider)} · ${escapeHtml(llm.model || '')}</span>
@@ -254,15 +254,21 @@
     if (cb2 && !cb2._wired) { cb2.addEventListener('change', apply); cb2._wired = true; }
   }
 
-  async function runLlmReview(hostEl, mat, opts){
+  async function runLlmReview(hostEl, mat, opts, variant){
+    variant = (variant === 'v') ? 'v' : 'base';
     _inflight = true;
-    const btn = hostEl.querySelector('#btnLlm');
-    if (btn) btn.disabled = true;
+    const disable = (v) => { const b = hostEl.querySelector(v); if (b) b.disabled = true; };
+    disable('#btnLlm'); disable('#btnLlmV');
     const statusEl = hostEl.querySelector('#llmStatus');
-    if (statusEl) statusEl.innerHTML = '<span class="llm-spinner">Reviewing chart…</span>';
+    if (statusEl) statusEl.innerHTML = `<span class="llm-spinner">Reviewing chart… (${variant})</span>`;
     try {
       const svg = hostEl.querySelector('#chartHost svg');
-      const out = await AppLlm.review(mat, opts.bucket ? opts.bucket.name : '', opts.parameters, svg);
+      const reviewOpts = { variant };
+      // The "(v)" button runs the enhanced variant prompt; base uses the factory.
+      if (variant === 'v' && typeof AppConfig !== 'undefined' && AppConfig.getPromptTemplateV) {
+        reviewOpts.template = await AppConfig.getPromptTemplateV();
+      }
+      const out = await AppLlm.review(mat, opts.bucket ? opts.bucket.name : '', opts.parameters, svg, reviewOpts);
       if (typeof opts.onLlmResult === 'function') opts.onLlmResult(mat.material, out);
       render(hostEl, mat, Object.assign({}, opts, { llm: out }));
     } catch (e) {
@@ -275,8 +281,8 @@
       if (s2) s2.innerHTML = `<span class="llm-error">✗ ${escapeHtml(msg)}${hint}</span>`;
     } finally {
       _inflight = false;
-      const b2 = hostEl.querySelector('#btnLlm');
-      if (b2) b2.disabled = false;
+      const enable = (v) => { const b = hostEl.querySelector(v); if (b) b.disabled = false; };
+      enable('#btnLlm'); enable('#btnLlmV');
     }
   }
 
@@ -330,10 +336,13 @@
     }
     const perEventCell = `<div class="stat-cell"${perEventTitle ? ` title="${escapeHtml(perEventTitle)}"` : ''}><span class="lab">Per event cons</span><div class="v">${perEventDisp}</div></div>`;
 
+    const _ranBase = llmCfg && llmCfg.variant !== 'v';
+    const _ranV    = llmCfg && llmCfg.variant === 'v';
     const llmActionsHtml = enableLlm
       ? `
       <div class="actions-row">
-        <button id="btnLlm" class="primary" ${_inflight ? 'disabled' : ''}>${llmCfg ? '↻ Re-run LLM review' : '✦ Run LLM review'}</button>
+        <button id="btnLlm" class="primary" ${_inflight ? 'disabled' : ''} title="Current factory prompt">${_ranBase ? '↻ Re-run' : '✦ Run'} LLM review (base)</button>
+        <button id="btnLlmV" class="primary" ${_inflight ? 'disabled' : ''} title="Enhanced prompt — batched-consumption + 'why now / what to check' framing">${_ranV ? '↻ Re-run' : '✦ Run'} LLM review (v)</button>
         <span id="llmStatus"></span>
       </div>`
       : '';
@@ -411,7 +420,9 @@
     // Bind LLM (only when the run button is present)
     if (enableLlm) {
       const llmBtn = hostEl.querySelector('#btnLlm');
-      if (llmBtn) llmBtn.addEventListener('click', () => runLlmReview(hostEl, mat, opts));
+      if (llmBtn) llmBtn.addEventListener('click', () => runLlmReview(hostEl, mat, opts, 'base'));
+      const llmBtnV = hostEl.querySelector('#btnLlmV');
+      if (llmBtnV) llmBtnV.addEventListener('click', () => runLlmReview(hostEl, mat, opts, 'v'));
     }
 
     // APP-E26 — material-number copy button (async Clipboard API + fallback).

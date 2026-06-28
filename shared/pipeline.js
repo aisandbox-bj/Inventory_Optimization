@@ -828,18 +828,23 @@
           _evQty.set(key, (_evQty.get(key) || 0) + qv);
         }
         const _evVals = [..._evQty.values()];
-        let perEventStats = { mean: null, std: null, n: _evVals.length };
+        let perEventStats = { mean: null, median: null, std: null, n: _evVals.length };
         if (_evVals.length) {
           const _mean = _evVals.reduce((s, v) => s + v, 0) / _evVals.length;
+          // median = typical batch draw (robust to spot-pull outliers) — APP-RENAME-BATCHED / batched-Min
+          const _sorted = [..._evVals].sort((a, b) => a - b);
+          const _mid = Math.floor(_sorted.length / 2);
+          const _median = _sorted.length % 2 ? _sorted[_mid] : (_sorted[_mid - 1] + _sorted[_mid]) / 2;
           let _std = null;
           if (_evVals.length > 1) {
             const _var = _evVals.reduce((s, v) => s + (v - _mean) * (v - _mean), 0) / (_evVals.length - 1);
             _std = Math.sqrt(_var);
           }
           perEventStats = {
-            mean: Math.round(_mean * 100) / 100,
-            std:  _std == null ? null : Math.round(_std * 100) / 100,
-            n:    _evVals.length
+            mean:   Math.round(_mean * 100) / 100,
+            median: Math.round(_median * 100) / 100,
+            std:    _std == null ? null : Math.round(_std * 100) / 100,
+            n:      _evVals.length
           };
         }
 
