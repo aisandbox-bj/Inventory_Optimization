@@ -56,6 +56,25 @@
     return [...byOrder.values()];
   }
 
+  // APP-BATCH-WO (operator 2026-06-28) — batch sizes from WORK-ORDER draws only:
+  // 261 net of 262, grouped by order. Cost-centre issues (201/202) are shop
+  // consumables, not job batches, so they're excluded. Mirrors pipeline batchStats.
+  function batchQtys(json, material){
+    const mb51 = (json && json.data && json.data.mb51) || [];
+    const mat  = String(material).trim();
+    const byOrder = new Map();
+    for (const r of mb51){
+      if (String(r.material || '').trim() !== mat) continue;
+      const mt = String(r.movementType || '').trim();
+      if (mt !== '261' && mt !== '262') continue;        // WO issue / return only — excludes CC
+      const o = String(r.order || '').trim();
+      if (!o) continue;                                  // order-less → not a job batch
+      const q = Math.abs(num(r.quantity));
+      byOrder.set(o, (byOrder.get(o) || 0) + (mt === '261' ? q : -q));
+    }
+    return [...byOrder.values()].filter(v => v > 0);     // net job draws only
+  }
+
   function median(sorted){
     const n = sorted.length; if (!n) return 0;
     const m = Math.floor(n / 2);
@@ -172,5 +191,5 @@
     return `${head}${axis}${edges}${bars}${meanLine}${medLine}${xtitle}${ylab}</svg>`;
   }
 
-  global.ConsumptionProfile = { eventQtys, woQtys, describe, calcANumbers, calcB, renderHistogram };
+  global.ConsumptionProfile = { eventQtys, woQtys, batchQtys, describe, calcANumbers, calcB, renderHistogram };
 })(window);

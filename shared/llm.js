@@ -78,17 +78,24 @@
     // Per-event draw distribution + whether the recommended Min covers a single
     // typical batch (median draw). Pure pipeline-derived — no client identifiers.
     const _pe = material.perEventStats || {};
-    const _batch = (_pe.median != null) ? _pe.median : null;
-    const perEventMedian = (_batch != null) ? _batch : '—';
+    const perEventMedian = (_pe.median != null) ? _pe.median : '—';
     const perEventMean   = (_pe.mean   != null) ? _pe.mean : '—';
     const perEventStd    = (_pe.std    != null) ? _pe.std  : '—';
     const perEventN      = (_pe.n      != null) ? _pe.n    : 0;
+    // APP-BATCH-WO — batch size is WORK-ORDER draws only (261/262 per order); a
+    // cost-centre draw (201/202) is shop consumables, not a job batch, excluded.
+    const _bs = material.batchStats || {};
+    const _batch = (_bs.median != null) ? _bs.median : null;
+    const batchMedian = (_batch != null) ? _batch : '—';
+    const batchMean   = (_bs.mean != null) ? _bs.mean : '—';
+    const batchStd    = (_bs.std  != null) ? _bs.std  : '—';
+    const batchN      = (_bs.n    != null) ? _bs.n    : 0;
     let batchCoverage;
-    if (material.recMin == null)      batchCoverage = 'n/a (no recommended Min)';
-    else if (_batch == null || _batch <= 0) batchCoverage = 'n/a (no consumption events)';
-    else if (material.recMin <  _batch)       batchCoverage = `BELOW a single batch — a single ${_batch}-unit draw cannot be filled from Min ${material.recMin}`;
-    else if (material.recMin <  _batch * 1.2) batchCoverage = `THIN — Min ${material.recMin} covers <1.2× the ${_batch}-unit typical batch`;
-    else                                       batchCoverage = `OK — Min ${material.recMin} covers the ${_batch}-unit typical batch`;
+    if (_batch == null || _batch <= 0)        batchCoverage = 'n/a (no work-order batches — drawn via cost-centre only)';
+    else if (material.recMin == null)         batchCoverage = `n/a (no recommended Min; typical WO batch ${_batch} units)`;
+    else if (material.recMin <  _batch)       batchCoverage = `BELOW a single batch — a single ${_batch}-unit WO draw cannot be filled from Min ${material.recMin}`;
+    else if (material.recMin <  _batch * 1.2) batchCoverage = `THIN — Min ${material.recMin} covers <1.2× the ${_batch}-unit typical WO batch`;
+    else                                       batchCoverage = `OK — Min ${material.recMin} covers the ${_batch}-unit typical WO batch`;
     return {
       customerContext: (customerContext == null || customerContext === '') ? '(none)' : String(customerContext),
       material:     material.material,
@@ -130,7 +137,9 @@
       stockoutDominated:   !!material.stockoutDominated,
       p2StockoutCount:     (material.p2StockoutCount != null) ? material.p2StockoutCount : 0,
       // Batched-consumption tokens (enhanced "v" prompt)
-      perEventMedian, perEventMean, perEventStd, perEventN, batchCoverage
+      perEventMedian, perEventMean, perEventStd, perEventN, batchCoverage,
+      // APP-BATCH-WO — batch size from work-order draws only (CC excluded)
+      batchMedian, batchMean, batchStd, batchN
     };
   }
 

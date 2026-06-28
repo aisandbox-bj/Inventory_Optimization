@@ -380,6 +380,43 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-BATCH-MIN-ALONGSIDE + APP-SBX-REVIEW ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-28</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-BATCH-MIN-ALONGSIDE · Batched Min shown beside the calc Min — calc Min/Max untouched</h4>
+      <ul>
+        <li><b>Clarified first (operator concern).</b> The recommended <b>Min/Max were NOT impacted</b> by the batched-WO work: <code>recMin = P2 rate × min-months</code>, <code>recMax = P2 rate × max-months</code> (pipeline.js:995–996), and the Trace banner shows the current SAP Min. The batched figure had only ever fed the LLM "(v)" prompt + the Sandbox.</li>
+        <li><b>What's new.</b> The MRP comparison table now carries an informational <b>"Min · batched"</b> row beside <b>"Min (calc)"</b> — the typical work-order batch (median, CC excluded) × a factor. It's display-only: it does <b>not</b> flag as a change, does <b>not</b> feed the traffic light, and does <b>not</b> alter the recommended Min/Max. <b>Max stays single</b> (P2 × max-months). New result field <code>batchedMin</code>; new setting <b>Batched Min factor</b> (default 1.2, in intake params + FACTORY_DEFAULTS). Verified: 2000669 → Min (calc) 3000 · Min · batched 5 · Max 6000; recMin/recMax unchanged. Files: <code>shared/pipeline.js</code>, <code>shared/material-detail.{js,css}</code>, <code>shared/canonical-schema.js</code>, <code>intake/intake.js</code>.</li>
+      </ul>
+
+      <h4>APP-SBX-REVIEW · Sandbox — persistent review flag + note + a "Sandbox vs Prod" delta pop-up</h4>
+      <ul>
+        <li><b>"Sandbox vs Prod" pop-up.</b> An <code>ℹ Sandbox vs Prod</code> button opens a modal listing what's experimental in the Sandbox vs the live pages (WO-only batch metric — now promoted; batch histogram — Sandbox only; BATCHED/STEADY labels — live still LUMPY/SMOOTH; the batched-Min factor — now a setting; and a reminder the live recommendation Min/Max is unchanged) so the operator can decide what to promote.</li>
+        <li><b>Persistent review.</b> A <b>Reviewed</b> checkbox + a free-text <b>review note</b> that persist in <code>settings.sandbox.*</code> — survive dataset reloads and page changes (same mechanism as the API keys). Verified: both round-trip to storage; modal opens/closes; zero console errors. Files: <code>sandbox/sandbox.{html,js,css}</code>.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.4-dev — APP-BATCH-WO ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-28</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-BATCH-WO · Batch parameters use work-order draws only — cost-centre excluded</h4>
+      <ul>
+        <li><b>Why (operator).</b> A cost-centre draw (201/202) is shop consumables for the bin (the "1's and 2's"), not a specific job — so it shouldn't count toward the "batch" size. Only <b>work-order issues (261, net of 262), grouped per order,</b> are a job batch.</li>
+        <li><b>What.</b> New <code>batchStats</code> {mean, median, std, n} on the pipeline result (net job draw per WO, CC excluded), kept <b>separate</b> from the all-events <code>perEventStats</code> (the "Per event cons" display stat, unchanged — operator's earlier choice). The batch-coverage / batched-Min logic now reads <code>batchStats.median</code> everywhere: the <b>LLM "(v)" prompt</b> (a new "Batch draw (work orders only)" line + the coverage verdict) and the <b>Sandbox</b> ("WO batch draws" box + histogram, with the all-issue median noted for contrast; an all-CC material now reads "no work-order batch draws").</li>
+        <li><b>Why it matters (verified live).</b> On 2000669 the all-issues median was <b>96</b> (dominated by 266 cost-centre consumable draws) but the true <b>WO batch median is 4</b> (49 job draws) — the CC draws were massively inflating the "batch". Batch coverage now correctly uses 4. Files: <code>shared/pipeline.js</code>, <code>shared/llm.js</code>, <code>shared/config.js</code>, <code>shared/consumption-profile.js</code>, <code>sandbox/sandbox.js</code>. No SCHEMA_VERSION change.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-LLM-V + APP-FIX-HISTO-BUCKETS ───────── -->
     <article class="roc-entry dev">
       <div class="head">

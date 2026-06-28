@@ -1737,6 +1737,7 @@
       { key:'p2Months',            label:'P2 months',       type:'number', step:1 },
       { key:'minMonths',           label:'Min months',      type:'number', step:1 },
       { key:'maxMonths',           label:'Max months',      type:'number', step:1 },
+      { key:'batchedMinFactor',    label:'Batched Min factor', type:'number', step:0.05 },
       { key:'threshold',           label:'Threshold',       type:'number', step:1 },
       { key:'minEventsThreshold',  label:'Min consumption events', type:'number', step:1 },
       { key:'hcePctThreshold',     label:'HCE % threshold', type:'number', step:0.05 },

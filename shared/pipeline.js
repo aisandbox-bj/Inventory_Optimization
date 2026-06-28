@@ -848,6 +848,40 @@
           };
         }
 
+        // APP-BATCH-WO (operator 2026-06-28) — the BATCH parameters use WORK-ORDER
+        // draws only: 261 net of 262, grouped by order. A cost-centre issue
+        // (201/202) is shop consumables for the bin, NOT a job batch, so it's
+        // excluded. Kept separate from perEventStats above (the all-events "Per
+        // event cons" display stat). Empty when the material is drawn only via CC.
+        const _batchQty = new Map();
+        for (const r of tx) {
+          const mt = String(r.movementType || '').trim();
+          if (mt !== '261' && mt !== '262') continue;          // WO issue / return only
+          const o = String(r.order || '').trim();
+          if (!o) continue;                                     // order-less → not a job batch
+          const qv = Math.abs(parseFloat(r.quantity) || 0);
+          _batchQty.set(o, (_batchQty.get(o) || 0) + (mt === '261' ? qv : -qv));
+        }
+        const _batchVals = [..._batchQty.values()].filter(v => v > 0);   // net job draws only
+        let batchStats = { mean: null, median: null, std: null, n: _batchVals.length };
+        if (_batchVals.length) {
+          const _bm  = _batchVals.reduce((s, v) => s + v, 0) / _batchVals.length;
+          const _bso = [..._batchVals].sort((a, b) => a - b);
+          const _bi  = Math.floor(_bso.length / 2);
+          const _bmed = _bso.length % 2 ? _bso[_bi] : (_bso[_bi - 1] + _bso[_bi]) / 2;
+          let _bstd = null;
+          if (_batchVals.length > 1) {
+            const _bvar = _batchVals.reduce((s, v) => s + (v - _bm) * (v - _bm), 0) / (_batchVals.length - 1);
+            _bstd = Math.sqrt(_bvar);
+          }
+          batchStats = {
+            mean:   Math.round(_bm * 100) / 100,
+            median: Math.round(_bmed * 100) / 100,
+            std:    _bstd == null ? null : Math.round(_bstd * 100) / 100,
+            n:      _batchVals.length
+          };
+        }
+
         // ── APP-E1 · Back-calc SOH series (pulled up — APP-E11 needs ──────
         // stockoutWindows to make the P2 anchoring decision below).
         let stockOnHandSeries = [];
@@ -960,6 +994,13 @@
 
         const rmin = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * minMonths) : null;
         const rmax = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
+        // APP-BATCH-MIN-ALONGSIDE (operator 2026-06-28) — INFORMATIONAL second Min:
+        // typical WO batch (median, CC excluded) × factor. Lives ALONGSIDE the calc
+        // Min (rmin); it does NOT feed the traffic light or the recommended Min/Max.
+        // Max stays single (rmax = p2 × maxMonths), unaffected.
+        const batchedMin = (batchStats.median != null && batchStats.median > 0)
+          ? Math.round(batchStats.median * (params.batchedMinFactor || 1.2))
+          : null;
 
         const woCount = countIssueWorkOrders(tx);
         const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated);
@@ -1069,7 +1110,9 @@
           mrpRecFlag,                              // APP-E8 — display token ('PD → V1') for list column + set filter, or null
           runway,                                  // months of cover at P2 rate
           woCount,                                 // unique issuing work orders in window
-          perEventStats,                           // APP-TREND-PEC — {mean, std, n} units issued per consumptive event (full window)
+          perEventStats,                           // APP-TREND-PEC — {mean, median, std, n} units per consumptive event, ALL events incl. cost-centre (display stat)
+          batchStats,                              // APP-BATCH-WO — {mean, median, std, n} net job draw per WORK ORDER (261/262 only, CC excluded) — the batch parameter
+          batchedMin,                              // APP-BATCH-MIN-ALONGSIDE — informational WO-batch Min (median × factor); shown next to recMin, does NOT drive the recommendation
           fewEvents:    !!tl.fewEvents,            // true if few-events overlay tripped
           // v2.1.0 signal fields — additive, used by LLM prompt context
           netSign,                                 // 'POSITIVE' | 'NEGATIVE (returns dominate)' | 'MIXED' | 'NO_DATA'

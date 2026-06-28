@@ -131,14 +131,22 @@
 
     const rows = [
       { label:'MRP type',     cur: mat.mrpType || '—',                                       rec: mat.recMrpType || '—' },
-      { label:'Min',          cur: mat.cmin != null ? mat.cmin : '—',                        rec: mat.recMin != null ? mat.recMin : '—' },
+      { label:'Min (calc)',   cur: mat.cmin != null ? mat.cmin : '—',                        rec: mat.recMin != null ? mat.recMin : '—' }
+    ];
+    // APP-BATCH-MIN-ALONGSIDE — informational second Min (WO batch × factor), shown
+    // beside the calc Min. Does NOT drive the recommendation; the calc Min governs.
+    if (mat.batchedMin != null) {
+      rows.push({ label:'Min · batched', cur:'—', rec: mat.batchedMin, recOmitted: true, info: true,
+                  title:'Typical work-order batch (median, cost-centre excluded) × factor — informational; the calc Min above governs the recommendation.' });
+    }
+    rows.push(
       { label:'Max',          cur: mat.cmax != null ? mat.cmax : '—',                        rec: mat.recMax != null ? mat.recMax : '—' },
       { label:'Safety Stock', cur: mat.safetyStock != null ? mat.safetyStock : '—',          rec: '—', recOmitted: true }
-    ];
+    );
     const trs = rows.map(r => {
       const changed = !r.recOmitted && r.cur !== '—' && r.rec !== '—' && !eq(r.cur, r.rec);
       return `
-        <tr class="${changed ? 'changed' : ''}">
+        <tr class="${changed ? 'changed' : ''}${r.info ? ' mrp-info' : ''}"${r.title ? ` title="${escapeAttr(r.title)}"` : ''}>
           <td class="lab">${escapeHtml(r.label)}</td>
           <td class="current">${escapeHtml(String(r.cur))}</td>
           <td class="rec">${escapeHtml(String(r.rec))}</td>
@@ -149,7 +157,7 @@
       <div class="mrp-compare">
         <div class="mrp-compare-head">
           <h4>MRP Settings · Current vs Recommended</h4>
-          <span class="hint">Yellow rows = recommendation differs from current. Safety Stock is informational (not modelled in v2 algorithm).</span>
+          <span class="hint">Yellow rows = recommendation differs from current. <b>Min · batched</b> = a typical WO batch × factor, shown for comparison only — the <b>Min (calc)</b> governs. Safety Stock is informational.</span>
         </div>
         ${mat.mrpReclassRecommended ? `<div class="mrp-reclass-note">⚑ ${escapeHtml(mat.mrpReclassNote || '')}</div>` : ''}
         <table class="mrp-compare-table">

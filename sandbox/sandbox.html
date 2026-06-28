@@ -62,10 +62,18 @@
     </div>
 
     <div class="sbx-controls" id="sbxControls" hidden>
-      <span class="sbx-ctl-lab">Batched Min = batch size (median) ×</span>
+      <span class="sbx-ctl-lab">Batched Min = WO batch (median) ×</span>
       <label class="sbx-slider">factor <input type="number" id="sbxFactor" min="1" max="5" step="0.05" value="1.2" class="sbx-factor" /></label>
+      <button id="btnVsProd" class="ghost sbx-vsprod" title="What's experimental in the Sandbox that isn't in the live pages yet">ℹ Sandbox vs Prod</button>
       <div class="sbx-toolbar-spacer"></div>
       <div class="sbx-summary" id="sbxSummary">—</div>
+    </div>
+
+    <!-- APP-SBX-REVIEW — persistent review flag + note (stored in settings.*, survives dataset reloads, like the API keys) -->
+    <div class="sbx-review" id="sbxReview" hidden>
+      <label class="sbx-rev-chk"><input type="checkbox" id="sbxReviewed" /> <span>Reviewed</span></label>
+      <input type="text" id="sbxReviewNote" class="sbx-rev-note" placeholder="persistent review note — survives dataset reloads & page changes…" autocomplete="off" />
+      <span class="sbx-rev-saved" id="sbxRevSaved"></span>
     </div>
 
     <div class="scr-main" id="scrMain" hidden>
@@ -101,6 +109,21 @@
       </div>
       <div class="scr-modal-body" id="bandsBody"></div>
       <div class="scr-modal-foot" id="bandsFoot"></div>
+    </div>
+  </div>
+
+  <!-- ─── APP-SBX-REVIEW — "Sandbox vs Prod" delta modal ─── -->
+  <div id="vsProdModal" class="scr-modal hidden" aria-hidden="true">
+    <div class="scr-backdrop" id="vsProdBackdrop"></div>
+    <div class="scr-dialog">
+      <div class="scr-modal-head">
+        <div class="scr-modal-title">
+          <span class="lab">⚗ Sandbox</span>
+          <h3>What's here that isn't (fully) in the live pages</h3>
+        </div>
+        <button id="vsProdClose" class="scr-close" title="Close">✕</button>
+      </div>
+      <div class="scr-modal-body" id="vsProdBody"></div>
     </div>
   </div>
 

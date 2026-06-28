@@ -134,8 +134,10 @@
     $('#scrToolbar').hidden = false;
     $('#scrMain').hidden = false;
     $('#sbxControls').hidden = false;
+    $('#sbxReview').hidden = false;
     bindToolbar();
     bindSandboxControls();
+    bindSandboxReview();   // APP-SBX-REVIEW — persistent review flag + note + vs-Prod modal
     renderActiveBands();
     renderList();
     updateExportButton();
@@ -477,17 +479,20 @@
     for (const e of state.materials) {
       const evq = ConsumptionProfile.eventQtys(state.json, e.m.material);
       const woq = ConsumptionProfile.woQtys(state.json, e.m.material);
-      e.sbxQtys  = evq;
-      e.sbxStats = ConsumptionProfile.describe(evq);
-      e.sbxA     = ConsumptionProfile.calcANumbers(woq);
+      const bq  = ConsumptionProfile.batchQtys(state.json, e.m.material);   // APP-BATCH-WO — WO draws only
+      e.sbxQtys      = evq;
+      e.sbxStats     = ConsumptionProfile.describe(evq);
+      e.sbxA         = ConsumptionProfile.calcANumbers(woq);
+      e.sbxBatchQtys = bq;
+      e.sbxBatch     = ConsumptionProfile.describe(bq);
     }
   }
 
-  // APP-SBX-BATCHMIN — does the recommended Min cover a typical batch draw?
-  // batch size = median units-per-event (robust to spot-pull outliers);
-  // batched Min = batch size × factor. Flag when it exceeds the current rec Min.
+  // APP-SBX-BATCHMIN / APP-BATCH-WO — does the recommended Min cover a typical
+  // WORK-ORDER batch draw? batch size = median net job draw (261/262 per order,
+  // cost-centre excluded); batched Min = batch size × factor; flag when > rec Min.
   function batchAdequacy(entry){
-    const st = entry.sbxStats || {};
+    const st = entry.sbxBatch || {};
     const batchSize  = st.median || 0;
     const factor     = state.sbx.factor || 1.2;
     const batchedMin = batchSize > 0 ? Math.round(batchSize * factor) : null;
@@ -504,6 +509,42 @@
       updateSandboxSummary();
       refreshProfilePanel();
     });
+  }
+
+  /* APP-SBX-REVIEW — persistent (settings.*) review flag + note, like the API
+     keys: survives dataset reloads + page changes. Plus a "Sandbox vs Prod" delta
+     modal so the operator can see what's experimental here and decide what to promote. */
+  const SBX_REVIEW_KEY = 'settings.sandbox.reviewed';
+  const SBX_NOTE_KEY   = 'settings.sandbox.reviewNote';
+  const VS_PROD_ITEMS = [
+    ['WO-only batch metric', 'Batch size = median net job draw per work order (261 net of 262); cost-centre draws (201/202 = shop consumables) are excluded. <b>Now promoted</b> — the live recommendation shows "Min · batched" from this figure (informational; the calc Min still governs).'],
+    ['Batch histogram + WO-batch stats box', 'The per-job-draw distribution (nice round buckets + mean/median markers) and the "WO batch draws" stats. <b>Sandbox only.</b>'],
+    ['BATCHED / STEADY labels', 'The Sandbox relabels the consumption pattern; the live Trend / Screener still read <b>LUMPY / SMOOTH</b> (global rename queued: APP-RENAME-BATCHED).'],
+    ['Batched-Min adequacy + factor', 'The "RAISE MIN" verdict (batched Min vs current Min) with the live factor control. <b>Now promoted</b> — the factor is a real setting ("Batched Min factor", default 1.2) and the batched Min shows on the live recommendation. It does <b>not</b> change the calc Min/Max.'],
+    ['The live recommendation is unchanged', 'For clarity: the algorithmic Min/Max stays <b>Min = P2 rate × min-months</b>, <b>Max = P2 rate × max-months</b>. Nothing in the Sandbox alters that — the batched figures are comparison-only.']
+  ];
+  function flashSaved(el){ if (!el) return; el.textContent = '✓ saved'; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 1200); }
+  function bindSandboxReview(){
+    const chk = $('#sbxReviewed'), note = $('#sbxReviewNote'), saved = $('#sbxRevSaved');
+    if (chk) {
+      AppStorage.get(SBX_REVIEW_KEY).then(v => { chk.checked = !!v; }).catch(() => {});
+      chk.addEventListener('change', async () => { try { await AppStorage.set(SBX_REVIEW_KEY, chk.checked); flashSaved(saved); } catch {} });
+    }
+    if (note) {
+      AppStorage.get(SBX_NOTE_KEY).then(v => { if (typeof v === 'string') note.value = v; }).catch(() => {});
+      let t; note.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(async () => { try { await AppStorage.set(SBX_NOTE_KEY, note.value); flashSaved(saved); } catch {} }, 350);
+      });
+    }
+    const modal = $('#vsProdModal'), body = $('#vsProdBody');
+    if (body) body.innerHTML = `<ul class="vsprod-list">${VS_PROD_ITEMS.map(([h, d]) => `<li><b>${h}</b><div>${d}</div></li>`).join('')}</ul>`;
+    const open  = () => { if (modal) { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false'); } };
+    const close = () => { if (modal) { modal.classList.add('hidden'); modal.setAttribute('aria-hidden', 'true'); } };
+    const btn = $('#btnVsProd'); if (btn) btn.addEventListener('click', open);
+    const x = $('#vsProdClose'); if (x) x.addEventListener('click', close);
+    const bk = $('#vsProdBackdrop'); if (bk) bk.addEventListener('click', close);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   }
 
   function updateSandboxSummary(){
@@ -532,33 +573,35 @@
     const pat = entry.m.pattern || '';                                  // raw LUMPY/SMOOTH → reuse its colour class
     const patLabel = pat === 'LUMPY' ? 'BATCHED' : (pat === 'SMOOTH' ? 'STEADY' : (pat || '—'));
     const ad  = batchAdequacy(entry);
-    const histo = ConsumptionProfile.renderHistogram(entry.sbxQtys, { width: 1040, height: 320, color: ad.needBatched ? '#FBBF24' : '#5DD9E2' });
+    const bt  = entry.sbxBatch || {};                                    // WO-only batch stats
+    // Histogram shows the WORK-ORDER batch draws (the batch distribution); CC excluded.
+    const histo = ConsumptionProfile.renderHistogram(entry.sbxBatchQtys, { width: 1040, height: 320, color: ad.needBatched ? '#FBBF24' : '#5DD9E2' });
     const vClass = ad.needBatched ? 'LUMPY' : 'SMOOTH';
     const vPill  = ad.currentMin == null ? '—' : (ad.needBatched ? 'RAISE MIN' : 'OK');
     let banner;
-    if (ad.currentMin == null)      banner = `No recommended Min (not calculable) — can't test batch coverage`;
-    else if (ad.batchedMin == null) banner = `No consumption events — no batch size to cover`;
-    else if (ad.needBatched)        banner = `Batched Min <b>${ad.batchedMin.toLocaleString()}</b> &gt; current Min ${ad.currentMin.toLocaleString()} → raise Min to cover a ${sbx1(ad.batchSize)}-unit batch`;
-    else                            banner = `Current Min ${ad.currentMin.toLocaleString()} ≥ batched Min ${ad.batchedMin.toLocaleString()} — covers a ${sbx1(ad.batchSize)}-unit batch`;
+    if (ad.batchSize <= 0)          banner = `No work-order batch draws (drawn via cost-centre only) — batch-Min n/a`;
+    else if (ad.currentMin == null) banner = `No recommended Min (not calculable) — can't test batch coverage`;
+    else if (ad.needBatched)        banner = `Batched Min <b>${ad.batchedMin.toLocaleString()}</b> &gt; current Min ${ad.currentMin.toLocaleString()} → raise Min to cover a ${sbx1(ad.batchSize)}-unit WO batch`;
+    else                            banner = `Current Min ${ad.currentMin.toLocaleString()} ≥ batched Min ${ad.batchedMin.toLocaleString()} — covers a ${sbx1(ad.batchSize)}-unit WO batch`;
     host.innerHTML = `
       <div class="sbx-histo">${histo}</div>
       <div class="sbx-compare">
         <div class="sbx-calc sbx-calc-a">
-          <div class="sbx-calc-h">Consumption profile <span class="sbx-verdict ${pat}">${patLabel}</span></div>
-          <div class="sbx-calc-sub">per event · ${st.n} event${st.n === 1 ? '' : 's'}</div>
+          <div class="sbx-calc-h">WO batch draws <span class="sbx-verdict ${pat}">${patLabel}</span></div>
+          <div class="sbx-calc-sub">work orders only (CC excluded) · ${bt.n || 0} job draw${(bt.n || 0) === 1 ? '' : 's'} · all-issue median ${sbx1(st.median)}</div>
           <div class="sbx-rows">
-            <span>mean</span><b>${sbx1(st.mean)}</b>
-            <span>median (batch)</span><b>${sbx1(st.median)}</b>
-            <span>std</span><b>${sbx1(st.std)}</b>
-            <span>min–max</span><b>${sbx1(st.min)}–${sbx1(st.max)}</b>
-            <span>skew (mean÷med)</span><b>${st.skew == null ? '—' : sbx2(st.skew)}</b>
+            <span>mean</span><b>${sbx1(bt.mean)}</b>
+            <span>median (batch)</span><b>${sbx1(bt.median)}</b>
+            <span>std</span><b>${sbx1(bt.std)}</b>
+            <span>min–max</span><b>${sbx1(bt.min)}–${sbx1(bt.max)}</b>
+            <span>skew (mean÷med)</span><b>${bt.skew == null ? '—' : sbx2(bt.skew)}</b>
           </div>
         </div>
         <div class="sbx-calc sbx-calc-b">
           <div class="sbx-calc-h">Min adequacy <span class="sbx-verdict ${vClass}">${vPill}</span></div>
-          <div class="sbx-calc-sub">batched Min = batch size (median) × ${ad.factor}</div>
+          <div class="sbx-calc-sub">batched Min = WO batch (median) × ${ad.factor}</div>
           <div class="sbx-rows">
-            <span>batch size (median)</span><b>${sbx1(ad.batchSize)}</b>
+            <span>batch size (median, WO)</span><b>${sbx1(ad.batchSize)}</b>
             <span>factor</span><b>${ad.factor}</b>
             <span>current Min</span><b>${ad.currentMin == null ? '—' : ad.currentMin.toLocaleString()}</b>
             <span>batched Min</span><b class="${ad.needBatched ? 'sbx-hot' : ''}">${ad.batchedMin == null ? '—' : ad.batchedMin.toLocaleString()}</b>

@@ -137,8 +137,9 @@ STATISTICS
   P2 rate (current, {p2Months} mo):       {p2Rate} / mo  [{p2Flag}]
   P1 → P2 rate change:                    {rateChange}  {rateChangeFlag}
   Adjusted P2 (HCE excluded):             {adjP2}
-  Per-event draw (batch size):            median {perEventMedian}, mean {perEventMean} ± {perEventStd} over {perEventN} events
-  Batch coverage vs recommended Min:      {batchCoverage}
+  Per-event draw (all issues incl. CC):   median {perEventMedian}, mean {perEventMean} ± {perEventStd} over {perEventN} events
+  Batch draw (work orders only, CC excl.): median {batchMedian}, mean {batchMean} ± {batchStd} over {batchN} job draws
+  Batch coverage vs recommended Min:       {batchCoverage}
   HCE events (P2):                        {hceText}
   Inv-Adj dates excluded (operator-confirmed): {invAdjCount}
   Days since last issue:                  {daysSinceLastIssue}
@@ -158,7 +159,7 @@ Chart: orange step = cumulative consumption; cyan dashed = P1 trend; green dashe
 
 WATCH FOR — name the signal AND carry its number through to a consequence:
   • STOCKOUT-DISTORTED RATE — if there are stockouts in the window, the P2 rate is UNDERSTATED (consumption stopped because stock ran out, not because demand fell). True demand is higher than {p2Rate}/mo. Do NOT recommend lowering Min/Max. signal "stockoutDriven".
-  • BATCHED DEMAND — drawn in batches, not smoothly (compare per-event MEDIAN {perEventMedian} vs MEAN {perEventMean}, and the step sizes). The rate-based Min assumes smooth withdrawal; if "Batch coverage" says BELOW or THIN, a single legitimate draw cannot be filled even though the average looks fine — recommend raising Min to cover at least one typical batch. signal "batchedMinShort".
+  • BATCHED DEMAND — drawn in batches per job, not smoothly (compare the work-order batch MEDIAN {batchMedian} vs MEAN {batchMean}, and the step sizes). Cost-centre draws (shop consumables) are EXCLUDED from the batch figure. The rate-based Min assumes smooth withdrawal; if "Batch coverage" says BELOW or THIN, a single legitimate job draw cannot be filled even though the average looks fine — recommend raising Min to cover at least one typical batch. signal "batchedMinShort".
   • IMMINENT STOCKOUT — Runway @ P2 short ({runway} mo): "stock runs out in ~{runway} months at the current rate". signal "replenishmentGap".
   • NEGATIVE / FLOWING-BACK — net ≤ 0, returns exceed issues. signal "negativeNet".
   • GENUINE DEMAND DROP — Drop cause GENUINE_DEMAND_DROP, stock available throughout: possible obsolescence / fleet change. signal "sharpDrop".
@@ -245,7 +246,9 @@ suggestedEdits is optional. Each edit is { "field":"recMin|recMax|trafficLight|a
     // APP-E1 (v2.1.3) — stockout-aware drop diagnostic tokens
     'lastConsumptionDate', 'rateDropCause', 'stockoutSummary',
     // APP-LLM-V — batched-consumption tokens (enhanced "v" prompt)
-    'perEventMedian', 'perEventMean', 'perEventStd', 'perEventN', 'batchCoverage'
+    'perEventMedian', 'perEventMean', 'perEventStd', 'perEventN', 'batchCoverage',
+    // APP-BATCH-WO — work-order-only batch tokens (cost-centre excluded)
+    'batchMedian', 'batchMean', 'batchStd', 'batchN'
   ];
 
   /* ─── Parameter defaults (read with factory fallback) ───────────────────── */
