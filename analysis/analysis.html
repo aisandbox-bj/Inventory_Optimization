@@ -12,6 +12,11 @@
 <meta name="app-version" content="2.1.4-dev" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="../shared/brand-tokens.css" />
+<!-- APP-FIX-TREND-CSS — load the shared detail-panel CSS (same as the Screener,
+     before the page CSS) so the OPI lamps, Where-used modal, chart hover tooltip
+     and dynamic-period menu/hint are styled on Trend too. analysis.css loads
+     after, so it still wins on any duplicated rule (no Trend regression). -->
+<link rel="stylesheet" href="../shared/material-detail.css" />
 <link rel="stylesheet" href="analysis.css" />
 </head>
 <body>

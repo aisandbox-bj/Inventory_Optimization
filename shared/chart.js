@@ -114,6 +114,11 @@
     });
     target.appendChild(svg);
 
+    // APP-TREND-DYN — custom-period select-mode flag, declared early so the
+    // hover handler (added later) can suppress its tooltip while the operator
+    // is picking the start/end of a custom period.
+    let cpMode = false;
+
     // background
     svg.appendChild(rect(0, 0, W, H, { fill: PAL.bg }));
 
@@ -452,6 +457,7 @@
         tip.style.top  = Math.max(2, y) + 'px';
       }
       svg.addEventListener('mouseover', (e) => {
+        if (cpMode) return;   // APP-TREND-DYN — no hover tooltip while picking a custom period
         const t = e.target;
         if (!t || !t.classList || !t.classList.contains('chart-hit')) return;
         const line = t.getAttribute('data-line');
@@ -497,6 +503,115 @@
       svg.appendChild(text(bx + 4, by + 1, 'LUMPY', { fill: PAL.annot, size: 9, weight: 600, tracking: 1.5 }));
     }
 
+    // ─── APP-TREND-DYN · custom-period rate selector ────────────────────────
+    // Right-click → "Dynamic period select" → click START then END on the
+    // chart → a pink dashed "P" chord shows the net consumption rate (net ÷
+    // months — same basis as P1/P2, drawn as the chord between the cumulative
+    // values at the two endpoints) over the hand-picked window. For reading a
+    // clean rate between P1 and P2 when those windows are contaminated by a
+    // return or a stockout. Endpoints are free (operator decision); a readout
+    // shows the resolved dates · net units · months so the math is transparent.
+    {
+      target.style.position = 'relative';
+      const dataMin = new Date(cum[0].date).getTime();
+      const dataMax = new Date(cum[cum.length - 1].date).getTime();
+      const CP_COL = '#C77DFF';   // distinct purple (operator: "purple beats pink")
+      const cpGroup = el('g', { class: 'chart-custom-period' });
+      svg.appendChild(cpGroup);
+      let cpStart = null, cpEnd = null;
+
+      const menu = document.createElement('div');
+      menu.className = 'chart-ctx-menu hidden';
+      target.appendChild(menu);
+      const hint = document.createElement('div');
+      hint.className = 'chart-cp-hint hidden';
+      target.appendChild(hint);
+
+      const showHint = (m) => { hint.textContent = m; hint.classList.remove('hidden'); };
+      const hideHint = () => hint.classList.add('hidden');
+      const hideMenu = () => menu.classList.add('hidden');
+
+      function isoDayOf(ms){ const d = new Date(ms); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`; }
+      function eventToDate(e){
+        const ctm = svg.getScreenCTM();
+        if (!ctm) return null;
+        const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+        const p = pt.matrixTransform(ctm.inverse());
+        let frac = (p.x - MARGIN.left) / innerW;
+        frac = Math.max(0, Math.min(1, frac));
+        const ms = xMin + frac * (xMax - xMin);
+        return Math.max(dataMin, Math.min(dataMax, ms));
+      }
+      function draw(sMs, eMs, preview){
+        while (cpGroup.firstChild) cpGroup.removeChild(cpGroup.firstChild);
+        if (sMs == null || eMs == null) return;
+        const a = Math.min(sMs, eMs), b = Math.max(sMs, eMs);
+        const ya = cumAt(a), yb = cumAt(b);
+        const net = yb - ya;
+        const months = Math.abs(b - a) / (30.44 * 86400000);
+        const rate = months > 0 ? net / months : 0;
+        const x1 = xScale(a), y1 = yScale(ya), x2 = xScale(b), y2 = yScale(yb);
+        cpGroup.appendChild(rect(Math.min(x1, x2), MARGIN.top, Math.abs(x2 - x1), innerH, { fill: 'rgba(199,125,255,0.08)' }));
+        cpGroup.appendChild(line(x1, MARGIN.top, x1, MARGIN.top + innerH, { stroke: CP_COL, width: 1, dash: '3 3', opacity: 0.5 }));
+        cpGroup.appendChild(line(x2, MARGIN.top, x2, MARGIN.top + innerH, { stroke: CP_COL, width: 1, dash: '3 3', opacity: 0.5 }));
+        cpGroup.appendChild(line(x1, y1, x2, y2, { stroke: CP_COL, width: 2.5, dash: '7 4', opacity: preview ? 0.6 : 1 }));
+        cpGroup.appendChild(el('circle', { cx: x1, cy: y1, r: 3.2, fill: CP_COL }));
+        cpGroup.appendChild(el('circle', { cx: x2, cy: y2, r: 3.2, fill: CP_COL }));
+        let labX = x2 + 8, labY = y2 - 8;
+        if (labX + 112 > MARGIN.left + innerW) { labX = Math.min(x1, x2) - 112; if (labX < MARGIN.left + 2) labX = MARGIN.left + 2; }
+        if (labY < MARGIN.top + 12) labY = MARGIN.top + 12;
+        const cpLabel   = text(labX, labY, `P · ${rate.toFixed(1)}/mo`, { fill: CP_COL, size: 11.5, weight: 700 });
+        const cpReadout = text(labX, labY + 11, `${isoDayOf(a)}→${isoDayOf(b)} · ${Math.round(net * 10) / 10}u · ${months.toFixed(2)}mo`, { fill: CP_COL, size: 8.5, opacity: 0.95 });
+        cpGroup.appendChild(cpLabel);
+        cpGroup.appendChild(cpReadout);
+        // APP-FIX-DYN-LEGIBILITY — grey backing behind the text so it stays legible
+        // over busy chart areas (operator request). Sized from the rendered text bbox.
+        try {
+          const b1 = cpLabel.getBBox(), b2 = cpReadout.getBBox();
+          const minX = Math.min(b1.x, b2.x), minY = Math.min(b1.y, b2.y);
+          const maxX = Math.max(b1.x + b1.width, b2.x + b2.width), maxY = Math.max(b1.y + b1.height, b2.y + b2.height);
+          const pad = 3.5;
+          cpGroup.insertBefore(el('rect', { x: minX - pad, y: minY - pad, width: (maxX - minX) + 2 * pad, height: (maxY - minY) + 2 * pad, rx: 3, fill: 'rgba(16,24,30,0.86)', stroke: CP_COL, 'stroke-width': 0.8, 'stroke-opacity': 0.4 }), cpLabel);
+        } catch (e) { /* getBBox unavailable — text stays without backing */ }
+      }
+      function clearPeriod(){ cpMode = false; cpStart = null; cpEnd = null; svg.style.cursor = ''; hideHint(); while (cpGroup.firstChild) cpGroup.removeChild(cpGroup.firstChild); }
+      function startSelect(){ cpMode = true; cpStart = null; cpEnd = null; svg.style.cursor = 'crosshair'; const t = target.querySelector('.chart-tip'); if (t) t.classList.add('hidden'); showHint('Click the START of the period…'); }
+
+      svg.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const r = target.getBoundingClientRect();
+        menu.innerHTML = `<div class="cm-item" data-act="select">⤢ Dynamic period select</div>` + ((cpStart != null || cpEnd != null) ? `<div class="cm-item" data-act="clear">✕ Clear period</div>` : '');
+        menu.classList.remove('hidden');
+        let mx = e.clientX - r.left, my = e.clientY - r.top;
+        if (mx + menu.offsetWidth > r.width) mx = r.width - menu.offsetWidth - 2;
+        if (my + menu.offsetHeight > r.height) my = r.height - menu.offsetHeight - 2;
+        menu.style.left = Math.max(0, mx) + 'px';
+        menu.style.top = Math.max(0, my) + 'px';
+      });
+      menu.addEventListener('click', (e) => {
+        const it = e.target.closest && e.target.closest('.cm-item'); if (!it) return;
+        const act = it.getAttribute('data-act');
+        hideMenu();
+        if (act === 'select') startSelect();
+        else if (act === 'clear') clearPeriod();
+      });
+      svg.addEventListener('mousedown', hideMenu);
+
+      svg.addEventListener('click', (e) => {
+        if (!cpMode) return;
+        const d = eventToDate(e);
+        if (d == null) return;
+        if (cpStart == null){ cpStart = d; showHint('Click the END of the period…'); draw(cpStart, d, true); return; }
+        if (Math.abs(d - cpStart) < 6 * 86400000){ showHint('Pick a wider end point (≥ ~1 week)…'); return; }
+        cpEnd = d; cpMode = false; svg.style.cursor = ''; hideHint(); draw(cpStart, cpEnd, false);
+      });
+      svg.addEventListener('mousemove', (e) => {
+        if (!cpMode || cpStart == null) return;
+        const d = eventToDate(e);
+        if (d != null) draw(cpStart, d, true);
+      });
+    }
+
     return svg;
   }
 
@@ -513,21 +628,27 @@
     for (let v = start; v <= max + 1e-9; v += step) out.push(v);
     return out;
   }
+  // APP-FIX-CHART-TZ — month ticks + labels are computed in UTC, not local time.
+  // Data dates are 'YYYY-MM-DD' strings, which Date parses as UTC midnight, and
+  // the whole app's date math is UTC (APP-FIX-BACKCALC-TZ). Using local getters
+  // here (setDate/setMonth/getMonth) placed each tick ~7h off the data and could
+  // shift a tick across a day/month boundary under a DST change — so ticks now
+  // align exactly to the UTC-parsed data points.
   function monthTicks(xMin, xMax, target){
     const months = (xMax - xMin) / (30.44 * 86400000);
     const step   = Math.max(1, Math.round(months / target));
     const out = [];
-    const d = new Date(xMin); d.setDate(1); d.setHours(0,0,0,0);
+    const d = new Date(xMin); d.setUTCDate(1); d.setUTCHours(0,0,0,0);
     while (d.getTime() <= xMax) {
       if (d.getTime() >= xMin) out.push(d.getTime());
-      d.setMonth(d.getMonth() + step);
+      d.setUTCMonth(d.getUTCMonth() + step);
     }
     return out;
   }
   function fmtMonth(t){
     const d = new Date(t);
     const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-    return `${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
+    return `${months[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;
   }
   function fmtNum(v){
     if (Math.abs(v) >= 1000) return Math.round(v).toLocaleString();

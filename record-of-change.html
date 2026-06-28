@@ -380,6 +380,62 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-FIX-CHART-TZ ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-CHART-TZ · Trend chart month-tick math switched to UTC (hygiene)</h4>
+      <ul>
+        <li><b>Context.</b> Operator reported a rare Trend graph where the X-axis dates "didn't render correctly" (materials 1014869 / 1009607). <b>Could not reproduce</b> — those materials aren't in the test data, and clean-data charts render dates correctly (labels right, ticks evenly spaced).</li>
+        <li><b>What changed.</b> <code>chart.js</code> <code>monthTicks</code> / <code>fmtMonth</code> used <b>local</b> date getters (<code>setDate</code> / <code>setMonth</code> / <code>getMonth</code>) on dates JS parses as <b>UTC midnight</b> — the same pattern APP-FIX-BACKCALC-TZ fixed elsewhere. Switched to UTC getters so ticks align exactly to the UTC-parsed data and a DST boundary can't shift a tick.</li>
+        <li><b>Honest scope (credibility).</b> Measured the visible effect at <b>~1 pixel</b> (a tick moved x=413→412) — so this is <b>correctness hygiene, NOT the operator's reported visible glitch</b>, which remains <b>unreproduced</b> (tracked as an open Backlog item; prime suspect = a non-ISO posting-date format in that extract that <code>new Date()</code> misparses → data at the wrong X). Labels unchanged; zero console errors.</li>
+        <li><b>Files.</b> <code>shared/chart.js</code> (<code>monthTicks</code> + <code>fmtMonth</code>). No SCHEMA_VERSION change.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.4-dev — APP-FIX-TREND-CSS ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-TREND-CSS · Trend page wasn't loading the shared detail-panel CSS</h4>
+      <ul>
+        <li><b>Symptom (operator).</b> The open-procurement lamps (APP-OPI-01) rendered as cryptic plain text ("PR PO 1 IT", read as "PRP0 11") on the <b>Trend</b> detail header, but as proper colour-coded lamps on the <b>Screener</b>. "The Screener one is correct."</li>
+        <li><b>Root cause.</b> <code>analysis.html</code> (Trend) loaded only <code>brand-tokens.css</code> + <code>analysis.css</code> — it did <b>not</b> load <code>shared/material-detail.css</code>, where the <code>.opi-*</code> styles live. The Screener loads it. So every detail-panel style added to the shared CSS rendered on the Screener but not on Trend. (This is the visible half of the deferred APP-SCR-02 CSS-duplication item: render logic is single-source via <code>material-detail.js</code>; the CSS was not.)</li>
+        <li><b>Also silently affected (same cause).</b> The recent <b>chart hover tooltip</b> (APP-TREND-HOV), <b>Where-used modal</b> (APP-WU-02) and <b>dynamic-period menu/hint</b> (APP-TREND-DYN) keep their CSS in <code>material-detail.css</code> too — so they were unstyled on Trend (they functioned, but looked wrong). Prior verification checked behaviour/DOM, not computed styling, and missed it.</li>
+        <li><b>Fix.</b> <code>analysis.html</code> now links <code>../shared/material-detail.css</code> <b>before</b> <code>analysis.css</code> — mirroring the Screener's cascade (shared base, page CSS overrides). analysis.css loads after, so it still wins on any duplicated rule (no Trend layout regression); the missing shared rules (OPI lamps, Where-used modal, hover tooltip, dynamic-period menu/hint) now apply on Trend.</li>
+        <li><b>Verified (live preview).</b> Trend stylesheets now brand-tokens · <b>material-detail</b> · analysis; the lit OPI dot is the proper 7px cyan circle (identical to the Screener, was transparent/unstyled before); stat grid still 4-col grid + chart toolbar still flex (no regression); zero console errors.</li>
+        <li><b>Files.</b> <code>analysis/analysis.html</code> (one <code>&lt;link&gt;</code>). No SCHEMA_VERSION change. The deeper <b>APP-SCR-02</b> cleanup (remove the now-redundant duplicated detail rules from <code>analysis.css</code>) remains a follow-up; this fix makes Trend correct without it.</li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.4-dev — APP-TREND-DYN ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-TREND-DYN · Trend chart — dynamic custom-period rate selector</h4>
+      <ul>
+        <li><b>What it is.</b> An ad-hoc "measure the clean rate over a window I pick" tool on the consumption chart (Trend + Screener). Use it when P1 or P2 is contaminated by an inventory return or a stockout and you want the true consumption rate over a clean sub-period. <b>Right-click the chart → "Dynamic period select" → left-click the START, left-click the END</b> → a distinct <b>purple dashed "P" chord</b> appears with <b>P · {rate}/mo</b> and a readout. Right-click → <b>"Clear period"</b> removes it. ~4 interactions, no 16 clicks.</li>
+        <li><b>Legibility (operator feedback).</b> The readout (label + window line) sits on a <b>grey backing rect</b> sized to the text, so it stays readable over busy chart areas; colour switched <b>pink → purple</b> per the operator ("purple beats pink"). The backing is drawn over the chord/dots but behind the text.</li>
+        <li><b>The rate (operator decision).</b> <b>Net ÷ months</b> — the same basis as P1/P2 — drawn as the chord between the cumulative-consumption values at your two endpoints, so its slope reads as the rate exactly like the P1/P2 lines. Net = goods issues (261/201) − returns (262/202) over the window; within a clean window net = gross, which is the point of picking a clean window.</li>
+        <li><b>Free endpoints + transparent readout (operator decision).</b> Click anywhere; the click maps to a date via the SVG's own transform (<code>getScreenCTM</code>), clamped to the data range. The readout under the label shows <b>{startDate}→{endDate} · {net}u · {months}mo</b> so you can verify the math — <b>net ÷ months ties out to the shown rate</b> (months shown to 2 decimals precisely so the division checks out). A live preview chord follows the cursor while you pick the end; a short window (&lt; ~1 week) asks for a wider end point.</li>
+        <li><b>Behaviour.</b> One custom period at a time (re-selecting replaces it); it resets when you switch material (the chart re-renders). The per-event hover (APP-TREND-HOV) is suppressed only while you're actively picking, and works normally otherwise. Self-contained in <code>chart.js</code> (SVG chord + HTML right-click menu + pick hint), gated on nothing — available whenever a chart is drawn.</li>
+        <li><b>Verified (live preview).</b> Real app on 1001220: right-click → menu (Dynamic period select; Clear once a period exists) → two clicks → "P · 55.0/mo" with readout "2025-06-02→2026-04-10 · 564u · 10.26mo"; an independent MB51 recompute of that window gave net 564 ÷ 10.25 mo = <b>55.0</b> — exact match, and the readout self-ties-out (564 ÷ 10.26 = 55.0). Clear empties the period; switching material clears it; the hover still works outside select mode; Trend + Screener identical; zero console errors.</li>
+        <li><b>Files.</b> <code>shared/chart.js</code> (select-mode + menu + pick + chord/readout draw), <code>shared/material-detail.css</code> (right-click menu + pick-hint styles). No SCHEMA_VERSION change. Snapshot: <code>_rollback/APP-TREND-DYN-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-TREND-PEC + APP-TREND-HOV ───────── -->
     <article class="roc-entry dev">
       <div class="head">
