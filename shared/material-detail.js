@@ -368,7 +368,10 @@
       ${renderMrpCompare(mat)}
       ${renderInvAdjTable(mat)}
 
-      ${renderHceTable(mat)}
+      <!-- APP-TREND-HCE-RM — on-screen HCE table removed from the detail panel:
+           the per-event chart hover (APP-TREND-HOV), Where-used drill (APP-WU-02)
+           and the chart's own top-HCE annotations cover this dynamically now.
+           (PDF Pack + Excel still carry their own HCE table — unchanged.) -->
 
       ${llmActionsHtml}
       ${llmCfg ? renderLlmPanel(llmCfg) : ''}

@@ -25,7 +25,22 @@
   function monthsBetween(a, b){
     const da = toDate(a), db = toDate(b);
     if (!da || !db) return 0;
-    return (db.getFullYear() - da.getFullYear()) * 12 + (db.getMonth() - da.getMonth());
+    // APP-FIX-P1-RATE — UTC getters. 'YYYY-MM-DD' parses as UTC midnight, so
+    // local getters in a west-of-UTC timezone read the 1st of a month as the
+    // previous month (Apr 1 → Mar 31), over-counting p1Months by 1 (e.g. 6
+    // instead of 5 → P1 rate ~17% low). UTC keeps the count in calendar-day space.
+    return (db.getUTCFullYear() - da.getUTCFullYear()) * 12 + (db.getUTCMonth() - da.getUTCMonth());
+  }
+  // APP-FIX-P1-RATE — snap a date to the 1st / last day of its (UTC) month, so
+  // the P1 window is whole calendar months and monthsBetween+1 == its true length.
+  function snapMonthStart(iso){
+    const d = toDate(iso); if (!d) return iso;
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
+  }
+  function snapMonthEnd(iso){
+    const d = toDate(iso); if (!d) return iso;
+    const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
+    return `${last.getUTCFullYear()}-${String(last.getUTCMonth() + 1).padStart(2, '0')}-${String(last.getUTCDate()).padStart(2, '0')}`;
   }
 
   /* ─── Group-by helper ───────────────────────────────────────────────────── */
@@ -711,8 +726,8 @@
     const minMonths  = params.minMonths;
     const maxMonths  = params.maxMonths;
     const p2Months   = params.p2Months;
-    const p1Start    = params.p1Start;
-    const p1End      = params.p1End;
+    const p1Start    = snapMonthStart(params.p1Start);   // APP-FIX-P1-RATE — whole-month window
+    const p1End      = snapMonthEnd(params.p1End);
     const p1Months   = Math.max(1, monthsBetween(p1Start, p1End) + 1);
     const p2Start    = addMonths(runDate, -p2Months);
     const p2End      = runDate;

@@ -380,6 +380,32 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-FIX-P1-RATE + APP-TREND-HCE-RM ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-28</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-P1-RATE · P1 consumption rate was ~17–20% low — timezone bug in the month-count divisor (corrected)</h4>
+      <ul>
+        <li><b>Symptom.</b> Overlaying a <b>dynamic custom-period rate</b> (APP-TREND-DYN) on top of the P1 baseline gave a different number — usually small, but sometimes <b>&gt;20%</b>, and <b>more pronounced over P1 than P2</b>. P1 is rarely referenced, but it still has to be correct.</li>
+        <li><b>Root cause (investigated + confirmed live).</b> The P1 rate is <code>net ÷ p1Months</code>, where <code>p1Months = monthsBetween(p1Start, p1End) + 1</code>. <code>monthsBetween</code> used <b>local</b> date getters on dates that parse as <b>UTC midnight</b> — so in a west-of-UTC timezone <code>new Date('2025-04-01').getMonth()</code> reads as <b>March</b> (Apr 1 UTC = Mar 31 local). For the default Apr 1 → Aug 31 window that made <code>p1Months = 6</code> instead of <b>5</b>, so P1 was divided by one month too many → <b>~17% low</b>. Confirmed in-app: material 1001220 read <b>26.0</b> (156 ÷ 6); it should be <b>31.2</b> (156 ÷ 5), which is exactly what the dynamic overlay and an independent recomputation both give. Same timezone-trap family as <code>APP-FIX-BACKCALC-TZ</code> and <code>APP-FIX-CHART-TZ</code>.</li>
+        <li><b>Why P1 not P2.</b> Only P1 uses <code>monthsBetween</code>. The P2 window is built as <em>exactly</em> <code>p2Months</code> (<code>addMonths(runDate, −p2Months)</code>), so its divisor already matches its length — that's why the discrepancy was "more pronounced over P1." P2 rates are <b>unchanged</b> by this fix.</li>
+        <li><b>Fix (operator decision: fix monthsBetween + snap).</b> (1) <code>monthsBetween</code> switched to <b>UTC</b> getters, so the count is correct everywhere. (2) The P1 window is <b>snapped to whole calendar months</b> (start → 1st, end → last day) in the pipeline <em>and</em> at intake, so <code>monthsBetween+1</code> always equals the window's true length even for a non-month-aligned pick. Both done with <code>snapMonthStart</code>/<code>snapMonthEnd</code> (UTC).</li>
+        <li><b>Blast radius (this is a change to the deterministic math — surfaced, not hidden).</b> Every P1 rate with a whole-month window rises <b>exactly 20%</b> (÷6 → ÷5) to its correct value. On the LV sample (69 of 82 materials have a P1 rate) that re-trips <b>3 rate-drop</b> and <b>6 rate-rise</b> flags — these are <b>corrections</b> (the old flags were computed off the buggy rate), and any traffic-light keyed off them shifts with them. The Min/Max recommendation algorithm itself is otherwise untouched; the LLM still only annotates.</li>
+        <li><b>Latent, NOT fixed (queued).</b> <code>addMonths</code> (used to build the P2 window) mixes local <code>get/setMonth</code> with UTC <code>toISOString</code> — the same timezone-trap family. It can shift the P2 window edge by a day in some cases. Left untouched this round (P2's discrepancy is already within ~1% and the operator's concern was P1); logged as a follow-up so it isn't lost.</li>
+        <li><b>Files.</b> <code>shared/pipeline.js</code> (UTC <code>monthsBetween</code> + snap helpers + snap the P1 window), <code>intake/intake.js</code> (snap the P1 date inputs on change). No SCHEMA_VERSION change.</li>
+      </ul>
+
+      <h4>APP-TREND-HCE-RM · High-Consumption-Events table removed from the on-screen detail panel</h4>
+      <ul>
+        <li><b>Why.</b> The per-event <b>chart hover</b> (APP-TREND-HOV), the <b>Where-used drill</b> (APP-WU-02) and the chart's own top-HCE annotations now let you read the same events dynamically — the static table at the bottom of the detail panel is redundant.</li>
+        <li><b>What.</b> Dropped the <code>renderHceTable(mat)</code> call from the shared detail template (<code>shared/material-detail.js</code>), so the table no longer renders on <b>Trend, Screener, or Sandbox</b>. The chart, stats, MRP-compare and Inv-Adj sections are unchanged. The <b>PDF Pack and Excel exports keep their own HCE tables</b> — those are client deliverables and were not touched. Verified: panel renders cleanly, no HCE table, zero console errors.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-SBX-01 sandbox ───────── -->
     <article class="roc-entry dev">
       <div class="head">

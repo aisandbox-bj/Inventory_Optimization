@@ -1714,6 +1714,17 @@
     renderParams();
   }
 
+  // APP-FIX-P1-RATE — snap a 'YYYY-MM-DD' to the 1st / last day of its (UTC) month.
+  function snapMonthStartIso(iso){
+    const d = new Date(iso); if (isNaN(d.getTime())) return iso;
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
+  }
+  function snapMonthEndIso(iso){
+    const d = new Date(iso); if (isNaN(d.getTime())) return iso;
+    const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
+    return `${last.getUTCFullYear()}-${String(last.getUTCMonth() + 1).padStart(2, '0')}-${String(last.getUTCDate()).padStart(2, '0')}`;
+  }
+
   function renderParams(){
     const factory = CanonicalSchema.FACTORY_DEFAULTS;
     const saved   = state.paramsSaved;
@@ -1778,6 +1789,10 @@
             .filter(Boolean);
         }
         else                       v = el.value;
+        // APP-FIX-P1-RATE — snap the P1 window to whole calendar months (mirrors
+        // the pipeline) so its month-count divisor equals the true window length.
+        if (k === 'p1Start' && v) { v = snapMonthStartIso(v); el.value = v; }
+        if (k === 'p1End'   && v) { v = snapMonthEndIso(v);   el.value = v; }
         state.paramsRun[k] = v;
         if (k === 'minMaxMethod') toggleLeadTimesDrop();
         renderParams();
