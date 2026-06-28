@@ -380,6 +380,25 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-SBX-01 sandbox ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-SBX-01 · Sandbox — a scratch page to test classifier hypotheses before promoting them</h4>
+      <ul>
+        <li><b>Why.</b> Operator wants to validate a change to the Lumpy/Smooth classifier across a stack of real charts <em>before</em> it touches the live decision tree — "prove it, then promote, then clear the test page." A new <b>Sandbox</b> sibling page is that surface; the live pipeline classifier is <b>unchanged</b>.</li>
+        <li><b>What it is.</b> A clone of the <b>Screener, minus the Trace graphic</b>: same band filter + material list (click through fast), the shared consumption <b>chart + stats</b>, and — <b>below the graph</b> — a permanent <b>consumption histogram</b> (units per event, with mean + median markers) and a side-by-side <b>Calc A (current) vs Calc B (proposed)</b> comparison with each one's numbers and LUMPY/SMOOTH verdict + an AGREE/DISAGREE line.</li>
+        <li><b>Calc A vs Calc B.</b> <b>Calc A</b> = the current rule (per work order: top-1 dominance + CV + few-events; verdict = the live <code>mat.pattern</code>, numbers recomputed for display). <b>Calc B</b> = the proposed mean-vs-median rule (operator decision): LUMPY when <b>skew (mean ÷ median) ≥ a threshold</b> OR <b>events ≤ a threshold</b> — both are <b>live sliders</b>, so you tune them and watch the per-material verdict flip and a cross-material summary ("A: x LUMPY · B: y LUMPY · z disagree of N") update in real time.</li>
+        <li><b>Honest nuance.</b> The Sandbox shows the <b>analysed</b> materials only — the pipeline's min-events screen already removes very-low-event materials before they get here, so Calc B's "events ≤ k" rule rarely fires on this data unless the screen is loose. Testing the classifier on those screened-out materials needs the "show excluded user-list materials" feature (separately scoped) or a looser screen.</li>
+        <li><b>Verified (live preview, LV data).</b> Page loads (82 materials), histogram + dual-calc render below the chart, sliders update verdicts + the summary live (skew→1.0 flips 1001220 to LUMPY; B count 14→30 as the threshold drops; reset restores 14·8-disagree). Trace cell removed; consumption chart intact; zero console errors. Storage keys namespaced (<code>sandbox.viewState</code> / <code>settings.sandboxBands</code>) so it doesn't clobber the Screener.</li>
+        <li><b>Files.</b> NEW <code>sandbox/sandbox.{html,js,css}</code> (cloned from the Screener) + <code>shared/consumption-profile.js</code> (stats + Calc B + histogram — a shared module so a winning rule is lift-and-shift to the live pages). Nav "⚗ Sandbox" link added to Dashboard / Trend / Screener. No SCHEMA_VERSION change, no change to the live classifier. <b>Scratch page — to be cleared once a classifier winner is promoted.</b> (Carry-over cosmetic: the cloned list still shows the Screener's export-flag checkbox; vestigial, the export button is removed.)</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-FIX-CHART-TZ ───────── -->
     <article class="roc-entry dev">
       <div class="head">

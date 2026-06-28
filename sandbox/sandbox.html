@@ -12,12 +12,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Inventory Optimization · Screener</title>
+<title>Inventory Optimization · Sandbox</title>
 <meta name="app-version" content="2.1.4-dev" />
 <link rel="stylesheet" href="../shared/brand-tokens.css" />
 <link rel="stylesheet" href="../shared/material-detail.css" />
 <link rel="stylesheet" href="../shared/trace-phase.css" />
-<link rel="stylesheet" href="screener.css" />
+<link rel="stylesheet" href="sandbox.css" />
 </head>
 <body>
 
@@ -25,15 +25,15 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.1.4-dev · Screener</a>
+    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.1.4-dev · Sandbox</a>
   </div>
   <div class="links">
     <a href="../index.html">Dashboard</a>
     <a href="../intake/intake.html">Intake</a>
     <a href="../analysis/analysis.html">Trend</a>
     <a href="../trace/trace.html">Trace</a>
-    <a href="screener.html" class="active">Screener</a>
-    <a href="../sandbox/sandbox.html">⚗ Sandbox</a>
+    <a href="../screener/screener.html">Screener</a>
+    <a href="sandbox.html" class="active">⚗ Sandbox</a>
     <a href="../settings/settings.html">Settings</a>
     <a href="../record-of-change.html">RoC</a>
     <a href="../user-manual.html">Manual</a>
@@ -59,7 +59,14 @@
       <div class="scr-active-bands" id="scrActiveBands"></div>
       <button id="btnBands" class="primary" title="Set the bands (filters) that decide which analysed materials appear in the Screener">⚙ Screener bands…</button>
       <button id="btnClearBands" class="ghost" title="Clear all bands — show every analysed material">Clear bands</button>
-      <button id="btnExport" class="primary" title="Export one letter-size PDF page per flagged material — both tiles side by side. Flag materials with the checkbox in the list.">⤓ Export flagged (0)</button>
+    </div>
+
+    <div class="sbx-controls" id="sbxControls" hidden>
+      <span class="sbx-ctl-lab">Calc B (proposed) — LUMPY when</span>
+      <label class="sbx-slider">skew (mean÷median) ≥ <input type="range" id="sbxSkew" min="1" max="4" step="0.1" value="1.6" /> <b id="sbxSkewV">1.6</b></label>
+      <label class="sbx-slider">or events ≤ <input type="range" id="sbxMinEv" min="0" max="10" step="1" value="3" /> <b id="sbxMinEvV">3</b></label>
+      <div class="sbx-toolbar-spacer"></div>
+      <div class="sbx-summary" id="sbxSummary">—</div>
     </div>
 
     <div class="scr-main" id="scrMain" hidden>
@@ -116,7 +123,8 @@
 <script src="../shared/where-used.js"></script>
 <script src="../shared/movement-detail.js"></script>
 <script src="../shared/material-detail.js"></script>
-<script src="screener.js"></script>
+<script src="../shared/consumption-profile.js"></script>
+<script src="sandbox.js"></script>
 
 </body>
 </html>
