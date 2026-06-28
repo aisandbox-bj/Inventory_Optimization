@@ -77,7 +77,7 @@
     // the Trace page (otherwise the average chain length wouldn't reconcile).
     traceExcl:        { manualByMat: {}, sigmaLimit: null },
     // SANDBOX — Calc B (proposed classifier) thresholds, driven by the sliders.
-    sbx:              { skewT: 1.6, minEv: 3 }
+    sbx:              { factor: 1.2 }   // APP-SBX-BATCHMIN — batched-Min factor (will read from settings when promoted)
   };
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -483,21 +483,24 @@
     }
   }
 
-  function calcBFor(entry){
-    return ConsumptionProfile.calcB(entry.sbxStats, { skewThreshold: state.sbx.skewT, minEvents: state.sbx.minEv });
+  // APP-SBX-BATCHMIN — does the recommended Min cover a typical batch draw?
+  // batch size = median units-per-event (robust to spot-pull outliers);
+  // batched Min = batch size × factor. Flag when it exceeds the current rec Min.
+  function batchAdequacy(entry){
+    const st = entry.sbxStats || {};
+    const batchSize  = st.median || 0;
+    const factor     = state.sbx.factor || 1.2;
+    const batchedMin = batchSize > 0 ? Math.round(batchSize * factor) : null;
+    const currentMin = (entry.m.recMin != null) ? entry.m.recMin : null;
+    const needBatched = currentMin != null && batchedMin != null && batchedMin > currentMin;
+    return { batchSize, factor, batchedMin, currentMin, needBatched };
   }
 
   function bindSandboxControls(){
-    const sk = $('#sbxSkew'), me = $('#sbxMinEv');
-    if (sk) sk.addEventListener('input', () => {
-      state.sbx.skewT = parseFloat(sk.value);
-      $('#sbxSkewV').textContent = state.sbx.skewT.toFixed(1);
-      updateSandboxSummary();
-      refreshProfilePanel();
-    });
-    if (me) me.addEventListener('input', () => {
-      state.sbx.minEv = parseInt(me.value, 10);
-      $('#sbxMinEvV').textContent = String(state.sbx.minEv);
+    const f = $('#sbxFactor');
+    if (f) f.addEventListener('input', () => {
+      const v = parseFloat(f.value);
+      if (Number.isFinite(v) && v > 0) state.sbx.factor = v;
       updateSandboxSummary();
       refreshProfilePanel();
     });
@@ -505,15 +508,12 @@
 
   function updateSandboxSummary(){
     const el = $('#sbxSummary'); if (!el) return;
-    let aLump = 0, bLump = 0, disagree = 0;
+    let need = 0, evaluable = 0;
     for (const e of state.materials) {
-      const a = e.m.pattern === 'LUMPY';
-      const b = calcBFor(e).lumpy;
-      if (a) aLump++;
-      if (b) bLump++;
-      if (a !== b) disagree++;
+      const ad = batchAdequacy(e);
+      if (ad.currentMin != null && ad.batchedMin != null) { evaluable++; if (ad.needBatched) need++; }
     }
-    el.innerHTML = `<span class="sbx-sum-a">A: ${aLump} LUMPY</span> · <span class="sbx-sum-b">B: ${bLump} LUMPY</span> · <span class="sbx-sum-d">${disagree} disagree</span> <span class="sbx-sum-n">of ${state.materials.length}</span>`;
+    el.innerHTML = `<span class="sbx-sum-b">${need} need a higher (batched) Min</span> <span class="sbx-sum-n">of ${evaluable} with a Min · ${state.materials.length} total</span>`;
   }
 
   function refreshProfilePanel(){
@@ -528,39 +528,44 @@
   function sbx1(v){ return v == null ? '—' : (Math.round(v * 10) / 10); }
 
   function renderProfilePanel(host, entry){
-    const st = entry.sbxStats, a = entry.sbxA, b = calcBFor(entry);
-    const aVerdict = entry.m.pattern || '—';
-    const agree = (aVerdict === b.verdict);
-    const histo = ConsumptionProfile.renderHistogram(entry.sbxQtys, { width: 520, height: 156 });
-    const skewHot = st.skew != null && st.skew >= state.sbx.skewT;
+    const st  = entry.sbxStats;
+    const pat = entry.m.pattern || '';                                  // raw LUMPY/SMOOTH → reuse its colour class
+    const patLabel = pat === 'LUMPY' ? 'BATCHED' : (pat === 'SMOOTH' ? 'STEADY' : (pat || '—'));
+    const ad  = batchAdequacy(entry);
+    const histo = ConsumptionProfile.renderHistogram(entry.sbxQtys, { width: 1040, height: 320, color: ad.needBatched ? '#FBBF24' : '#5DD9E2' });
+    const vClass = ad.needBatched ? 'LUMPY' : 'SMOOTH';
+    const vPill  = ad.currentMin == null ? '—' : (ad.needBatched ? 'RAISE MIN' : 'OK');
+    let banner;
+    if (ad.currentMin == null)      banner = `No recommended Min (not calculable) — can't test batch coverage`;
+    else if (ad.batchedMin == null) banner = `No consumption events — no batch size to cover`;
+    else if (ad.needBatched)        banner = `Batched Min <b>${ad.batchedMin.toLocaleString()}</b> &gt; current Min ${ad.currentMin.toLocaleString()} → raise Min to cover a ${sbx1(ad.batchSize)}-unit batch`;
+    else                            banner = `Current Min ${ad.currentMin.toLocaleString()} ≥ batched Min ${ad.batchedMin.toLocaleString()} — covers a ${sbx1(ad.batchSize)}-unit batch`;
     host.innerHTML = `
       <div class="sbx-histo">${histo}</div>
       <div class="sbx-compare">
         <div class="sbx-calc sbx-calc-a">
-          <div class="sbx-calc-h">Calc A · current <span class="sbx-verdict ${aVerdict}">${aVerdict}</span></div>
-          <div class="sbx-calc-sub">per work order · dominance + CV + few-events</div>
+          <div class="sbx-calc-h">Consumption profile <span class="sbx-verdict ${pat}">${patLabel}</span></div>
+          <div class="sbx-calc-sub">per event · ${st.n} event${st.n === 1 ? '' : 's'}</div>
           <div class="sbx-rows">
-            <span>WOs</span><b>${a.woCount}</b>
-            <span>top-1 share</span><b>${sbxPct(a.top1)}</b>
-            <span>CV</span><b>${sbx2(a.cv)}</b>
-            <span>total</span><b>${Math.round(a.total).toLocaleString()}</b>
+            <span>mean</span><b>${sbx1(st.mean)}</b>
+            <span>median (batch)</span><b>${sbx1(st.median)}</b>
+            <span>std</span><b>${sbx1(st.std)}</b>
+            <span>min–max</span><b>${sbx1(st.min)}–${sbx1(st.max)}</b>
+            <span>skew (mean÷med)</span><b>${st.skew == null ? '—' : sbx2(st.skew)}</b>
           </div>
         </div>
         <div class="sbx-calc sbx-calc-b">
-          <div class="sbx-calc-h">Calc B · proposed <span class="sbx-verdict ${b.verdict}">${b.verdict}</span></div>
-          <div class="sbx-calc-sub">per event · mean-vs-median skew</div>
+          <div class="sbx-calc-h">Min adequacy <span class="sbx-verdict ${vClass}">${vPill}</span></div>
+          <div class="sbx-calc-sub">batched Min = batch size (median) × ${ad.factor}</div>
           <div class="sbx-rows">
-            <span>events</span><b>${st.n}</b>
-            <span>mean</span><b>${sbx1(st.mean)}</b>
-            <span>median</span><b>${sbx1(st.median)}</b>
-            <span>skew (mean÷med)</span><b class="${skewHot ? 'sbx-hot' : ''}">${st.skew == null ? '—' : sbx2(st.skew)}</b>
-            <span>std</span><b>${sbx1(st.std)}</b>
-            <span>min–max</span><b>${sbx1(st.min)}–${sbx1(st.max)}</b>
+            <span>batch size (median)</span><b>${sbx1(ad.batchSize)}</b>
+            <span>factor</span><b>${ad.factor}</b>
+            <span>current Min</span><b>${ad.currentMin == null ? '—' : ad.currentMin.toLocaleString()}</b>
+            <span>batched Min</span><b class="${ad.needBatched ? 'sbx-hot' : ''}">${ad.batchedMin == null ? '—' : ad.batchedMin.toLocaleString()}</b>
           </div>
-          <div class="sbx-reasons">${b.reasons.join(' · ')}</div>
         </div>
       </div>
-      <div class="sbx-agree ${agree ? 'ok' : 'no'}">A = ${aVerdict} &nbsp;·&nbsp; B = ${b.verdict} &nbsp;→&nbsp; ${agree ? 'AGREE' : 'DISAGREE'}</div>`;
+      <div class="sbx-agree ${ad.needBatched ? 'no' : 'ok'}">${banner}</div>`;
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

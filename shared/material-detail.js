@@ -63,37 +63,57 @@
     const imPO = (op.imOpenPO   != null && op.imOpenPO   > 0) ? op.imOpenPO   : 0;
     const imIT = (op.imInTransit != null && op.imInTransit > 0) ? op.imInTransit : 0;
     if (!op.hasPr && !imPO && !imIT) return '';   // nothing to show
+    // APP-FIX-OPI-RECON — the lamp number is the SAP Inventory-Master snapshot
+    // QUANTITY where present (operator-confirmed truth, e.g. open PO = 127 units);
+    // otherwise the count of chains traced from PR History. Title carries both so
+    // a qty is never silently shown as if it were a count. data-opi routes the
+    // click to that lamp's own popover (no more one-tile-for-all-lamps).
     const lamps = [
-      { key:'pr', lab:'PR', lit: prN > 0,            n: prN,            title:`Open PR: ${prN}` },
-      { key:'po', lab:'PO', lit: poN > 0 || imPO > 0, n: poN || imPO,   title:`Open PO: ${poN}${imPO ? ` · SAP qty ${imPO}` : ''}` },
-      { key:'it', lab:'IT', lit: itN > 0 || imIT > 0, n: itN || imIT,   title:`In transit: ${itN}${imIT ? ` · SAP qty ${imIT}` : ''}` }
+      { key:'pr', lab:'PR', lit: prN > 0,             n: prN,         title:`Open PR — ${prN} traced from PR History` },
+      { key:'po', lab:'PO', lit: poN > 0 || imPO > 0, n: imPO || poN, title:`Open PO — SAP snapshot ${imPO ? imPO + ' units' : 'n/a'} · ${poN} on-order traced` },
+      { key:'it', lab:'IT', lit: itN > 0 || imIT > 0, n: imIT || itN, title:`In transit — SAP snapshot ${imIT ? imIT + ' units' : 'n/a'} · ${itN} traced` }
     ];
     const lampHtml = lamps.map(l =>
-      `<span class="opi-lamp opi-${l.key} ${l.lit ? 'lit' : 'off'}" title="${escapeAttr(l.title)}">`
+      `<span class="opi-lamp opi-${l.key} ${l.lit ? 'lit' : 'off'}" data-opi="${l.key}" title="${escapeAttr(l.title)}">`
       + `<span class="opi-dot"></span><span class="opi-lab">${l.lab}</span>`
       + `${l.lit && l.n ? `<span class="opi-n">${l.n}</span>` : ''}</span>`
     ).join('');
-    return `<div class="opi-wrap"><div class="opi-lamps" id="opiLamps" title="Open procurement — PR / PO / In Transit (click for detail)">${lampHtml}</div>${renderOpiPopover(op)}</div>`;
+    return `<div class="opi-wrap"><div class="opi-lamps" id="opiLamps" title="Open procurement — PR / PO / In Transit (click a lamp for detail)">${lampHtml}</div>${renderOpiPopover(op)}</div>`;
   }
   function renderOpiPopover(op){
     const fmtDate = d => d ? String(d).slice(0, 10) : '—';
-    const section = (title, items, idFn, dateFn) => {
-      if (!items || !items.length) return '';
+    const sumQty  = items => (items || []).reduce((a, c) => a + (Number(c.qty) || 0), 0);
+    const tbl = (items, idFn, dateFn) => {
+      if (!items || !items.length) return '<div class="opi-empty">none traced from PR History.</div>';
       const rows = items.map(c =>
         `<tr><td>${escapeHtml(idFn(c))}</td><td>${fmtDate(dateFn(c))}</td><td class="num">${opiNum(c.qty)}</td><td class="num">${opiAge(dateFn(c))}</td></tr>`
       ).join('');
-      return `<div class="opi-sec"><div class="opi-sec-h">${title} <span class="opi-sec-n">${items.length}</span></div>`
-        + `<table class="opi-tbl"><thead><tr><th>Ref</th><th>Created</th><th class="num">Qty</th><th class="num">Age</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      return `<table class="opi-tbl"><thead><tr><th>Ref</th><th>Created</th><th class="num">Qty</th><th class="num">Age</th></tr></thead><tbody>${rows}</tbody></table>`;
     };
-    const prSec = section('Open PR', op.openPR, c => 'PR ' + c.pr, c => c.prDate);
-    const poSec = section('Open PO · on order', op.onOrder, c => 'PO ' + c.po, c => c.poDate);
-    const itSec = section('In transit · at 3PL', op.inTransit, c => 'PO ' + c.po, c => c.gr3pl);
-    const body = (prSec + poSec + itSec) || '<div class="opi-empty">No open PR / PO / in-transit chains.</div>';
-    const imLine = (op.imOpenPO != null || op.imInTransit != null)
-      ? `<div class="opi-im">SAP snapshot (Inventory Master) — open PO: <b>${opiNum(op.imOpenPO)}</b> · in transit: <b>${opiNum(op.imInTransit)}</b></div>`
-      : '';
-    return `<div class="opi-pop hidden" id="opiPop"><div class="opi-pop-h">Open procurement</div>${body}${imLine}`
-      + `<div class="opi-pop-cav">Ref · created date · qty · days open. PR/PO/in-transit from PR History + MB51 movements; SAP snapshot from Inventory Master.</div></div>`;
+    // Honest reconciliation: the SAP snapshot is the headline; the PR-History line
+    // items are what could be traced. When they don't add up, SAY SO (credibility)
+    // rather than showing the snapshot number over a list that can't match it.
+    const recon = (label, imQty, tracedItems) => {
+      if (imQty == null) return '';
+      const traced = sumQty(tracedItems);
+      const n = (tracedItems || []).length;
+      let note = `SAP snapshot (Inventory Master): <b>${opiNum(imQty)}</b> ${label} units. PR History traces ${n} (${opiNum(traced)} units).`;
+      if (imQty > traced)      note += ` The remaining <b>${opiNum(imQty - traced)}</b> are on ${label} lines not in the loaded PR History.`;
+      else if (imQty < traced) note += ` Traced exceeds the snapshot — the SAP extract may predate recent activity.`;
+      return `<div class="opi-im">${note}</div>`;
+    };
+    const cav = `<div class="opi-pop-cav">Line items: ref · created date · qty · days open, from PR History + MB51. Headline figure is the SAP Inventory-Master snapshot.</div>`;
+    const pop = (key, title, body) =>
+      `<div class="opi-pop hidden" id="opiPop-${key}"><div class="opi-pop-h">${title}</div>${body}${cav}</div>`;
+    // SAP "open PO" = not yet GR'd at site = on-order PLUS in-transit (received at
+    // the 3PL but not at site); reconcile the snapshot against both.
+    const poBody = `<div class="opi-sec-h">On order</div>${tbl(op.onOrder, c => 'PO ' + c.po, c => c.poDate)}`
+                 + recon('open-PO', op.imOpenPO, [...(op.onOrder || []), ...(op.inTransit || [])]);
+    const itBody = `<div class="opi-sec-h">At 3PL · in transit</div>${tbl(op.inTransit, c => 'PO ' + c.po, c => c.gr3pl)}`
+                 + recon('in-transit', op.imInTransit, op.inTransit);
+    return pop('pr', 'Open PR', tbl(op.openPR, c => 'PR ' + c.pr, c => c.prDate))
+         + pop('po', 'Open PO', poBody)
+         + pop('it', 'In transit', itBody);
   }
 
   /* ─── MRP Settings Comparison: Current (shaded) vs Recommended (shaded) ─ */
@@ -451,13 +471,23 @@
       wuBtn.addEventListener('click', () => openWhereUsedModal(mat, opts));
     }
 
-    // APP-OPI-01 — open-procurement lamps: click a lamp to toggle the detail
-    // popover. One guarded document-level handler closes any open popover.
+    // APP-OPI-01 / APP-FIX-OPI-RECON — click a lamp to toggle ITS OWN popover
+    // (PR / PO / IT each have a distinct #opiPop-<key>); clicking another lamp
+    // switches; clicking the lit lamp again closes. One guarded document-level
+    // handler closes any open popover.
     const opiLamps = hostEl.querySelector('#opiLamps');
-    const opiPop   = hostEl.querySelector('#opiPop');
-    if (opiLamps && opiPop) {
-      opiLamps.addEventListener('click', (e) => { e.stopPropagation(); opiPop.classList.toggle('hidden'); });
-      opiPop.addEventListener('click', (e) => e.stopPropagation());
+    const opiWrap  = hostEl.querySelector('.opi-wrap');
+    if (opiLamps && opiWrap) {
+      opiLamps.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const lamp = e.target.closest('.opi-lamp');
+        if (!lamp) return;
+        const pop = opiWrap.querySelector('#opiPop-' + lamp.getAttribute('data-opi'));
+        const reopen = pop && pop.classList.contains('hidden');
+        opiWrap.querySelectorAll('.opi-pop').forEach(p => p.classList.add('hidden'));
+        if (pop && reopen) pop.classList.remove('hidden');
+      });
+      opiWrap.querySelectorAll('.opi-pop').forEach(p => p.addEventListener('click', (e) => e.stopPropagation()));
       if (!window._opiDocCloseWired) {
         window._opiDocCloseWired = true;
         document.addEventListener('click', () => {

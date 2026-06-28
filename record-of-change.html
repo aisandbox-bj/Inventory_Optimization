@@ -380,6 +380,34 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-FIX-OPI-RECON + APP-SBX-BATCHMIN + APP-FIX-HISTO-LEGIBLE ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-28</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-OPI-RECON · Open PR/PO/In-Transit popover — per-lamp tiles + honest SAP-vs-traced reconciliation</h4>
+      <ul>
+        <li><b>Symptom (operator).</b> The PO lamp correctly showed <b>Open PO = 127</b> (confirmed in SAP), but clicking it opened a tile listing only 2 POs that didn't total 127 — and clicking the PR lamp opened the <b>same</b> tile.</li>
+        <li><b>Cause.</b> (1) One shared popover rendered <em>all three</em> sections and every lamp toggled it → identical tile for PR/PO/IT. (2) The PO lamp number is the SAP <b>Inventory-Master snapshot quantity</b> (127 units), while the listed line items come from the <b>PR-History-derived chains</b> — a different, partial source. SAP has 127 units on open POs; the loaded PR History only traces the few with a PR→PO linkage. The 127 is right; the app simply can't break it into line items from what it was given.</li>
+        <li><b>Fix.</b> Each lamp now opens <b>its own popover</b> (PR / PO / IT). The lamp number is the <b>SAP snapshot quantity</b> where present (the confirmed truth), with the traced-chain count in the tooltip — it no longer silently switches between a SAP <em>quantity</em> and a chain <em>count</em>. And the PO/IT popover <b>states the reconciliation in plain English</b> (credibility): e.g. <i>"SAP snapshot: 127 open-PO units. PR History traces 2 (18 units). The remaining 109 are on open-PO lines not in the loaded PR History."</i> SAP "open PO" is reconciled against on-order <em>plus</em> in-transit (both are POs not yet GR'd at site). Verified live (per-lamp separation on 2000669; injected a 127 snapshot → note reads "…traces 1 (80 units). The remaining 47 are on open-PO lines not in the loaded PR History"). Trend + Screener. Files: <code>shared/material-detail.js</code>.</li>
+      </ul>
+
+      <h4>APP-SBX-BATCHMIN · Sandbox reworked into a batched-Min testbed (replaces the skew sliders)</h4>
+      <ul>
+        <li><b>Concept (operator).</b> The Min/Max math is rate-based, which assumes <em>smooth</em> withdrawal. For <b>batched</b> demand (track rebuild draws the whole set; nuts draw a big recurring lot) the rate can look fine while the Min sits <em>below a single batch</em> — so a repeatable request can't be filled. The lever is a <b>batch-coverage check</b>: does the recommended Min cover a typical batch draw?</li>
+        <li><b>What.</b> The Sandbox's skew sliders are gone; in their place a single <b>factor</b> text box. The panel below the chart now shows a <b>Consumption profile</b> (per-event mean / median / std / min–max / skew, with the pattern shown as <b>BATCHED / STEADY</b>) and a <b>Min adequacy</b> box with <b>two Mins</b>: the <b>current</b> recommended Min and a <b>batched Min = batch size (median units-per-event) × factor</b>. When the batched Min exceeds the current Min it flags <b>RAISE MIN</b> (amber histogram + red banner), and the toolbar summary counts how many materials need a higher Min. Verified on LV: at factor 1.2, 0 of 66 trip (LV materials are high-volume — e.g. Min 3,000 vs a 96-unit batch → batched Min 115); at factor 40, 62 trip (3,840 &gt; 3,000) — mechanism + summary + banner all respond.</li>
+        <li><b>Still a scratch page.</b> The live classifier and Min/Max math are <b>unchanged</b>. Open decisions before promoting: the batch-size basis (median now; a higher percentile may be needed where spot-pulls outnumber rebuilds) and where the factor lives (a real <b>setting</b> at promotion). The promoted version also feeds the batch size + Min into the <b>LLM prompt</b> (it misses this today). Files: <code>sandbox/sandbox.{html,js,css}</code>, <code>shared/consumption-profile.js</code>.</li>
+      </ul>
+
+      <h4>APP-FIX-HISTO-LEGIBLE · Sandbox histogram enlarged + readable fonts</h4>
+      <ul>
+        <li>The histogram was a 520-wide / font-size-8 SVG that letterboxed tiny in the wide panel. Rebuilt at 1040×320 with 16–19px fonts, bigger margins, and thicker mean/median markers — it now fills the panel and is legible. Files: <code>shared/consumption-profile.js</code> (+ the Sandbox caller).</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-FIX-P1-RATE + APP-TREND-HCE-RM ───────── -->
     <article class="roc-entry dev">
       <div class="head">

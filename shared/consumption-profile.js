@@ -106,12 +106,15 @@
 
   function renderHistogram(qtys, opts){
     opts = opts || {};
-    const W = opts.width || 520, H = opts.height || 156;
-    const M = { top: 16, right: 12, bottom: 30, left: 36 };
+    // APP-FIX-HISTO-LEGIBLE — bigger canvas + readable fonts. The panel is wide,
+    // so a wide viewBox fills it and the (viewBox-unit) font sizes render near 1:1.
+    const W = opts.width || 1040, H = opts.height || 320;
+    const M = { top: 34, right: 24, bottom: 62, left: 76 };
     const iw = W - M.left - M.right, ih = H - M.top - M.bottom;
-    const head = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block">`;
+    const FS = { bar: 16, axis: 16, name: 15, marker: 19 };   // font sizes
+    const head = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block">`;
     if (!qtys.length) {
-      return `${head}<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="11">no consumption events</text></svg>`;
+      return `${head}<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="20">no consumption events</text></svg>`;
     }
     const st  = describe(qtys);
     const max = st.max;
@@ -126,20 +129,20 @@
     let bars = '';
     for (let i = 0; i < bins; i++){
       const h = (counts[i] / cmax) * ih;
-      const x = M.left + (i / bins) * iw + 1, y = M.top + ih - h, w = Math.max(1, bwpx - 2);
+      const x = M.left + (i / bins) * iw + 1.5, y = M.top + ih - h, w = Math.max(2, bwpx - 3);
       bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${col}" fill-opacity="0.6" stroke="${col}" stroke-opacity="0.9"/>`;
-      if (counts[i] > 0) bars += `<text x="${(x + w / 2).toFixed(1)}" y="${(y - 2).toFixed(1)}" text-anchor="middle" fill="#D6DFDE" font-family="monospace" font-size="8">${counts[i]}</text>`;
+      if (counts[i] > 0) bars += `<text x="${(x + w / 2).toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" fill="#D6DFDE" font-family="monospace" font-size="${FS.bar}">${counts[i]}</text>`;
     }
-    const axis = `<line x1="${M.left}" y1="${M.top + ih}" x2="${M.left + iw}" y2="${M.top + ih}" stroke="#9BABA8" stroke-width="1"/>`;
-    const xlab = `<text x="${M.left}" y="${M.top + ih + 12}" fill="#9BABA8" font-family="monospace" font-size="8">0</text>`
-               + `<text x="${M.left + iw}" y="${M.top + ih + 12}" text-anchor="end" fill="#9BABA8" font-family="monospace" font-size="8">${Math.round(max).toLocaleString()}</text>`
-               + `<text x="${M.left + iw / 2}" y="${H - 4}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="8" letter-spacing="1">UNITS PER EVENT</text>`;
-    const ylab = `<text x="6" y="${M.top + 8}" fill="#9BABA8" font-family="monospace" font-size="8">${cmax}</text>`
-               + `<text transform="rotate(-90 10 ${M.top + ih / 2})" x="10" y="${M.top + ih / 2}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="8" letter-spacing="1">EVENTS</text>`;
-    const meanLine = `<line x1="${mx(st.mean).toFixed(1)}" y1="${M.top}" x2="${mx(st.mean).toFixed(1)}" y2="${M.top + ih}" stroke="#FBBF24" stroke-width="1.4"/>`
-                   + `<text x="${(mx(st.mean) + 2).toFixed(1)}" y="${M.top + 8}" fill="#FBBF24" font-family="monospace" font-size="8">mean ${Math.round(st.mean * 10) / 10}</text>`;
-    const medLine  = `<line x1="${mx(st.median).toFixed(1)}" y1="${M.top}" x2="${mx(st.median).toFixed(1)}" y2="${M.top + ih}" stroke="#7CDDB2" stroke-width="1.4" stroke-dasharray="3 2"/>`
-                   + `<text x="${(mx(st.median) + 2).toFixed(1)}" y="${M.top + 19}" fill="#7CDDB2" font-family="monospace" font-size="8">med ${Math.round(st.median * 10) / 10}</text>`;
+    const axis = `<line x1="${M.left}" y1="${M.top + ih}" x2="${M.left + iw}" y2="${M.top + ih}" stroke="#9BABA8" stroke-width="1.4"/>`;
+    const xlab = `<text x="${M.left}" y="${M.top + ih + 22}" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}">0</text>`
+               + `<text x="${M.left + iw}" y="${M.top + ih + 22}" text-anchor="end" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}">${Math.round(max).toLocaleString()}</text>`
+               + `<text x="${M.left + iw / 2}" y="${H - 8}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}" letter-spacing="1.5">UNITS PER EVENT</text>`;
+    const ylab = `<text x="10" y="${M.top + 12}" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}">${cmax}</text>`
+               + `<text transform="rotate(-90 18 ${M.top + ih / 2})" x="18" y="${M.top + ih / 2}" text-anchor="middle" fill="#9BABA8" font-family="monospace" font-size="${FS.axis}" letter-spacing="1.5">EVENTS</text>`;
+    const meanLine = `<line x1="${mx(st.mean).toFixed(1)}" y1="${M.top}" x2="${mx(st.mean).toFixed(1)}" y2="${M.top + ih}" stroke="#FBBF24" stroke-width="2.4"/>`
+                   + `<text x="${(mx(st.mean) + 5).toFixed(1)}" y="${M.top + 16}" fill="#FBBF24" font-family="monospace" font-size="${FS.marker}">mean ${Math.round(st.mean * 10) / 10}</text>`;
+    const medLine  = `<line x1="${mx(st.median).toFixed(1)}" y1="${M.top}" x2="${mx(st.median).toFixed(1)}" y2="${M.top + ih}" stroke="#7CDDB2" stroke-width="2.4" stroke-dasharray="4 3"/>`
+                   + `<text x="${(mx(st.median) + 5).toFixed(1)}" y="${M.top + 38}" fill="#7CDDB2" font-family="monospace" font-size="${FS.marker}">med ${Math.round(st.median * 10) / 10}</text>`;
     return `${head}${axis}${bars}${meanLine}${medLine}${xlab}${ylab}</svg>`;
   }
 
