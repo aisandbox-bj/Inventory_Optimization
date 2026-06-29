@@ -380,6 +380,22 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-BATCH-MIN-GOVERNS ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-28</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-BATCH-MIN-GOVERNS · Min recommendation — one block (calc + batch), and a setting for which governs</h4>
+      <ul>
+        <li><b>Why.</b> The earlier two-row layout (Min (calc) + a separate Min · batched row) showed both equally prominently — misleading when the batch is tiny vs the calc (operator: "if batch is 12 and calc Min is 250, the 12 is irrelevant"). Operator wanted one block: the two inputs + the governing figure, and a switch for which one governs.</li>
+        <li><b>What.</b> The separate "Min · batched" row is gone. The MRP comparison now has <b>one Min row</b> whose Recommended cell shows the <b>governing figure big</b> with both inputs beneath — <code>calc {n} · batch {n}</code>. New setting <b>"Batched Min governs"</b> (<code>batchedMinGoverns</code>, default <b>off</b>): <b>off</b> = the rate-based <b>calc Min</b> governs and the batch is comparison-only (no change to existing recommendations); <b>on</b> = recommended Min = <b>max(calc, batched)</b> so the Min always covers one typical batch, and that drives the traffic light + the raise/lower action. <b>Max stays single</b> (P2 × max-months), unaffected.</li>
+        <li><b>Pipeline.</b> Split <code>recMinCalc</code> (the rate-based calc) from <code>recMin</code> (the governing value); <code>recMin = (batchedMinGoverns==='on') ? max(recMinCalc, batchedMin) : recMinCalc</code>. <b>Default off ⇒ no silent change</b> to any existing assessment; turning it on only raises the Min (and can flip a light) where a batch exceeds the rate-cover. Verified: with the LV data (no item has batch &gt; calc) off and on are identical; 1001220 reads <i>165 · calc 165 · batch 1</i>; the setting renders in intake. Files: <code>shared/canonical-schema.js</code>, <code>intake/intake.js</code>, <code>shared/pipeline.js</code>, <code>shared/material-detail.{js,css}</code>. No SCHEMA_VERSION change.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-BATCH-MIN-ALONGSIDE + APP-SBX-REVIEW ───────── -->
     <article class="roc-entry dev">
       <div class="head">

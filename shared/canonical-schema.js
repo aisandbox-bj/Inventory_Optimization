@@ -23,7 +23,8 @@
     p2Months:               3,
     minMonths:              3,
     maxMonths:              6,
-    batchedMinFactor:       1.2,                    // APP-BATCH-MIN-ALONGSIDE (2026-06-28): informational "Min · batched" = typical WO batch (median, CC excluded) × this factor. Shown beside the calc Min; does NOT change the recommendation.
+    batchedMinFactor:       1.2,                    // APP-BATCH-MIN-ALONGSIDE (2026-06-28): "Min · batched" = typical WO batch (median, CC excluded) × this factor. Shown beside the calc Min.
+    batchedMinGoverns:      'off',                  // APP-BATCH-MIN-GOVERNS (2026-06-28): 'off' = calc Min governs the recommendation (batched shown for comparison only). 'on' = recommended Min = max(calc Min, batched Min) — the Min always covers one typical batch, and that drives the traffic light. Default off (no change to existing recommendations).
     threshold:              10,
     minEventsThreshold:     3,                      // APP-E9 (2026-06-25): min distinct consumption events (a WO 261 issue OR a cost-centre 201 issue) a material needs to qualify. Screens out high-qty / few-event materials that can't be reliably Min/Maxed. 0 = off.
     hcePctThreshold:        0.50,                   // 50% of period total
@@ -67,7 +68,8 @@
     p2Months:            'Rolling current window measured back from the run date. <b>P2 rate drives the Min/Max recommendation.</b>',
     minMonths:           'Months of consumption the recommended <b>Min</b> should cover (only used in monthsBased method).',
     maxMonths:           'Months of consumption the recommended <b>Max</b> should cover (only used in monthsBased method).',
-    batchedMinFactor:    'Multiplier for the informational <b>Min · batched</b> = typical work-order batch (median units/job, cost-centre draws excluded) × this factor. Shown beside the calc Min for comparison; does <b>not</b> change the recommendation. Default 1.2.',
+    batchedMinFactor:    'Multiplier for the <b>Min · batched</b> = typical work-order batch (median units/job, cost-centre draws excluded) × this factor. Default 1.2.',
+    batchedMinGoverns:   'Does the batched Min <b>govern</b> the recommendation? <b>off</b> (default) = the rate-based <b>calc Min</b> governs and the batched Min is shown for comparison only. <b>on</b> = recommended Min = <b>max(calc Min, batched Min)</b> so the Min always covers one typical batch — and that drives the traffic light.',
     threshold:           'Minimum net consumption (units) over the analysis window for a material to qualify for analysis.',
     minEventsThreshold:  'Minimum number of distinct <b>consumption events</b> a material needs over the window to qualify — a work-order issue (261) or a cost-centre issue (201) each counts as one event. Screens out high-quantity / few-event materials that can\'t be reliably Min/Maxed. Set to 0 to disable. Applied alongside the quantity Threshold above (a material must pass <em>both</em>).',
     hcePctThreshold:     'Single WO ≥ this share of the period total flags as a <b>High Consumption Event</b> (one-off spike — e.g. rebuild).',

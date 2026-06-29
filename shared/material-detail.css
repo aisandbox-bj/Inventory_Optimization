@@ -454,10 +454,9 @@
 .mrp-compare-table tr.changed td.rec{
   background:rgba(241,196,15,0.10);
 }
-/* APP-BATCH-MIN-ALONGSIDE — informational "Min · batched" row (not a calc value) */
-.mrp-compare-table tr.mrp-info td.lab{ color:var(--text-sec); font-style:italic; }
-.mrp-compare-table tr.mrp-info td.rec{ color:#C77DFF; background:rgba(199,125,255,0.06); font-weight:600; }
-.mrp-compare-table tr.mrp-info td.current{ color:var(--text-muted); }
+/* APP-BATCH-MIN-GOVERNS — Min block: governing figure big, the two inputs beneath */
+.mrp-compare-table .min-gov{ font-weight:700; }
+.mrp-compare-table .min-sub{ display:block; font-size:11px; color:var(--text-muted); font-weight:400; margin-top:2px; letter-spacing:.3px; }
 .mrp-compare-table tr.changed td.rec{ color:var(--status-warn); }
 
 /* ─── APP-E8 · MRP reclass (PD → V1) surfacing ──────────────────────────── */

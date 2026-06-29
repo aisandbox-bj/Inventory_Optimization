@@ -129,27 +129,30 @@
       return String(a) === String(b);
     };
 
+    // APP-BATCH-MIN-GOVERNS — one Min block: the governing recommended Min shown
+    // big (= the calc Min, or max(calc, batch) when batchedMinGoverns='on'), with
+    // BOTH inputs beneath (calc · batch) for comparison. No separate batched row.
+    const _minRec   = (mat.recMin     != null) ? mat.recMin     : null;
+    const _minCalc  = (mat.recMinCalc != null) ? mat.recMinCalc : _minRec;
+    const _minBatch = (mat.batchedMin != null) ? mat.batchedMin : null;
+    let _minRecHtml;
+    if (_minRec == null)          _minRecHtml = '—';
+    else if (_minBatch != null)   _minRecHtml = `<span class="min-gov">${_minRec}</span> <span class="min-sub">calc ${_minCalc} · batch ${_minBatch}</span>`;
+    else                          _minRecHtml = `<span class="min-gov">${_minRec}</span>`;
+
     const rows = [
-      { label:'MRP type',     cur: mat.mrpType || '—',                                       rec: mat.recMrpType || '—' },
-      { label:'Min (calc)',   cur: mat.cmin != null ? mat.cmin : '—',                        rec: mat.recMin != null ? mat.recMin : '—' }
+      { label:'MRP type',     cur: mat.mrpType || '—',                              rec: mat.recMrpType || '—' },
+      { label:'Min',          cur: mat.cmin != null ? mat.cmin : '—',               rec: _minRec != null ? String(_minRec) : '—', recHtml: _minRecHtml },
+      { label:'Max',          cur: mat.cmax != null ? mat.cmax : '—',               rec: mat.recMax != null ? mat.recMax : '—' },
+      { label:'Safety Stock', cur: mat.safetyStock != null ? mat.safetyStock : '—', rec: '—', recOmitted: true }
     ];
-    // APP-BATCH-MIN-ALONGSIDE — informational second Min (WO batch × factor), shown
-    // beside the calc Min. Does NOT drive the recommendation; the calc Min governs.
-    if (mat.batchedMin != null) {
-      rows.push({ label:'Min · batched', cur:'—', rec: mat.batchedMin, recOmitted: true, info: true,
-                  title:'Typical work-order batch (median, cost-centre excluded) × factor — informational; the calc Min above governs the recommendation.' });
-    }
-    rows.push(
-      { label:'Max',          cur: mat.cmax != null ? mat.cmax : '—',                        rec: mat.recMax != null ? mat.recMax : '—' },
-      { label:'Safety Stock', cur: mat.safetyStock != null ? mat.safetyStock : '—',          rec: '—', recOmitted: true }
-    );
     const trs = rows.map(r => {
       const changed = !r.recOmitted && r.cur !== '—' && r.rec !== '—' && !eq(r.cur, r.rec);
       return `
-        <tr class="${changed ? 'changed' : ''}${r.info ? ' mrp-info' : ''}"${r.title ? ` title="${escapeAttr(r.title)}"` : ''}>
+        <tr class="${changed ? 'changed' : ''}">
           <td class="lab">${escapeHtml(r.label)}</td>
           <td class="current">${escapeHtml(String(r.cur))}</td>
-          <td class="rec">${escapeHtml(String(r.rec))}</td>
+          <td class="rec">${r.recHtml || escapeHtml(String(r.rec))}</td>
         </tr>`;
     }).join('');
 
@@ -157,7 +160,7 @@
       <div class="mrp-compare">
         <div class="mrp-compare-head">
           <h4>MRP Settings · Current vs Recommended</h4>
-          <span class="hint">Yellow rows = recommendation differs from current. <b>Min · batched</b> = a typical WO batch × factor, shown for comparison only — the <b>Min (calc)</b> governs. Safety Stock is informational.</span>
+          <span class="hint">Yellow rows = recommendation differs from current. The <b>Min</b> shows the governing figure with its two inputs beneath — <b>calc</b> (P2 rate × months) and <b>batch</b> (a typical WO batch × factor). Which one governs is a setting (<i>Batched Min governs</i>). Safety Stock is informational.</span>
         </div>
         ${mat.mrpReclassRecommended ? `<div class="mrp-reclass-note">⚑ ${escapeHtml(mat.mrpReclassNote || '')}</div>` : ''}
         <table class="mrp-compare-table">

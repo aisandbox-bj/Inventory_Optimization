@@ -992,15 +992,21 @@
               ? Math.round((p2r - p1r) / p1r * 1000) / 10
               : null);
 
-        const rmin = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * minMonths) : null;
-        const rmax = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
-        // APP-BATCH-MIN-ALONGSIDE (operator 2026-06-28) — INFORMATIONAL second Min:
-        // typical WO batch (median, CC excluded) × factor. Lives ALONGSIDE the calc
-        // Min (rmin); it does NOT feed the traffic light or the recommended Min/Max.
-        // Max stays single (rmax = p2 × maxMonths), unaffected.
+        // APP-BATCH-MIN-ALONGSIDE / APP-BATCH-MIN-GOVERNS (operator 2026-06-28) —
+        // calc Min = rate-based (p2 × minMonths). batchedMin = typical WO batch
+        // (median, CC excluded) × factor, shown beside it. Whether the batched Min
+        // GOVERNS (recommended Min = max of the two, so it always covers one batch)
+        // is a setting: batchedMinGoverns 'off' (default — calc governs, batch is
+        // comparison-only) | 'on' (max governs + drives the traffic light).
+        // Max stays single (rmax = p2 × maxMonths), unaffected either way.
+        const rminCalc = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * minMonths) : null;
+        const rmax     = (p2f === 'OK' && p2r > 0) ? Math.round(p2r * maxMonths) : null;
         const batchedMin = (batchStats.median != null && batchStats.median > 0)
           ? Math.round(batchStats.median * (params.batchedMinFactor || 1.2))
           : null;
+        const rmin = (params.batchedMinGoverns === 'on' && rminCalc != null && batchedMin != null)
+          ? Math.max(rminCalc, batchedMin)
+          : rminCalc;
 
         const woCount = countIssueWorkOrders(tx);
         const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated);
@@ -1112,7 +1118,8 @@
           woCount,                                 // unique issuing work orders in window
           perEventStats,                           // APP-TREND-PEC — {mean, median, std, n} units per consumptive event, ALL events incl. cost-centre (display stat)
           batchStats,                              // APP-BATCH-WO — {mean, median, std, n} net job draw per WORK ORDER (261/262 only, CC excluded) — the batch parameter
-          batchedMin,                              // APP-BATCH-MIN-ALONGSIDE — informational WO-batch Min (median × factor); shown next to recMin, does NOT drive the recommendation
+          batchedMin,                              // APP-BATCH-MIN-ALONGSIDE — WO-batch Min (median × factor); shown next to the calc Min
+          recMinCalc: rminCalc,                    // APP-BATCH-MIN-GOVERNS — the rate-based calc Min (p2 × minMonths). recMin = this, or max(this, batchedMin) when batchedMinGoverns='on'
           fewEvents:    !!tl.fewEvents,            // true if few-events overlay tripped
           // v2.1.0 signal fields — additive, used by LLM prompt context
           netSign,                                 // 'POSITIVE' | 'NEGATIVE (returns dominate)' | 'MIXED' | 'NO_DATA'
