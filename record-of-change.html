@@ -380,6 +380,21 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-E3-PDF ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-29</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>APP-E3-PDF · PDF Pack + Screener PDF — JPEG q0.65 + jsPDF compression (the "huge PDF" fix)</h4>
+      <ul>
+        <li><b>Problem.</b> The <b>PDF Pack</b> rendered each material's chart as a <b>lossless PNG with no jsPDF compression</b> — and jsPDF stores PNG as <b>raw uncompressed pixels</b>, so a single chart page weighed <b>~4.7 MB</b> (a 20-material pack ≈ 95 MB). The Screener PDF already used JPEG but at q0.92, no compression.</li>
+        <li><b>What.</b> The Pack chart now exports <b>JPEG at q0.65</b> (new <code>AppChart.toJpeg</code>, sitting beside the unchanged on-screen <code>toPng</code>) and the doc is created with <code>compress: true</code>. Screener PDF: the chart + 5 box plots dropped q0.92 → <b>q0.65</b>, doc <code>compress: true</code>. Quality 0.65 is the operator's pick — they'll eyeball it; trivially dialled up if too soft.</li>
+        <li><b>Verified.</b> Through the real chart → image → jsPDF path on a representative chart SVG: one page <b>4,734 KB → 75 KB (~98%)</b> (the image itself 279 KB PNG → 96 KB JPEG; the rest is compression + no longer storing jsPDF's raw-pixel PNG). Both pages boot, <code>toPng</code> intact (on-screen render unchanged), zero console errors. Files: <code>shared/chart.js</code>, <code>analysis/analysis.js</code>, <code>screener/screener.js</code>. Snapshot <code>_rollback/APP-E3-PDF-pre/</code>. No SCHEMA_VERSION change. <b>Pending operator validation (quality eyeball at q0.65).</b></li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-E3-MINIFY ───────── -->
     <article class="roc-entry dev">
       <div class="head">

@@ -922,7 +922,7 @@
 
     try {
       const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-      const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });  // APP-E3-PDF — compress streams
 
       for (let i = 0; i < mats.length; i++) {
         const m = mats[i];
@@ -1029,11 +1029,11 @@
       host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1100px;height:430px;visibility:hidden;background:#0C2D3B;';
       document.body.appendChild(host);
       const svg = AppChart.render(host, m, { width: 1100, height: 430 });
-      const png = await AppChart.toPng(svg, 1.6);
+      const png = await AppChart.toJpeg(svg, 1.6, 0.65);  // APP-E3-PDF — JPEG q0.65 (was lossless PNG)
       document.body.removeChild(host);
       const chartW = W - 2*M;
       const chartH = chartW * (430 / 1100);
-      doc.addImage(png, 'PNG', M, y, chartW, chartH);
+      doc.addImage(png, 'JPEG', M, y, chartW, chartH);
       y += chartH + 4;
     } catch (e) {
       doc.setTextColor(192, 0, 0);

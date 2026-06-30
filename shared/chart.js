@@ -657,7 +657,7 @@
   }
 
   /* ─── SVG → PNG conversion (for LLM image input) ────────────────────────── */
-  function toPng(svgEl, scale){
+  function _rasterize(svgEl, scale){
     scale = scale || 2;
     return new Promise((resolve, reject) => {
       try {
@@ -674,14 +674,19 @@
           ctx.fillStyle = '#0C2D3B';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL('image/png'));
+          resolve(canvas);
         };
         img.onerror = (e) => reject(e);
         img.src = svg64;
       } catch (e) { reject(e); }
     });
   }
+  function toPng(svgEl, scale){ return _rasterize(svgEl, scale).then(c => c.toDataURL('image/png')); }
+  /* APP-E3-PDF — JPEG export for PDF embedding. JPEG is far smaller than PNG for
+     the dark chart fills; the on-screen render path is unchanged and still uses
+     toPng. Default quality 0.65 (operator-chosen). */
+  function toJpeg(svgEl, scale, quality){ return _rasterize(svgEl, scale).then(c => c.toDataURL('image/jpeg', quality == null ? 0.65 : quality)); }
 
-  global.AppChart = Object.freeze({ render, toPng, PAL });
+  global.AppChart = Object.freeze({ render, toPng, toJpeg, PAL });
 
 })(window);

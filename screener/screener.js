@@ -713,7 +713,7 @@
       host.style.cssText = 'position:fixed; left:-100000px; top:0; width:1000px;';
       document.body.appendChild(host);
 
-      const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+      const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'letter', compress: true });  // APP-E3-PDF — compress streams
       for (let i = 0; i < flagged.length; i++) {
         btn.textContent = `Exporting ${i + 1}/${flagged.length}…`;
         if (i > 0) doc.addPage();
@@ -781,7 +781,7 @@
     try {
       host.innerHTML = '<div id="expCh"></div>';
       const svg = AppChart.render(host.querySelector('#expCh'), m, { width: 936, height: 320 });
-      const png = await svgToJpeg(svg, 1.8, 0.92);
+      const png = await svgToJpeg(svg, 1.8, 0.65);  // APP-E3-PDF — q0.65
       const chH = CW * 320 / 936;
       ensure(chH + 2);
       doc.addImage(png, 'JPEG', M, y, CW, chH); y += chH + 4;
@@ -914,7 +914,7 @@
         doc.setTextColor(45, 55, 70); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
         doc.splitTextToSize(pdfSafe(ps.label || ''), pw - 1).slice(0, 2).forEach((ln, li) => doc.text(ln, cxp, y + 3 + li * 2.7, { align: 'center' }));
         doc.setFont('helvetica', 'normal');
-        try { const p = await svgToJpeg(plotSvgs[k], 2, 0.92); doc.addImage(p, 'JPEG', x, y + titleH, pw, ph); } catch (e) { /* skip one */ }
+        try { const p = await svgToJpeg(plotSvgs[k], 2, 0.65); doc.addImage(p, 'JPEG', x, y + titleH, pw, ph); } catch (e) { /* skip one */ }
       }
       y += titleH + ph + 4;
     }
