@@ -380,6 +380,19 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-E3-MINIFY ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-29</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>APP-E3-MINIFY · Downloaded .json is compact (no pretty-print) — ~28–36% smaller</h4>
+      <ul>
+        <li><b>What.</b> The <b>Download .json</b> button now writes compact JSON (<code>JSON.stringify(json)</code>) instead of pretty-printed (<code>null, 2</code>). The localStorage save was already compact — only the download carried the whitespace. Still valid JSON; the <b>Upload .json</b> handler re-parses it unchanged. <b>Trade-off (surfaced):</b> the downloaded file is no longer line-indented for human eyeballing — it's a backup/portability artefact, so size wins; easy to make a toggle if anyone wants the readable form. Verified: ~36% smaller on an MB51-shaped sample; Intake boots, zero console errors. Files: <code>intake/intake.js</code> (one line). Snapshot <code>_rollback/APP-E3-MINIFY-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-E3-TRIM ───────── -->
     <article class="roc-entry dev">
       <div class="head">

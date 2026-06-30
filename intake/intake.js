@@ -2205,7 +2205,11 @@
       // APP-E3-TRIM — honour the same opt-in for the downloaded file.
       const trimChk = $('#chkTrimScope');
       if (trimChk && trimChk.checked) trimToScope(json);
-      const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+      // APP-E3-MINIFY — compact (no pretty-print whitespace) — ~28% smaller file,
+      // zero data loss. The localStorage save (storage.js) was already compact;
+      // only this download was pretty-printed. Still valid JSON; the Upload .json
+      // handler re-parses it unchanged.
+      const blob = new Blob([JSON.stringify(json)], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       const name = state.name.trim().replace(/[^A-Za-z0-9_-]+/g, '_');
