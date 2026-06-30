@@ -380,6 +380,56 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- ───────── v2.1.4-dev — APP-E3-TRIM ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-29</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-E3-TRIM · Opt-in "trim to materials in use" on save / download — kills the dead-catalog bloat</h4>
+      <ul>
+        <li><b>Problem.</b> A real export measured <b>54 MB for a 331-material assessment</b> — and 90% of it was the <b>Inventory Master</b>: the operator loads the whole 50,908-row Material Master but analyses only 331 materials. <b>50,577 rows are dead catalog.</b> (MB51 was already scoped at 15k rows; description-dedupe would've been 0.8% — both shelved after measuring. Full reasoning: <code>_Hand-over docs/APP-E3 - JSON trim safety audit</code>.)</li>
+        <li><b>What.</b> A <b>"Trim to materials in use"</b> checkbox (default on) in the Intake review actions. On <b>Save</b> and <b>Download</b>, the material-keyed tables (<code>inventoryMaster</code>, <code>mb51</code>, <code>materialVendor</code>, <code>leadTimes</code>) are filtered to the <b>keep-set = scope materials ∪ PR-History materials</b>. The save toast reports rows trimmed / materials kept.</li>
+        <li><b>Why it's safe (identical results).</b> The keep-set is resolved through the pipeline's own <code>buildBuckets</code> (so every scope mode — manual / fleet / class / vendor — is handled), and the <code>∪ PR-History</code> union keeps Trace's chains intact. The pipeline already restricts to scope at the bucket level; every per-material consumer looks up by in-scope material; the Inv-Adj rate exclusion uses the <b>stored confirmed dates</b>, not the σ candidate scan. So re-analysis of a trimmed assessment yields <b>identical numbers</b>. The trim <b>reassigns</b> <code>json.data.*</code> (never mutates the shared parsed arrays), and on any failure trims nothing + saves full with a notice.</li>
+        <li><b>Verified.</b> On the real 54 MB export, through the actual <code>buildBuckets</code> path: Inventory Master <b>50,908 → 331 rows</b>, whole file <b>~35 MB → 3.9 MB</b> (~89%); MB51 unchanged (already scoped); every in-scope material's Master row retained; checkbox renders + defaults on; zero console errors. Files: <code>intake/intake.html</code>, <code>intake/intake.js</code>. Snapshot <code>_rollback/APP-E3-TRIM-pre/</code>. No SCHEMA_VERSION change. <b>Pending operator validation.</b></li>
+      </ul>
+    </article>
+
+    <!-- ───────── v2.1.4-dev — APP-FIX-ADDMONTHS-TZ ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-29</span>
+        <span class="tag dev">dev</span>
+      </div>
+
+      <h4>APP-FIX-ADDMONTHS-TZ · addMonths() moved to UTC — the P2 window start no longer drifts for month-boundary run dates</h4>
+      <ul>
+        <li><b>Problem.</b> The latent follow-up flagged by APP-FIX-P1-RATE. <code>pipeline.js</code> <code>addMonths()</code> still computed with local <code>r.setMonth(r.getMonth()+months)</code> then read back via <code>toISOString()</code> (UTC) — a local/UTC mix — while its siblings <code>monthsBetween</code> / <code>snapMonthStart</code> / <code>snapMonthEnd</code> all went UTC that session.</li>
+        <li><b>Root cause.</b> West of UTC a <code>'YYYY-MM-DD'</code> parses as UTC-midnight = the <em>previous local day</em>, so <code>getMonth()</code> / <code>getDate()</code> read one day — and at a month boundary one month — early. <code>addMonths(runDate, -p2Months)</code> builds the <b>P2 (rolling recent) window start</b> (pipeline.js:732 and :925), so that edge drifted.</li>
+        <li><b>Fix.</b> <code>addMonths</code> now builds the result via <code>Date.UTC(d.getUTCFullYear(), d.getUTCMonth()+months, d.getUTCDate())</code> — one function, ~4 lines + a header comment. No SCHEMA_VERSION change.</li>
+        <li><b>What changes (surfaced, not hidden).</b> The P2 window start now lands on the calendar-correct date. For run dates <em>near a month boundary</em> (the 1st especially) this shifts the start by up to a few days — e.g. a 2026-03-01 run with a 6-month P2 moved <b>Aug 28 → Sep 1</b>; a 1-month P2 moved <b>Jan 29 → Feb 1</b>. <b>Mid-month and end-of-month run dates are unchanged.</b> Because P2 feeds the recent rate (and thus Min/Max + the rate-drop/rise light), affected boundary-date assessments can see small rate/recommendation changes — a <b>correction</b>, not cosmetic. The <b>P1 window is unaffected</b> (operator dates + month-snap).</li>
+        <li><b>Verified.</b> Browser at America/Vancouver (UTC-8): before/after table across 1st / mid-month / 31st run dates — only boundary dates change, the rest identical; <code>pipeline.js</code> parses (<code>window.AppPipeline</code> defined) and the Trend page boots with zero console errors. Files: <code>shared/pipeline.js</code>. Snapshot: <code>_rollback/APP-FIX-ADDMONTHS-TZ-pre/</code>. <b>Not yet pushed — pending operator validation on real data.</b></li>
+      </ul>
+    </article>
+
+    <!-- ───────── Calibre Forge — planning note (no app change) ───────── -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.4</span>
+        <span class="date">2026-06-29</span>
+        <span class="tag dev">note</span>
+      </div>
+
+      <h4>Calibre Forge — fourth Calibre tool entered design (planning note, no app change)</h4>
+      <ul>
+        <li><b>What.</b> A new sibling tool, <b>Calibre Forge</b>, has entered design — the supply-chain-manager companion to Tune. It would consume Tune's Intake JSON (material-number join, no write-back) to surface portfolio-wide over- and under-stock, rank items by the capital tied up, and diagnose the root cause; an interactive <b>"Data unlock"</b> view maps which deliverables each data source switches on. <b>Not built, not shipped, not part of this app</b> — a scope brief only.</li>
+        <li><b>Why it's logged here.</b> So the changelog reflects the suite's direction. <b>No Tune code, schema, or behaviour changed — nothing to test.</b> The brief is an internal project document (not in this repo).</li>
+      </ul>
+    </article>
+
     <!-- ───────── v2.1.4-dev — APP-BATCH-MIN-GOVERNS ───────── -->
     <article class="roc-entry dev">
       <div class="head">

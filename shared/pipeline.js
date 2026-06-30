@@ -18,8 +18,11 @@
   function addMonths(iso, months){
     const d = toDate(iso);
     if (!d) return null;
-    const r = new Date(d.getTime());
-    r.setMonth(r.getMonth() + months);
+    // APP-FIX-ADDMONTHS-TZ — UTC month math, consistent with monthsBetween /
+    // snapMonthStart / snapMonthEnd. Local setMonth/getMonth read a UTC-midnight
+    // 'YYYY-MM-DD' as the previous local day west of UTC, shifting the P2 window
+    // start by up to a day (and the month at boundaries). UTC keeps it calendar-correct.
+    const r = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, d.getUTCDate()));
     return r.toISOString().slice(0, 10);
   }
   function monthsBetween(a, b){

@@ -2172,6 +2172,14 @@
       if (!requireAssessmentName()) return;
       const json = buildJson();
       const name = state.name.trim();
+      // APP-E3-TRIM — opt-in: shrink the saved JSON to the materials in use.
+      let trimNote = '';
+      const trimChk = $('#chkTrimScope');
+      if (trimChk && trimChk.checked) {
+        const t = trimToScope(json);
+        if (t.ok && t.dropped > 0) trimNote = ` · trimmed ${t.dropped.toLocaleString()} unused rows, kept ${t.materials.toLocaleString()} materials`;
+        else if (!t.ok) toast(`Trim skipped (${t.error}) — saved full`, 'warn');
+      }
       const result = await AppStorage.set('intake.' + name, json);
       // also update an "intakes" index list
       const idx = (await AppStorage.get('intakes.index')) || [];
@@ -2188,12 +2196,15 @@
       await AppStorage.set('intakes.index', idxClean.slice(0, 50));
       // also save as "current" for analysis engine handoff
       await AppStorage.set('intake.current', json);
-      toast(`Saved as "${name}" to ${result.store === 'idb' ? 'IndexedDB' : 'localStorage'} (${humanBytes(result.size)})`, 'ok');
+      toast(`Saved as "${name}" to ${result.store === 'idb' ? 'IndexedDB' : 'localStorage'} (${humanBytes(result.size)})${trimNote}`, 'ok');
     });
 
     $('#btnDownload').addEventListener('click', () => {
       if (!requireAssessmentName()) return;
       const json = buildJson();
+      // APP-E3-TRIM — honour the same opt-in for the downloaded file.
+      const trimChk = $('#chkTrimScope');
+      if (trimChk && trimChk.checked) trimToScope(json);
       const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
@@ -2273,6 +2284,39 @@
     const da = new Date(a), db = new Date(b);
     return (db.getFullYear() - da.getFullYear()) * 12 + (db.getMonth() - da.getMonth());
   }
+  /* APP-E3-TRIM — keep only the materials this assessment uses, dropping the
+     full material catalog + any out-of-scope rows from the material-keyed
+     tables. Keep-set = (scope-resolved materials, via the pipeline's own bucket
+     logic so every scope mode is handled) ∪ (PR-History materials, so Trace's
+     chains survive). SAFE/lossless: the pipeline already restricts to scope at
+     the bucket level, every per-material consumer looks up by in-scope material,
+     and the Inv-Adj rate exclusion uses the STORED confirmed dates (not the σ
+     candidate scan). Full reasoning: "_Hand-over docs/APP-E3 - JSON trim safety
+     audit". Reassigns json.data.* (never mutates the shared state.parsed arrays).
+     Returns a summary for the toast; on any failure it trims nothing. */
+  function trimToScope(json){
+    const keep = new Set();
+    try {
+      const buckets = (window.AppPipeline && AppPipeline.buildBuckets(json)) || [];
+      for (const b of buckets){
+        if (b.materials instanceof Set) for (const m of b.materials){ const mm = String(m||'').trim(); if (mm) keep.add(mm); }
+        for (const t of (b.transactions||[])){ const m = String(t.material||'').trim(); if (m) keep.add(m); }
+      }
+    } catch(e){ return { ok:false, error: e.message }; }
+    for (const r of (json.data.prHistory||[])){ const m = String(r.material||'').trim(); if (m) keep.add(m); }
+    if (keep.size === 0) return { ok:false, error:'no in-scope materials resolved' };
+    const TABLES = ['inventoryMaster','mb51','materialVendor','leadTimes'];
+    let dropped = 0;
+    for (const tbl of TABLES){
+      const rows = json.data[tbl];
+      if (!Array.isArray(rows) || rows.length === 0) continue;
+      const kept = rows.filter(r => keep.has(String(r.material||'').trim()));
+      dropped += (rows.length - kept.length);
+      json.data[tbl] = kept;
+    }
+    return { ok:true, materials: keep.size, dropped };
+  }
+
   function humanBytes(n){
     if (n < 1024) return n + ' B';
     if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';

@@ -288,6 +288,10 @@
           <span class="lab">The canonical JSON is the contract</span>
           Intake produces one canonical JSON (schema version <code>1.0.0</code>). Trend and Trace both consume it. The math deliverable carries <b>no</b> LLM metadata — verdicts, provider info, and client identifiers never touch the canonical JSON by design.
         </div>
+        <div class="um-note">
+          <span class="lab">In design — Calibre Forge</span>
+          A fourth tool is being scoped: <b>Calibre Forge</b>, the supply-chain-manager companion to Tune's maintenance-manager view. It would read Tune's Intake JSON (the same material-number join, no write-back) to surface portfolio-wide over- and under-stock, rank items by the capital tied up, and diagnose the root cause — with an interactive map of which deliverables each data source unlocks. <b>It is not built and not part of this app</b> — there is nothing to open yet; only a scope brief exists. Noted here so the suite picture stays complete.
+        </div>
       </section>
 
       <!-- ───────────── 2 · Quick start ───────────── -->

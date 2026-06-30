@@ -481,6 +481,9 @@
           <button id="btnDownload">⤓ Download .json</button>
           <button id="btnUpload">⤒ Upload .json</button>
           <input type="file" id="uploadJsonInput" accept=".json" class="hidden" />
+          <label id="trimScopeOpt" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-sec,#9fb3c8);cursor:pointer;white-space:nowrap" title="Keep only the materials this assessment uses (scope + their procurement history). The full material catalog and any out-of-scope rows are dropped from the saved/downloaded file. Analysis results are identical — the engine restricts to scope and the Inv-Adj exclusions use your confirmed dates. See the JSON trim safety audit.">
+            <input type="checkbox" id="chkTrimScope" checked /> Trim to materials in use
+          </label>
           <span class="spacer"></span>
           <button id="btnOpenAnalysis" class="ghost">Open in Trend →</button>
         </div>
