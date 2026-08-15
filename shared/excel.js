@@ -268,8 +268,13 @@
     return { top:s, left:s, bottom:s, right:s };
   }
 
-  /* ─── Build one per-material sheet ─── */
-  async function buildMaterialSheet(wb, ws, m, parameters, runDate){
+  /* ─── Build one per-material sheet ───
+     analystOpts (optional, APP-ACT-02): { analyst } where analyst is a handle
+     { isAction(mat)->bool, getRec(mat)->{mrpType,min,max,safety} }. When present
+     the "MRP Settings Comparison" table gains a 4th "Analyst" column (populated
+     only when isAction(mat)) plus a "Safety Stock" row. When absent the sheet is
+     identical to its pre-change shape (existing callers pass nothing). */
+  async function buildMaterialSheet(wb, ws, m, parameters, runDate, analystOpts){
     // Column widths matching the reference (A=gutter, B=label, C=value, D=notes)
     ws.getColumn(1).width = 3;
     ws.getColumn(2).width = 24;
@@ -474,8 +479,16 @@
     ws.getRow(r).height = 20;
     r++;
 
+    // APP-ACT-02 — optional Analyst column (only when an analyst handle is supplied
+    // AND this material is flagged "For Action"; header always present when handle given)
+    const _analyst = analystOpts && analystOpts.analyst ? analystOpts.analyst : null;
+    const _isAction = _analyst ? !!_analyst.isAction(m.material) : false;
+    const _rec = (_analyst && _isAction) ? (_analyst.getRec(m.material) || {}) : {};
+    const _showAnalyst = !!_analyst;
+
     // Comparison column headers
-    ['', 'Current', 'Recommended'].forEach((h, i) => {
+    const cmpHeaders = _showAnalyst ? ['', 'Current', 'Recommended', 'Analyst'] : ['', 'Current', 'Recommended'];
+    cmpHeaders.forEach((h, i) => {
       const c = ws.getRow(r).getCell(i + 2);
       c.value = h;
       c.font  = { bold:true, color:{ argb:'FFFFFFFF' }, name:'Calibri', size:10 };
@@ -485,11 +498,12 @@
     });
     r++;
 
-    // Comparison rows
+    // Comparison rows — [label, current, recommended, analyst(when flagged)]
     const cmpRows = [
-      ['MRP Type', m.mrpType || '—',                            m.recMrpType || m.mrpType || 'PD'],
-      ['Min',      (m.cmin == null ? '—' : m.cmin),             (m.recMin == null ? '—' : m.recMin)],
-      ['Max',      (m.cmax == null ? '—' : m.cmax),             (m.recMax == null ? '—' : m.recMax)]
+      ['MRP Type',     m.mrpType || '—',                         m.recMrpType || m.mrpType || 'PD',   _isAction ? (_rec.mrpType || '—') : '—'],
+      ['Min',          (m.cmin == null ? '—' : m.cmin),          (m.recMin == null ? '—' : m.recMin), _isAction ? (_rec.min || '—') : '—'],
+      ['Max',          (m.cmax == null ? '—' : m.cmax),          (m.recMax == null ? '—' : m.recMax), _isAction ? (_rec.max || '—') : '—'],
+      ['Safety Stock', (m.safetyStock == null ? '—' : m.safetyStock), '—',                            _isAction ? (_rec.safety || '—') : '—']
     ];
     cmpRows.forEach((cr, i) => {
       const row = ws.getRow(r);
@@ -501,7 +515,7 @@
         row.getCell(ci).font = { name:'Calibri', size:10 };
         row.getCell(ci).alignment = { horizontal:'center', vertical:'middle' };
       });
-      // Highlight if recommended differs from current
+      // Highlight if recommended differs from current (Current-vs-Recommended only — unchanged)
       const changed = String(cr[1]) !== String(cr[2]) && cr[2] !== '—';
       [2, 3, 4].forEach(ci => {
         row.getCell(ci).border = thinBorder();
@@ -509,6 +523,14 @@
           row.getCell(ci).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + C.noteFill } };
         }
       });
+      // Analyst column (col 5) — separate styling, no change-highlight
+      if (_showAnalyst) {
+        const ac = row.getCell(5);
+        ac.value = cr[3];
+        ac.font  = { name:'Calibri', size:10 };
+        ac.alignment = { horizontal:'center', vertical:'middle' };
+        ac.border = thinBorder();
+      }
       r++;
     });
 
@@ -1046,6 +1068,313 @@
     return { filename: fname, sizeBytes: buf.byteLength };
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════
+     UNIFIED SCOPED EXPORT (APP-ACT-02, Phase 2)
+     One entrypoint that supports: a material-scope filter, full-vs-summary
+     mode, multi-fleet workbooks, and the "For Action" + "Analyst Recommendation"
+     columns. Shares helpers with the per-bucket path (renderChartPng,
+     buildMaterialSheet, triggerDownload, thinBorder, TL_FILL, …). User-facing
+     strings say "Fleet"/"fleet" (the internal `bucket`/`buckets` names are kept).
+  ═══════════════════════════════════════════════════════════════════════ */
+
+  const ANALYST_HDR_FILL = '5E2A78';   // purple — visually groups the analyst columns
+
+  /* Gather the ordered, deduped material list across the given buckets.
+     Returns [{ m, bucketName }]; first occurrence of a material number wins,
+     and the owning bucket (fleet) is remembered for the Fleet column. */
+  function gatherScopedMaterials(buckets, materialFilter){
+    const seen = new Set();
+    const out = [];
+    for (const b of (buckets || [])) {
+      const mats = (b && b.materials) || [];
+      for (const m of mats) {
+        if (materialFilter && !materialFilter.has(m.material)) continue;
+        if (seen.has(m.material)) continue;
+        seen.add(m.material);
+        out.push({ m, bucketName: (b && b.name) || '' });
+      }
+    }
+    return out;
+  }
+
+  /* Build the scoped Index sheet.
+     Column order: [Fleet?] + INDEX_COLS(17) + [For Action, Analyst MRP,
+     Analyst Min, Analyst Max, Analyst Safety]? — Fleet only when >1 bucket,
+     the analyst block only when an analyst handle is supplied. */
+  function buildScopedIndexSheet(wb, matList, o){
+    const showFleet = !!o.showFleet;
+    const analyst   = o.analyst || null;
+    const fleetOff  = showFleet ? 1 : 0;
+
+    const ws = wb.addWorksheet('Index', {
+      views: [{ state:'frozen', ySplit:2, xSplit:0 }]
+    });
+
+    // Column model
+    const cols = [];
+    if (showFleet) cols.push({ kind:'fleet', header:'Fleet', width:22 });
+    INDEX_COLS.forEach(c => cols.push({ kind:'index', col:c, width:c.width }));
+    if (analyst) {
+      cols.push({ kind:'action',  header:'For Action',     width:11 });
+      cols.push({ kind:'aMrp',    header:'Analyst MRP',    width:12 });
+      cols.push({ kind:'aMin',    header:'Analyst Min',    width:12 });
+      cols.push({ kind:'aMax',    header:'Analyst Max',    width:12 });
+      cols.push({ kind:'aSafety', header:'Analyst Safety', width:13 });
+    }
+    cols.forEach((c, i) => { ws.getColumn(i + 1).width = c.width; });
+
+    // Row 1: title (merged across all columns)
+    const p1Range = `${fmtDateShort(o.parameters.p1Start)}–${fmtDateShort(o.parameters.p1End)}`;
+    const p2Range = `${fmtDateShort(p2StartIso(o.parameters, o.runDate))}–${fmtDateShort(o.runDate)}`;
+    const lastColLetter = numberToColumn(cols.length);
+    ws.mergeCells(`A1:${lastColLetter}1`);
+    const titleCell = ws.getCell('A1');
+    titleCell.value = `${o.scopeLabel} — Consumption Profile & MRP Assessment  |  P1: ${p1Range}  |  P2: ${p2Range}  |  Run: ${o.runDate}`;
+    titleCell.font = { name:'Calibri', size:12, bold:true, color:{ argb:'FFFFFFFF' } };
+    titleCell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + C.titleNavy } };
+    titleCell.alignment = { vertical:'middle', horizontal:'center', wrapText:false };
+    ws.getRow(1).height = 26;
+
+    // Row 2: column headers
+    cols.forEach((c, i) => {
+      const cell = ws.getRow(2).getCell(i + 1);
+      cell.value = (c.kind === 'index') ? c.col.header : c.header;
+      cell.font  = { bold:true, color:{ argb:'FFFFFFFF' }, name:'Calibri' };
+      let fill;
+      if (c.kind === 'fleet')      fill = C.headerGrey;
+      else if (c.kind === 'index') fill = (INDEX_COLS.indexOf(c.col) >= 14) ? C.headerOrange : C.headerNavy;
+      else                         fill = ANALYST_HDR_FILL;   // analyst block
+      cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + fill } };
+      cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
+      cell.border = thinBorder();
+    });
+    ws.getRow(2).height = 32;
+
+    // AutoFilter across the full widened range
+    ws.autoFilter = { from:{ row:2, column:1 }, to:{ row:2, column:cols.length } };
+
+    // Data rows
+    let r = 3;
+    for (const entry of matList) {
+      const m = entry.m;
+      const row = ws.getRow(r);
+      const stripeColour = (r % 2 === 0) ? C.stripeB : C.stripeA;
+      let ci = 1;
+
+      // Fleet column
+      if (showFleet) {
+        const cell = row.getCell(ci);
+        cell.value = entry.bucketName;
+        cell.font  = { name:'Calibri', size:10 };
+        cell.alignment = { horizontal:'left', vertical:'middle' };
+        cell.border = thinBorder();
+        if (stripeColour !== 'FFFFFF') cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + stripeColour } };
+        ci++;
+      }
+
+      // INDEX_COLS
+      INDEX_COLS.forEach(col => {
+        const cell = row.getCell(ci);
+        cell.value = fmtIndexCell(col, m);
+        cell.font  = { name:'Calibri', size:10 };
+        cell.alignment = alignFor(col);
+        cell.border = thinBorder();
+        if (stripeColour !== 'FFFFFF') cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + stripeColour } };
+        ci++;
+      });
+
+      // Analyst columns (populated only when flagged For Action)
+      if (analyst) {
+        const isAct = !!analyst.isAction(m.material);
+        const rec = isAct ? (analyst.getRec(m.material) || {}) : {};
+        const aVals = [
+          isAct ? '★' : '',
+          isAct ? (rec.mrpType || '') : '',
+          isAct ? (rec.min || '')     : '',
+          isAct ? (rec.max || '')     : '',
+          isAct ? (rec.safety || '')  : ''
+        ];
+        aVals.forEach((v, k) => {
+          const cell = row.getCell(ci);
+          cell.value = v;
+          cell.font  = { name:'Calibri', size:10, bold: (k === 0) };
+          cell.alignment = { horizontal: (k === 0) ? 'center' : 'left', vertical:'middle' };
+          cell.border = thinBorder();
+          if (stripeColour !== 'FFFFFF') cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + stripeColour } };
+          ci++;
+        });
+      }
+
+      // Traffic-light cell colour fill (INDEX_COLS trafficLight is index 12 → +fleetOff+13)
+      const tlCell = row.getCell(fleetOff + 13);
+      if (TL_FILL[m.trafficLight]) {
+        tlCell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + TL_FILL[m.trafficLight] } };
+        tlCell.font = { bold:true, color:{ argb: TL_FONT_WHITE.includes(m.trafficLight) ? 'FFFFFFFF' : 'FF000000' }, name:'Calibri' };
+        tlCell.alignment = { horizontal:'center', vertical:'middle' };
+      }
+
+      // HCE columns amber tint (INDEX_COLS 14,15 → +fleetOff+15, +fleetOff+16)
+      if (m.hceP2 && m.hceP2.length) {
+        [fleetOff + 15, fleetOff + 16].forEach(cnum => {
+          const c = row.getCell(cnum);
+          c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + C.noteFill } };
+          c.font = { name:'Calibri', size:10, color:{ argb:'FF' + C.note }, bold:true };
+        });
+      }
+
+      // Material No. cell bold (hyperlink applied later in full mode)
+      const matCell = row.getCell(fleetOff + 1);
+      matCell.font = Object.assign({}, matCell.font || {}, { bold:true });
+
+      r++;
+    }
+
+    return {
+      ws,
+      firstDataRow: 3,
+      matColNum: fleetOff + 1,
+      matColLetter: numberToColumn(fleetOff + 1)
+    };
+  }
+
+  /* Scoped Summary sheet — traffic-light counts tallied over the included list. */
+  function buildScopedSummarySheet(wb, matList, scopeLabel){
+    const sum = wb.addWorksheet('Summary');
+    sum.getCell('A1').value = `${scopeLabel} — Traffic-light Summary (fleet(s))`;
+    sum.getCell('A1').font  = { bold:true, size:13, name:'Calibri' };
+    sum.mergeCells('A1:B1');
+    sum.getRow(2).values = ['Light', 'Count'];
+    sum.getRow(2).font   = { bold:true, name:'Calibri' };
+
+    const counts = { GREEN:0, BLUE:0, ORANGE:0, RED:0, PURPLE:0, GREY:0 };
+    for (const e of matList) {
+      const tl = e.m.trafficLight;
+      if (counts[tl] != null) counts[tl]++;
+    }
+    const order = ['GREEN','BLUE','ORANGE','RED','PURPLE','GREY'];
+    let sr = 3;
+    for (const k of order) {
+      sum.getCell(`A${sr}`).value = k;
+      sum.getCell(`B${sr}`).value = counts[k] || 0;
+      sum.getCell(`A${sr}`).fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + TL_FILL[k] } };
+      sum.getCell(`A${sr}`).font  = { bold:true, color:{ argb: TL_FONT_WHITE.includes(k) ? 'FFFFFFFF' : 'FF000000' }, name:'Calibri' };
+      sr++;
+    }
+    sum.getCell(`A${sr}`).value = 'TOTAL';
+    sum.getCell(`B${sr}`).value = matList.length;
+    sum.getCell(`A${sr}`).font  = { bold:true, name:'Calibri' };
+    sum.getColumn(1).width = 14;
+    sum.getColumn(2).width = 12;
+  }
+
+  /* Scoped Run sheet — "Fleet" wording + scope rows + the parameter block. */
+  function buildScopedRunSheet(wb, buckets, matList, parameters, runDate, scopeLabel){
+    const meta = wb.addWorksheet('Run');
+    meta.getCell('A1').value = 'Inventory Optimization · Scoped Analysis Run';
+    meta.getCell('A1').font  = { bold:true, size:13, name:'Calibri' };
+    const fleetNames = (buckets || []).map(b => b.name).join(', ');
+    const rows = [
+      ['Scope',            scopeLabel],
+      ['Fleets included',  fleetNames],
+      ['Fleet',            (buckets && buckets.length === 1) ? buckets[0].name : `${(buckets || []).length} fleet(s)`],
+      ['Materials',        matList.length],
+      ['Run date',         runDate],
+      ['P1 start',         parameters.p1Start],
+      ['P1 end',           parameters.p1End],
+      ['P2 months',        parameters.p2Months],
+      ['Min months',       parameters.minMonths],
+      ['Max months',       parameters.maxMonths],
+      ['Threshold',        parameters.threshold],
+      ['HCE % threshold',  parameters.hcePctThreshold],
+      ['HCE multiplier',   parameters.hceMultThreshold],
+      ['Lumpy CV',         parameters.lumpyCvThreshold],
+      ['Lumpy top-WO',     parameters.lumpyTopWoThreshold],
+      ['Min/Max method',   parameters.minMaxMethod],
+      ['Exported at',      AppLocale.localDateTimeISO()]
+    ];
+    rows.forEach((rr, i) => {
+      meta.getCell(`A${i + 3}`).value = rr[0];
+      meta.getCell(`A${i + 3}`).font  = { bold:true, name:'Calibri' };
+      meta.getCell(`B${i + 3}`).value = rr[1];
+    });
+    meta.getColumn(1).width = 24;
+    meta.getColumn(2).width = 40;
+  }
+
+  /* Build the scoped workbook (returns { wb, materialCount }). */
+  async function buildScopedWorkbook(o){
+    const buckets    = o.buckets || [];
+    const filter     = o.materialFilter || null;
+    const mode       = (o.mode === 'summary') ? 'summary' : 'full';
+    const analyst    = o.analyst || null;
+    const parameters = o.parameters || {};
+    const runDate    = o.runDate || AppLocale.localDateISO();
+    const scopeLabel = o.scopeLabel || 'All fleets';
+    const showFleet  = buckets.length > 1;
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Inventory Optimization App';
+    wb.created = new Date();
+
+    // 1. Gather ordered, deduped material list.
+    const matList = gatherScopedMaterials(buckets, filter);
+
+    // 2. Index sheet.
+    const idxInfo = buildScopedIndexSheet(wb, matList, {
+      showFleet, analyst, parameters, runDate, scopeLabel
+    });
+
+    // 3. Per-material sheets + charts (full mode only) + Index hyperlinks.
+    if (mode === 'full') {
+      const taken = new Set(['Index']);
+      const sheetNameByMat = new Map();
+      let progress = 0;
+      const total = matList.length;
+      for (const entry of matList) {
+        const m = entry.m;
+        progress++;
+        if (o.progress) o.progress(progress, total, m.material);
+        const sname = safeSheetName(String(m.material), taken);
+        sheetNameByMat.set(m.material, sname);
+        const ws = wb.addWorksheet(sname);
+        await buildMaterialSheet(wb, ws, m, parameters, runDate, { analyst });
+      }
+      // Index column-A hyperlinks
+      let r = idxInfo.firstDataRow;
+      for (const entry of matList) {
+        const sname = sheetNameByMat.get(entry.m.material);
+        if (sname) {
+          const cell = idxInfo.ws.getCell(`${idxInfo.matColLetter}${r}`);
+          cell.value = { text: String(entry.m.material), hyperlink: `#'${sname}'!A1` };
+          cell.font  = { name:'Calibri', size:10, bold:true, underline:true, color:{ argb:'FF' + C.linkBlue } };
+          cell.alignment = { horizontal:'left', vertical:'middle' };
+          cell.border = thinBorder();
+        }
+        r++;
+      }
+    }
+
+    // 4. Summary sheet.
+    buildScopedSummarySheet(wb, matList, scopeLabel);
+
+    // 5. Run sheet.
+    buildScopedRunSheet(wb, buckets, matList, parameters, runDate, scopeLabel);
+
+    return { wb, materialCount: matList.length };
+  }
+
+  /* ─── Public: unified scoped export ─── */
+  async function downloadScoped(opts){
+    opts = opts || {};
+    if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS not loaded — include the CDN script.');
+    const { wb, materialCount } = await buildScopedWorkbook(opts);
+    const buf  = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fname = sanitizeFile(opts.filename || `Scoped_Analysis_${opts.runDate || AppLocale.localDateISO()}.xlsx`);
+    triggerDownload(blob, fname);
+    return { sizeBytes: buf.byteLength, materialCount };
+  }
+
   global.AppExcel = Object.freeze({
     buildWorkbookForBucket,
     downloadBucket,
@@ -1053,7 +1382,9 @@
     buildCombinedWorkbook,
     downloadCombined,
     buildMassReviewWorkbook,
-    downloadMassReview
+    downloadMassReview,
+    buildScopedWorkbook,
+    downloadScoped
   });
 
 })(window);

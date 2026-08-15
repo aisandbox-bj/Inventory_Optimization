@@ -347,17 +347,15 @@
 
     const tbody = rows.map(m => {
       const isReview = state.marked.review.has(m.material);
-      const isPdf    = state.marked.pdf.has(m.material);
       const isAction = !!(state.analyst && state.analyst.isAction(m.material));   // APP-ACT-01
       const rowClasses = [
         state.selectedMaterial === m.material ? 'selected' : '',
-        (isReview || isPdf || isAction) ? 'marked-any' : '',
+        (isReview || isAction) ? 'marked-any' : '',
         isReview ? 'marked-review' : '',
-        isPdf    ? 'marked-pdf'    : '',
         isAction ? 'marked-action' : ''
       ].filter(Boolean).join(' ');
-      const badges = (isReview || isPdf || isAction)
-        ? `<span class="mark-badges">${isAction ? '<span class="mark-badge action" title="Flagged For Action">★</span>' : ''}${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}${isPdf ? '<span class="mark-badge pdf" title="Marked for PDF print">⤓</span>' : ''}</span>`
+      const badges = (isReview || isAction)
+        ? `<span class="mark-badges">${isAction ? '<span class="mark-badge action" title="Flagged For Action">★</span>' : ''}${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}</span>`
         : '';
       return `
       <tr data-material="${escapeAttr(m.material)}" class="${rowClasses}">
@@ -407,6 +405,7 @@
         openRowContextMenu(e.clientX, e.clientY, tr.dataset.material);
       });
     });
+    refreshExportActionState();   // APP-ACT-02 — keep ★ For-action export buttons in sync
   }
 
   /* ─── Right-click context menu (v2.0) ───────────────────────────────────── */
@@ -418,14 +417,11 @@
 
     // Toggle which menu items are shown based on existing marks
     const isReview = state.marked.review.has(material);
-    const isPdf    = state.marked.pdf.has(material);
     const isAction = !!(state.analyst && state.analyst.isAction(material));   // APP-ACT-01
     menu.querySelector('[data-action="mark-action"]').style.display   = isAction ? 'none' : '';
     menu.querySelector('[data-action="unmark-action"]').style.display = isAction ? '' : 'none';
     menu.querySelector('[data-action="mark-review"]').style.display   = isReview ? 'none' : '';
     menu.querySelector('[data-action="unmark-review"]').style.display = isReview ? '' : 'none';
-    menu.querySelector('[data-action="mark-pdf"]').style.display      = isPdf    ? 'none' : '';
-    menu.querySelector('[data-action="unmark-pdf"]').style.display    = isPdf    ? '' : 'none';
 
     // Position — clamp to viewport
     const w = 260, h = 200;
@@ -440,8 +436,6 @@
         const act = item.dataset.action;
         if (act === 'mark-review')   { state.marked.review.add(material);    }
         if (act === 'unmark-review') { state.marked.review.delete(material); }
-        if (act === 'mark-pdf')      { state.marked.pdf.add(material);       }
-        if (act === 'unmark-pdf')    { state.marked.pdf.delete(material);    }
         if (act === 'mark-action')   { if (state.analyst) state.analyst.setAction(material, true);  }   // APP-ACT-01
         if (act === 'unmark-action') { if (state.analyst) state.analyst.setAction(material, false); }
         if (act === 'open-detail')   {
@@ -475,16 +469,13 @@
 
   /* Update bulk-operations row to show mark counters */
   function renderBulkCounters(){
+    // APP-ACT-02 — the PDF-print mark was retired (★ For Action is now the export
+    // selector); only the Mass-review mark counter remains.
     const reviewBtn = $('#btnMassReview');
-    const pdfBtn    = $('#btnPdfPack');
     const nReview = state.marked.review.size;
-    const nPdf    = state.marked.pdf.size;
     if (reviewBtn) reviewBtn.textContent = nReview > 0
-      ? `✦ Mass LLM Review · ${nReview} marked`
-      : `✦ Mass LLM Review`;
-    if (pdfBtn) pdfBtn.textContent = nPdf > 0
-      ? `⤓ Export PDF Pack · ${nPdf} marked`
-      : `⤓ Export PDF Pack`;
+      ? `✦ Mass review · ${nReview} marked`
+      : `✦ Mass review`;
   }
 
   /* ─── Excel-style per-column filter popover ───────────────────────────────
@@ -703,58 +694,152 @@
     // APP-E13 — grouped action row. Order chosen so the most-used path runs
     // left-to-right: open the data-quality review, pick PDF/Excel/JSON
     // outputs, then optionally run/reload an LLM review.
+    // APP-ACT-02 (Phase 2a) — collapsed Exports panel: a format × scope grid.
+    // Scopes: Full set (all fleets) · ★ For action (flagged only). The
+    // Selected-fleets picker arrives in Phase 2b. Bucket → Fleet throughout.
     host.innerHTML = `
-      <div class="export-group">
-        <span class="export-group-label">Data quality</span>
-        <div class="export-group-buttons">
-          <button id="btnInvAdj" class="ghost" title="Open the Inventory Adjustment review — flags MB51 dates with anomalously high issue-transaction counts (likely cycle counts) so they can be excluded from rate math. This is a heads-up, not an error.">✦ Inv Adj review</button>
+      <div class="export-panel collapsed" id="exportPanel">
+        <button type="button" class="export-toggle" id="exportToggle" aria-expanded="false" title="Show the export options">
+          <span class="export-caret">▸</span>
+          <span class="export-toggle-lab">Exports</span>
+          <span class="export-toggle-hint">PDF · Excel · JSON — click to open</span>
+        </button>
+        <div class="export-body" id="exportBody" hidden>
+          <div class="export-grid">
+            <div class="export-grid-row export-grid-head">
+              <span class="export-fmt"></span>
+              <span class="export-scope-head">Full set</span>
+              <span class="export-scope-head">★ For action</span>
+            </div>
+            <div class="export-grid-row">
+              <span class="export-fmt">PDF Pack</span>
+              <button class="exp-btn exp-pdf" data-fmt="pdf" data-scope="full" title="One PDF, one page per material — chart, key stats, MRP comparison (your Analyst Recommendation shown on flagged items), plus HCE + Inv-Adj tables. Covers every analysed material.">Full set</button>
+              <button class="exp-btn exp-pdf exp-action" data-fmt="pdf" data-scope="action" title="PDF pages for the materials you flagged For Action only — each carrying its Analyst Recommendation.">★ For action</button>
+            </div>
+            <div class="export-grid-row">
+              <span class="export-fmt">Excel · Full pack <small>with graphs</small></span>
+              <button class="exp-btn exp-xlsx" data-fmt="xlsxFull" data-scope="full" title="Excel workbook: an Index plus one sheet per material with its chart, stats and MRP comparison (Analyst Recommendation on flagged items). Every analysed material — can be a large file.">Full set</button>
+              <button class="exp-btn exp-xlsx exp-action" data-fmt="xlsxFull" data-scope="action" title="Excel Full pack (with graphs) for flagged materials only, each with its Analyst Recommendation.">★ For action</button>
+            </div>
+            <div class="export-grid-row">
+              <span class="export-fmt">Excel · Summary <small>table only</small></span>
+              <button class="exp-btn exp-xlsx" data-fmt="xlsxSummary" data-scope="full" title="Excel workbook: a single flat Index table — no per-material sheets, no charts, so it is fast and small. For-Action + Analyst Recommendation columns are filled on flagged items.">Full set</button>
+              <button class="exp-btn exp-xlsx exp-action" data-fmt="xlsxSummary" data-scope="action" title="Excel Summary table of the flagged materials only, with the Analyst Recommendation columns.">★ For action</button>
+            </div>
+          </div>
+          <div class="export-action-note" id="exportActionNote"></div>
+          <div class="export-aux">
+            <button id="btnDownloadJson" class="exp-btn exp-json" title="Download the canonical intake JSON (everything the pipeline read in — parsed SAP data, parameters, metadata). Safe to share / reload later via Intake.">⤓ Canonical dataset (JSON)</button>
+            <button id="btnInvAdj" class="exp-btn exp-dq" title="Open the Inventory Adjustment review — flags MB51 dates with anomalously high issue counts (likely cycle counts) so they can be excluded from rate math. A heads-up, not an error.">✦ Inv Adj review</button>
+            <button id="btnMassReview" class="exp-btn exp-llm" title="Run the LLM over up to 50 materials in the current fleet, in sequence — produces an Excel + JSON deliverable. In-memory only, wiped on close unless you download.">✦ Mass review</button>
+            <button id="btnLoadMassReview" class="exp-btn exp-llm-ghost" title="Reload a previously-downloaded Mass-Review JSON to view its LLM annotations again. The matching canonical intake must already be loaded here.">⤒ Reload saved review</button>
+          </div>
+          <span id="exportProgress" class="export-progress" style="display:none;"></span>
+          <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
         </div>
       </div>
-
-      <div class="export-group">
-        <span class="export-group-label">PDF</span>
-        <div class="export-group-buttons">
-          <button id="btnPdfPack" class="primary" title="One PDF, one page per selected material (chart + key stats + MRP comparison + HCE + Inv Adj). Right-click a row in the list to 'Mark for PDF print', then click here.">⤓ PDF Pack (selected)</button>
-        </div>
-      </div>
-
-      <div class="export-group">
-        <span class="export-group-label">Excel</span>
-        <div class="export-group-buttons">
-          <button id="btnExportBucket" class="primary" title="One Excel workbook for the currently-selected bucket only.">⤓ Excel — this bucket</button>
-          <button id="btnExportCombined" class="primary" title="One Excel workbook containing every bucket in this analysis, on separate tabs.">⤓ Excel — all (1 file)</button>
-          <button id="btnExportAll" class="ghost" title="One Excel workbook per bucket, downloaded in sequence (useful when the combined file is too large to open).">⤓ Excel — all (separate files)</button>
-        </div>
-      </div>
-
-      <div class="export-group">
-        <span class="export-group-label">JSON</span>
-        <div class="export-group-buttons">
-          <button id="btnDownloadJson" class="primary" title="Download the canonical intake JSON for this analysis (everything the pipeline read in — parsed MB51, IW39, Fleet, Inventory Master, parameters, metadata). Safe to share / reload later via the Intake page.">⤓ Canonical dataset</button>
-        </div>
-      </div>
-
-      <div class="export-group">
-        <span class="export-group-label">LLM</span>
-        <div class="export-group-buttons">
-          <button id="btnMassReview" class="primary" title="Pick up to 50 materials from this bucket and run the LLM against each one in sequence. Produces an Excel + JSON deliverable. In-memory only — wiped on modal close unless you download.">✦ Mass review (run)</button>
-          <button id="btnLoadMassReview" class="ghost" title="Reload a previously-downloaded Mass-Review JSON. Use this after a session was wiped (closed) to view the saved LLM annotations again. The matching canonical intake JSON must already be loaded on this page.">⤒ Reload saved review</button>
-        </div>
-      </div>
-
-      <span id="exportProgress" class="export-progress" style="display:none;"></span>
-      <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
     `;
+    // Collapse toggle (collapsed by default)
+    const panel = $('#exportPanel'), body = $('#exportBody'), toggle = $('#exportToggle');
+    toggle.addEventListener('click', () => {
+      const open = panel.classList.toggle('collapsed') === false;
+      body.hidden = !open;
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const caret = toggle.querySelector('.export-caret');
+      if (caret) caret.textContent = open ? '▾' : '▸';
+    });
+    // Scoped format × scope buttons
+    host.querySelectorAll('.exp-btn[data-fmt]').forEach(btn => {
+      btn.addEventListener('click', () => exportScoped(btn.dataset.fmt, btn.dataset.scope));
+    });
+    // Aux buttons
     $('#btnInvAdj').addEventListener('click', openInvAdjModal);
-    $('#btnPdfPack').addEventListener('click', openPdfPackModal);
     $('#btnMassReview').addEventListener('click', openMassReview);
-    renderBulkCounters();
     $('#btnLoadMassReview').addEventListener('click', () => $('#loadMassReviewInput').click());
     $('#loadMassReviewInput').addEventListener('change', handleMassReviewUpload);
-    $('#btnExportBucket').addEventListener('click', exportThisBucket);
-    $('#btnExportCombined').addEventListener('click', exportCombined);
-    $('#btnExportAll').addEventListener('click', exportAllBuckets);
     $('#btnDownloadJson').addEventListener('click', downloadCanonicalJson);
+    renderBulkCounters();
+    refreshExportActionState();
+  }
+
+  /* APP-ACT-02 — enable/disable the ★ For-action export buttons by how many
+     materials are flagged, kept in sync as the operator flags rows (called from
+     renderList). */
+  function refreshExportActionState(){
+    const n = state.analyst ? state.analyst.actionCount() : 0;
+    document.querySelectorAll('.exp-btn.exp-action').forEach(b => { b.disabled = n === 0; });
+    const note = document.querySelector('#exportActionNote');
+    if (note) note.textContent = n === 0
+      ? 'Flag materials For Action (★) to enable the “For action” exports.'
+      : `${n} material${n === 1 ? '' : 's'} flagged For Action.`;
+  }
+
+  /* APP-ACT-02 — resolve the material set for a scope, deduped across fleets.
+     Returns [{ mat, fleet }] preserving fleet-of-origin for the PDF header. */
+  function gatherScopedMaterials(buckets, filter){
+    const seen = new Set(), out = [];
+    for (const b of buckets) for (const m of b.materials) {
+      if (filter && !filter.has(m.material)) continue;
+      if (seen.has(m.material)) continue;
+      seen.add(m.material); out.push({ mat: m, fleet: b.name });
+    }
+    return out;
+  }
+
+  /* APP-ACT-02 — unified scoped export dispatcher.
+     format ∈ pdf | xlsxFull | xlsxSummary,  scope ∈ full | action.
+     (The Selected-fleets scope arrives in Phase 2b.) */
+  async function exportScoped(format, scope){
+    if (!state.result || !state.json) return;
+    const prog = $('#exportProgress'); if (prog) prog.style.display = '';
+    const buckets = state.result.buckets;
+    let materialFilter = null, scopeLabel = 'All fleets', scopeTag = 'FullSet';
+    if (scope === 'action'){
+      const flagged = state.analyst ? state.analyst.actionMaterials() : [];
+      if (!flagged.length){ if (prog) prog.textContent = 'Nothing flagged For Action.'; return; }
+      materialFilter = new Set(flagged);
+      scopeLabel = `For action (${flagged.length})`; scopeTag = 'ForAction';
+    }
+    const assess = (state.json.metadata.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
+    try {
+      if (format === 'pdf'){
+        const rows = gatherScopedMaterials(buckets, materialFilter);
+        if (!rows.length){ if (prog) prog.textContent = 'No materials in scope.'; return; }
+        await buildPdfPackForMaterials(rows, scopeTag, prog);
+      } else {
+        if (typeof AppExcel === 'undefined' || !AppExcel.downloadScoped){ if (prog) prog.textContent = 'Excel engine not available.'; return; }
+        const mode = format === 'xlsxSummary' ? 'summary' : 'full';
+        const fname = `analysis-${assess}-${scopeTag}-${mode}-${state.result.runDate}.xlsx`;
+        if (prog) prog.textContent = 'Building workbook…';
+        const res = await AppExcel.downloadScoped({
+          buckets, materialFilter, mode,
+          analyst: state.analyst,
+          parameters: state.json.parameters,
+          runDate: state.result.runDate,
+          filename: fname, scopeLabel,
+          progress: (nn, total, mat) => { if (prog) prog.textContent = `${mode === 'full' ? 'Chart' : 'Row'} ${nn}/${total} · ${mat}`; }
+        });
+        if (prog) prog.textContent = `✓ Exported ${res.materialCount} material${res.materialCount === 1 ? '' : 's'} · ${(res.sizeBytes / 1024).toFixed(0)} KB`;
+      }
+      if (prog) setTimeout(() => { prog.style.display = 'none'; }, 4000);
+    } catch (e){ console.error(e); if (prog) prog.textContent = `✗ ${e.message || e}`; }
+  }
+
+  /* APP-ACT-02 — build a PDF pack directly from a scoped material list (no modal;
+     the scope buttons replace the old right-click "mark for PDF" flow). */
+  async function buildPdfPackForMaterials(rows, scopeTag, prog){
+    const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if (!jsPDFCtor){ if (prog) prog.textContent = 'PDF engine not loaded.'; return; }
+    const doc = new jsPDFCtor({ orientation:'portrait', unit:'mm', format:'a4', compress:true });
+    for (let i = 0; i < rows.length; i++){
+      const { mat, fleet } = rows[i];
+      if (prog) prog.textContent = `PDF page ${i + 1}/${rows.length} · ${mat.material}`;
+      if (i > 0) doc.addPage();
+      await renderMaterialToPdf(doc, mat, fleet, i + 1, rows.length);
+    }
+    const assess = (state.json.metadata.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
+    doc.save(`PDF_Pack_${assess}_${scopeTag}_${state.result.runDate}.pdf`);
+    if (prog) prog.textContent = `✓ PDF saved · ${rows.length} page${rows.length === 1 ? '' : 's'}`;
   }
 
   /* ─── APP-E13 · Canonical-dataset JSON download ───────────────────────
@@ -1033,11 +1118,15 @@
   }
 
   /* ─── Per-material PDF page (A4 portrait, 210×297 mm) ─── */
-  async function renderMaterialToPdf(doc, m, bucket, pageIdx, pageTotal){
+  async function renderMaterialToPdf(doc, m, fleet, pageIdx, pageTotal){
     const W = 210, H = 297, M = 12;       // mm
     const params = state.json.parameters;
     const assess = state.json.metadata.assessmentName || '(unnamed)';
     const runDate = state.result.runDate;
+    // APP-ACT-02 — accept either a fleet-name string (new scoped path) or a
+    // bucket object (legacy call), and read the For-Action flag from the sidecar.
+    const fleetName = (fleet && fleet.name) ? fleet.name : String(fleet || '');
+    const isAction = !!(state.analyst && state.analyst.isAction(m.material));
 
     // ── Header band ──────────────────────────────────────────────────────
     doc.setFillColor(31, 56, 100);                 // navy
@@ -1048,7 +1137,7 @@
     doc.text('Inventory Optimization · Consumption Profile', M, 8);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.text(`${assess}  |  Bucket: ${bucket.name}  |  Run: ${runDate}`, M, 13.5);
+    doc.text(`${assess}  |  Fleet: ${fleetName}  |  Run: ${runDate}`, M, 13.5);
     doc.text(`Page ${pageIdx} / ${pageTotal}`, W - M, 13.5, { align: 'right' });
 
     // ── Material title row ──────────────────────────────────────────────
@@ -1057,6 +1146,15 @@
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
     doc.text(String(m.material), M, y);
+    // APP-ACT-02 — gold "★ For Action" marker beside flagged materials.
+    if (isAction) {
+      const wmat = doc.getTextWidth(String(m.material));
+      doc.setTextColor(197, 150, 20);              // gold, print-legible
+      doc.setFontSize(12);
+      doc.text('★ For Action', M + wmat + 6, y);
+      doc.setTextColor(20, 20, 30);
+      doc.setFontSize(16);
+    }
     // TL pill on right
     const tl = m.trafficLight;
     const tlColor = ({ GREEN:[0,176,80], BLUE:[52,152,219], ORANGE:[255,140,0], RED:[192,0,0], PURPLE:[155,89,182], GREY:[191,191,191] })[tl] || [127,127,127];
@@ -1142,28 +1240,32 @@
     y = doc.lastAutoTable.finalY + 4;
 
     // ── MRP Settings Comparison ──────────────────────────────────────────
-    const cmpBody = [
-      ['MRP type', m.mrpType || '—', m.recMrpType || m.mrpType || '—'],
-      ['Min',      m.cmin != null ? String(m.cmin) : '—',  m.recMin != null ? String(m.recMin) : '—'],
-      ['Max',      m.cmax != null ? String(m.cmax) : '—',  m.recMax != null ? String(m.recMax) : '—'],
-      ['Safety stock', m.safetyStock != null ? String(m.safetyStock) : '—', '—']
+    // APP-ACT-02 — flagged materials gain a 4th "Analyst" column from the sidecar.
+    const anRec = (isAction && state.analyst) ? state.analyst.getRec(m.material) : null;
+    const anCell = (v) => v ? String(v) : '—';
+    const baseRows = [
+      ['MRP type',     m.mrpType || '—',                                   m.recMrpType || m.mrpType || '—',           anRec ? anCell(anRec.mrpType) : null],
+      ['Min',          m.cmin != null ? String(m.cmin) : '—',              m.recMin != null ? String(m.recMin) : '—',  anRec ? anCell(anRec.min) : null],
+      ['Max',          m.cmax != null ? String(m.cmax) : '—',              m.recMax != null ? String(m.recMax) : '—',  anRec ? anCell(anRec.max) : null],
+      ['Safety stock', m.safetyStock != null ? String(m.safetyStock) : '—', '—',                                       anRec ? anCell(anRec.safety) : null]
     ];
+    const cmpBody = baseRows.map(r => anRec ? r : r.slice(0, 3));
+    const cmpHead = anRec ? [['MRP Settings', 'Current', 'Recommended', 'Analyst']] : [['MRP Settings', 'Current', 'Recommended']];
+    const cmpColStyles = anRec
+      ? { 0:{ fontStyle:'bold', cellWidth:34, fillColor:[240,240,245] }, 1:{ cellWidth:42, halign:'center' }, 2:{ cellWidth:42, halign:'center', textColor:[22,138,145] }, 3:{ cellWidth:42, halign:'center', textColor:[150,110,20] } }
+      : { 0:{ fontStyle:'bold', cellWidth:36, fillColor:[240,240,245] }, 1:{ cellWidth:56, halign:'center' }, 2:{ cellWidth:56, halign:'center', textColor:[22,138,145] } };
     doc.autoTable({
       startY: y,
-      head: [['MRP Settings', 'Current', 'Recommended']],
+      head: cmpHead,
       body: cmpBody,
       theme: 'grid',
       styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: [200, 200, 210], lineWidth: 0.15 },
       headStyles: { fillColor: [48, 84, 150], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 36, fillColor: [240, 240, 245] },
-        1: { cellWidth: 56, halign: 'center' },
-        2: { cellWidth: 56, halign: 'center', textColor: [22, 138, 145] }
-      },
+      columnStyles: cmpColStyles,
       didParseCell: (data) => {
-        if (data.row.section === 'body' && data.column.index >= 1 && data.row.index < 3) {
-          const cur = cmpBody[data.row.index][1];
-          const rec = cmpBody[data.row.index][2];
+        if (data.row.section === 'body' && (data.column.index === 1 || data.column.index === 2) && data.row.index < 3) {
+          const cur = baseRows[data.row.index][1];
+          const rec = baseRows[data.row.index][2];
           if (cur !== '—' && rec !== '—' && cur !== rec) {
             data.cell.styles.fillColor = [255, 243, 205];
           }

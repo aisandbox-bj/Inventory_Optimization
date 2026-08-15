@@ -634,16 +634,22 @@
       <!-- ───────────── 10 · Excel + PDF ───────────── -->
       <section class="um-section" id="excel">
         <h2><span class="num">10</span>Excel + PDF deliverables</h2>
-        <h3>Per-bucket workbook</h3>
+        <h3>The Exports panel (APP-ACT-02)</h3>
+        <p>Exports live in a <b>collapsed "Exports ▾" bar</b> below the material list — click to open. Inside is a <b>format × scope grid</b>: pick a <b>format</b> (PDF Pack · Excel · Full pack <em>with graphs</em> · Excel · Summary <em>table only</em>) and a <b>scope</b>:</p>
+        <ul>
+          <li><b>Full set</b> — every analysed material, across all fleets.</li>
+          <li><b>★ For action</b> — only the materials you flagged For Action (§9). Greyed out until at least one material is flagged; a note shows the current count.</li>
+        </ul>
+        <p>Flagged materials carry their <b>Analyst Recommendation</b> into the deliverable: the PDF page gains a gold <b>★ For Action</b> marker and an <b>Analyst</b> column in the MRP table; the Excel Index gains <b>For Action + Analyst MRP/Min/Max/Safety</b> columns (and per-material sheets get an Analyst column). Unflagged materials export as before (blank Analyst cells). <b>Excel · Summary</b> is a single flat Index — no per-material sheets or charts, so it is fast and small; <b>Excel · Full pack</b> includes every material's sheet + chart. Below the grid sit <b>Canonical dataset (JSON)</b>, <b>Inv Adj review</b>, and the <b>Mass review</b> LLM buttons. <em>(Phase 2b will add a "Selected fleets" scope with a fleet/unit picker, and move the LLM buttons to their own panel above Exports.)</em></p>
+        <h3>Workbook contents (per scope)</h3>
         <ul>
           <li><b>Index sheet</b> — title row, then a frozen header with AutoFilter on every column: Material / Description / Total Consumed / P1 Rate / P2 Rate / Rate Change % / Current Stock / MRP Type / Current Min / Current Max / Recommended Min / Recommended Max / Traffic Light / Action Required / HCE Flag (P2) / Adj P2 Rate / Multi-Model Flag. Material cells link to the per-material sheet; traffic-light cells are colour-filled; HCE columns amber-tint.</li>
           <li><b>Per-material sheet</b> — a Field/Value/Notes table (material, group, manufacturer, totals, P1/P2 + adjusted rates, rate change, stock, runway, MRP type, current + recommended Min/Max, traffic light, action); the <b>MRP Settings Comparison</b> (Current vs Recommended, amber where they differ — incl. the <code>PD → V1</code> reclass row + note from APP-E8); the HCE and Inv-Adj tables; and the embedded chart image at the F2 anchor.</li>
           <li><b>Summary + Run sheets</b> — traffic-light counts and run metadata (parameters, dates, export timestamp).</li>
         </ul>
-        <h3>Combined workbook (Export ALL)</h3>
-        <p>Single file: Master Index (every material across every bucket, bucket name first column, AutoFilter) + cross-bucket Summary + Run metadata. No per-material chart sheets, so it opens fast for comparison.</p>
+        <p>When a scope spans more than one fleet, the Index gains a leading <b>Fleet</b> column so you can see and filter which fleet each material came from.</p>
         <h3>PDF Pack</h3>
-        <p>One A4 portrait page per selected material — navy header band, material number + traffic-light pill, recommendation banner, the embedded chart, a stat grid, the MRP comparison (with the reclass note), and HCE / Inv-Adj tables where present. Mark materials by right-clicking list rows (<em>Mark for PDF print</em>), then <b>⤓ Export PDF Pack</b> → select → <b>Build PDF</b>. Built on jsPDF + autoTable (CDN); chart embeds via <code>AppChart.toPng()</code>; ~150–300 ms per material.</p>
+        <p>One A4 portrait page per material in the chosen scope — navy header band (Fleet + run date), material number (plus a gold <b>★ For Action</b> marker on flagged items), traffic-light pill, recommendation banner, the embedded chart, a stat grid, the MRP comparison (with the reclass note, and an <b>Analyst</b> column on flagged items), and HCE / Inv-Adj tables where present. Trigger it from the Exports panel's <b>PDF Pack</b> row (Full set or ★ For action). Built on jsPDF + autoTable (CDN); chart embeds via <code>AppChart.toJpeg()</code> at q0.65.</p>
         <div class="um-note warn">
           <span class="lab">LLM commentary in deliverables — default OFF</span>
           Any LLM annotation in a client-facing Excel/PDF is opt-in per export with a mandatory caveat banner. The default is OFF — the math deliverable ships clean.

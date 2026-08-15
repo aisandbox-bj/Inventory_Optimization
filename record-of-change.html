@@ -380,6 +380,26 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.1.5-dev - APP-ACT-02 (Phase 2a) Export overhaul -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-15</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>APP-ACT-02 (Phase 2a) — Export overhaul: collapsed format × scope grid · Full-set / For-action scopes · Excel Full-pack vs Summary · Analyst Rec in PDF + Excel · Bucket→Fleet</h4>
+      <ul>
+        <li><b>Collapsed Exports panel.</b> The old always-open 8-button row is now a <b>collapsed "Exports ▾" bar</b> that expands to a <b>format × scope grid</b>. Buttons are coloured <b>outlines</b> (no fill, white text) — PDF red, Excel green, JSON cyan, DQ amber, LLM purple — each with a hover-helper tooltip.</li>
+        <li><b>Two non-fleet scopes.</b> <b>Full set</b> (all fleets) and <b>★ For action</b> (only materials flagged For Action; the button is <b>greyed when nothing is flagged</b>, kept in sync as you flag rows) — offered on <b>PDF Pack</b>, <b>Excel · Full pack (with graphs)</b>, and <b>Excel · Summary (table only)</b>. Excel Full-pack vs Summary are now <b>real modes</b> (Summary = flat Index + Summary + Run, no per-material sheets/charts — fast + small).</li>
+        <li><b>Analyst Recommendation + For-Action in deliverables.</b> The PDF per-material page gains a gold <b>★ For Action</b> marker in the title and a 4th <b>Analyst</b> column in the MRP table; the Excel Index gains <b>For Action + Analyst MRP/Min/Max/Safety</b> columns and the per-material sheet's MRP table gains an <b>Analyst</b> column — all populated <b>only for flagged materials</b> (others blank), reading the APP-ACT-01 sidecar.</li>
+        <li><b>Marking consolidated (operator decision).</b> The separate right-click <b>"Mark for PDF print"</b> is <b>retired</b> — the ★ For Action flag is now the single per-material export selector. "Mark for LLM review" stays (Mass review is its own thing).</li>
+        <li><b>Bucket → Fleet.</b> User-facing "bucket" wording swapped to "fleet" across the export UI, PDF header ("Fleet:"), and Excel sheet titles/columns/Run sheet (internal `bucket` keys unchanged).</li>
+        <li><b>Files.</b> <code>analysis/analysis.js</code> (new collapsed grid + <code>exportScoped</code>/<code>gatherScopedMaterials</code>/<code>buildPdfPackForMaterials</code>/<code>refreshExportActionState</code>, PDF threading, retire mark-for-pdf), <code>analysis/analysis.css</code> (panel + grid + outline buttons), <code>analysis/analysis.html</code> (context-menu cleanup), <code>shared/excel.js</code> (new <code>AppExcel.downloadScoped</code>/<code>buildScopedWorkbook</code> — material filter + summary/full mode + Fleet column + analyst columns; existing builders incl. mass-review untouched). No SCHEMA_VERSION change.</li>
+        <li><b>Verified on-machine</b> (no Node → <code>node --check</code> skipped): clean http boot, zero console errors, all modules define. The Excel refactor was exercised end-to-end with synthetic fleets — <b>Summary</b> = Index/Summary/Run only, <b>Full</b> = per-material sheets present, Index header carries Fleet + For-Action + Analyst columns, the flagged row shows ★ + PD/12/40/3 while unflagged rows stay blank, the material filter narrows to the flagged set, <code>analyst=null</code> drops the analyst columns, and the workbook serialises to real .xlsx bytes. The export-panel CSS was confirmed by screenshot. <b>NOT tested on-machine:</b> the live click-through of a scope button against a pipeline-loaded dataset (no canonical JSON on this box) — that is the operator's off-repo pass. Rollback snapshot <code>_rollback/APP-ACT-02-pre/</code>.</li>
+        <li><b>Deferred to Phase 2b</b> (credibility): the <b>"Selected fleets…" scope</b> — a picker listing each fleet with its unit count + inclusion checkboxes — is <em>not</em> in this build (operator split it out to ship the non-fleet work now). The <code>downloadScoped</code> engine already accepts an arbitrary fleet list, so 2b is UI-only. Also not done: removing the now-dead legacy PDF-modal / per-bucket export functions (left in place, unwired, to keep this diff low-risk).</li>
+      </ul>
+    </article>
+
     <!-- v2.1.5-dev - APP-ACT-01 For Action + Analyst Rec + Prev/Next -->
     <article class="roc-entry dev">
       <div class="head">
