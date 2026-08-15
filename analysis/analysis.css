@@ -1232,3 +1232,32 @@
 .exp-btn.exp-llm:hover:not(:disabled){ border-color:#B83CD0; background:rgba(184,60,208,0.10); }
 .exp-btn.exp-llm-ghost{ border-color:var(--border); color:var(--text-muted); }
 .exp-btn.exp-llm-ghost:hover:not(:disabled){ color:#fff; background:rgba(255,255,255,0.05); }
+
+/* ═══ APP-TREND-NOTES (Phase 1) · right-docked per-material notes drawer + badge ═══ */
+.list-table .mark-badge.note{
+  background:rgba(31,206,216,0.16);
+  color:var(--accent);
+  border:1px solid rgba(31,206,216,0.50);
+}
+.notes-drawer{
+  position:fixed; right:18px; top:118px; z-index:60;
+  width:330px; max-width:calc(100vw - 36px); max-height:72vh;
+  display:flex; flex-direction:column;
+  background:var(--bg-panel, #0f2b3a);
+  border:1px solid var(--accent); border-radius:10px;
+  box-shadow:0 14px 44px rgba(0,0,0,.45);
+}
+.notes-drawer.hidden{ display:none; }
+.notes-head{ display:flex; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--border); }
+.notes-head .notes-lab{ font-family:var(--font-mono); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--accent); }
+.notes-head .notes-mat{ font-family:var(--font-mono); font-size:12px; color:var(--text-pri); }
+.notes-head .notes-close{ margin-left:auto; background:transparent; border:none; color:var(--text-muted); font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:5px; }
+.notes-head .notes-close:hover{ color:var(--text-pri); background:rgba(255,255,255,0.06); }
+.notes-area{
+  flex:1 1 auto; min-height:190px; resize:vertical; margin:0;
+  padding:12px 13px; border:none; outline:none;
+  background:transparent; color:var(--text-pri);
+  font-family:var(--font-body); font-size:13px; line-height:1.5;
+}
+.notes-area::placeholder{ color:var(--text-muted); }
+.notes-foot{ padding:8px 13px; border-top:1px solid var(--border); font-size:10.5px; color:var(--text-muted); font-family:var(--font-mono); letter-spacing:.3px; }

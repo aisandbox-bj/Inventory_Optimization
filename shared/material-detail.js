@@ -190,7 +190,7 @@
               <th></th>
               <th class="current-head">Current</th>
               <th class="rec-head">Recommended</th>
-              ${anOn ? '<th class="analyst-head">Analyst</th>' : ''}
+              ${anOn ? `<th class="analyst-head clickable" id="anActionHdr" title="Click to ${analyst.flagged ? 'clear the' : 'set the'} For Action flag">Analyst${analyst.flagged ? ' ★' : ''}</th>` : ''}
             </tr>
           </thead>
           <tbody>${trs}</tbody>
@@ -403,8 +403,7 @@
         <span class="chart-toolbar-lab">Show:</span>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleConsumption" checked> Consumption</label>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
-        ${opts.nav ? `<span class="nav-spacer"></span><div class="detail-nav"><button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button></div>` : ''}
-        ${opts.whereUsedFn ? '<span class="wu-spacer"></span><button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>' : ''}
+        ${(opts.nav || opts.notes || opts.whereUsedFn) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn" title="${opts.notes.hasNote ? 'Notes for this material — has a note (click to view/edit)' : 'Add a note for this material'}">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>` : ''}</div>` : ''}
       </div>
       <div class="chart-host" id="chartHost"></div>
       <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
@@ -517,6 +516,12 @@
       if (starBtn && typeof opts.analyst.onToggleAction === 'function') {
         starBtn.addEventListener('click', (e) => { e.stopPropagation(); opts.analyst.onToggleAction(); });
       }
+      // APP-TREND-ACTHDR — clicking the "Analyst" MRP-table header toggles the
+      // For-Action flag (so the operator can flag from the right-hand side).
+      const anHdr = hostEl.querySelector('#anActionHdr');
+      if (anHdr && typeof opts.analyst.onToggleAction === 'function') {
+        anHdr.addEventListener('click', (e) => { e.stopPropagation(); opts.analyst.onToggleAction(); });
+      }
       // Live analyst inputs only exist when the material is flagged For Action.
       if (opts.analyst.flagged && typeof opts.analyst.onChange === 'function') {
         const collect = () => ({
@@ -540,6 +545,12 @@
       if (pBtn && typeof opts.nav.onPrev === 'function') pBtn.addEventListener('click', opts.nav.onPrev);
       const nBtn = hostEl.querySelector('#navNext');
       if (nBtn && typeof opts.nav.onNext === 'function') nBtn.addEventListener('click', opts.nav.onNext);
+    }
+    // APP-TREND-NOTES — the "✎ Note" toolbar button opens the right-docked notes
+    // drawer for this material (managed page-side so it survives re-renders).
+    if (opts.notes && typeof opts.notes.onToggle === 'function') {
+      const nb = hostEl.querySelector('#notesBtn');
+      if (nb) nb.addEventListener('click', (e) => { e.stopPropagation(); opts.notes.onToggle(); });
     }
 
     // APP-WU-02 — "Where used" button opens a modal (was an inline panel in

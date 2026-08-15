@@ -380,6 +380,26 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.1.5-dev - Phase 1 (Capture & keep) - BUILT + TESTED LOCALLY, NOT PUSHED -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-15</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>Phase 1 (Capture &amp; keep) — analyst inputs + notes round-trip in the JSON · per-material Notes · flag-from-header · row-jump &amp; dropdown fixes · analyst-key bug fix — <b>BUILT + TESTED LOCALLY, NOT YET PUSHED (pending operator approval)</b></h4>
+      <ul>
+        <li><b>APP-FIX-ANALYST-KEY (critical, found during this build).</b> APP-ACT-01 bound the analyst sidecar with <code>metadata.name</code> — but the canonical field is <code>metadata.assessmentName</code>, so <code>.name</code> was <b>undefined</b> and every assessment's analyst data collided under the <code>_unnamed</code> key. Fixed to <code>assessmentName</code>. Added a <b>one-time migration</b>: when a named assessment has no sidecar yet but the legacy <code>_unnamed</code> bucket has data, it adopts it once then clears <code>_unnamed</code> (single-assessment recovery is exact) — so existing pre-fix analyst work is recovered, not lost.</li>
+        <li><b>APP-ACT-PERSIST.</b> On the Trend <b>Canonical dataset</b> download, the analyst sidecar (For-Action flags + Analyst Rec + <b>notes</b>) is co-packaged as a top-level <code>_analystData</code> block ALONGSIDE the canonical object (outside the schema — no SCHEMA_VERSION change, the pipeline ignores it). The Intake JSON-upload detects <code>_analystData</code>, restores it to the sidecar (keyed by assessmentName, sanitised), and strips it before validate/save. <b>Single-file round-trip:</b> download → re-upload → flags + Min/Max + notes restored, even on another machine.</li>
+        <li><b>APP-TREND-NOTES.</b> A per-material analyst <b>Notes</b> pop-out — a right-docked drawer (stays on the right of the screen), opened by a <b>"✎ Note"</b> button in the detail toolbar; auto-saves to the sidecar; note-bearing materials get a <b>✎ badge</b> in the list; live-links as you switch materials (Prev/Next / row-click). Notes ride the JSON round-trip (APP-ACT-PERSIST).</li>
+        <li><b>APP-TREND-ACTHDR.</b> Clicking the <b>"Analyst" header</b> in the MRP table toggles the current material's For-Action flag (the operator can flag from the right-hand side; the header shows a ★ when flagged).</li>
+        <li><b>APP-FIX-TREND-ROWJUMP.</b> The MRP-table cells now reserve a consistent height, so activating For Action (locked "—" → live inputs) no longer changes the table height / shifts the screen. Verified: row heights identical flagged vs unflagged (<code>[40,50,40,40]</code>).</li>
+        <li><b>APP-FIX-TREND-DDBG.</b> The Analyst MRP-type dropdown is dark-themed (control + options → <code>#12303f</code>) instead of the white backdrop. (Open native list is only fully themable on Chromium/Firefox/Windows — that's the operator's environment.)</li>
+        <li><b>Files.</b> <code>shared/analyst-marks.js</code> (notes + restore + key-migration), <code>shared/material-detail.{js,css}</code> (notes button, clickable header, row-height, dropdown), <code>analysis/analysis.{js,css,html}</code> (key fix, PERSIST embed, notes drawer + badge, ✎), <code>intake/intake.{js,html}</code> (PERSIST restore hook + analyst-marks script). No SCHEMA_VERSION change.</li>
+        <li><b>Verified on-machine</b> (no Node → parse-check via clean boot): zero console errors; sidecar notes persist/prune; the <b>PERSIST round-trip</b> (export raw → restore) restores flags+rec+notes with junk sanitised; the <b>legacy migration</b> adopts <code>_unnamed</code> then clears it (second assessment doesn't inherit); render markup (notes button, clickable "Analyst ★" header) correct; CSS confirmed by computed styles (drawer docks right, dropdown dark, <b>row heights equal flagged/unflagged</b>). Screenshot unavailable this session (Browser pane not displayed) → verified via DOM/computed-style checks. <b>NOT tested on-machine:</b> the full pipeline-loaded click-through (flag→note→download→re-upload→restore) — the operator's off-repo pass. <b>Rollback:</b> local <code>_rollback/PHASE1-pre/</code> + origin/main untouched at <code>724495b</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.1.5-dev - APP-ACT-02 (Phase 2a) Export overhaul -->
     <article class="roc-entry dev">
       <div class="head">

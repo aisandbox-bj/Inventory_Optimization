@@ -2225,6 +2225,19 @@
       try {
         const text = await file.text();
         const json = JSON.parse(text);
+        // APP-ACT-PERSIST (Phase 1) — restore co-packaged analyst data (For-Action
+        // flags + Analyst Rec + notes) to the sidecar, then strip it so the
+        // canonical stays clean for validateShape + save. Keyed by assessmentName
+        // (must match the analysis-page binding).
+        if (json._analystData && typeof json._analystData === 'object') {
+          try {
+            const nm = (json.metadata && json.metadata.assessmentName) || '';
+            if (typeof AnalystMarks !== 'undefined' && AnalystMarks.restore) {
+              AnalystMarks.restore(nm, json._analystData);
+            }
+          } catch (err) { console.warn('APP-ACT-PERSIST restore:', err); }
+          delete json._analystData;
+        }
         const v = CanonicalSchema.validateShape(json);
         if (!v.ok) { toast('Invalid JSON: ' + v.errors.join('; '), 'crit'); return; }
         // Repopulate state from the JSON

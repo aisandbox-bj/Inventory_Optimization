@@ -551,3 +551,32 @@
   box-shadow:0 0 0 2px rgba(242,199,68,0.20);
 }
 .mrp-compare-table select.an-select{ cursor:pointer; }
+
+/* ═══ Phase 1 (2026-08-15) · notes button · header-toggle · row-jump · dropdown ═══ */
+
+/* APP-TREND-ACTHDR — the "Analyst" header toggles For Action on click */
+.mrp-compare-table th.analyst-head.clickable{ cursor:pointer; user-select:none; }
+.mrp-compare-table th.analyst-head.clickable:hover{ color:#ffe083; }
+
+/* APP-FIX-TREND-ROWJUMP — reserve a consistent row height so flagging a material
+   (locked "—" → live inputs) no longer changes the table height / shifts the screen. */
+.mrp-compare-table td{ height:40px; }
+.mrp-compare-table .an-input{ height:26px; }
+.mrp-compare-table select.an-select{ height:26px; }
+
+/* APP-FIX-TREND-DDBG — dark-theme the Analyst MRP-type dropdown (control + options)
+   so it no longer shows a white backdrop. (The open list is native; Chromium/Firefox
+   on Windows honour these option colours.) */
+.mrp-compare-table select.an-select{ background-color:#12303f; color:var(--text-pri); }
+.mrp-compare-table select.an-select option{ background-color:#12303f; color:var(--text-pri); }
+
+/* APP-TREND-NOTES — the "✎ Note" toolbar button (right cluster) */
+.chart-toolbar .detail-right{ display:inline-flex; gap:6px; align-items:center; }
+.chart-toolbar .notes-btn{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.5px;
+  padding:5px 12px; border:1px solid var(--border); border-radius:6px;
+  background:transparent; color:var(--text-pri); cursor:pointer; transition:all .12s ease;
+}
+.chart-toolbar .notes-btn:hover{ border-color:var(--accent); color:var(--accent); }
+.chart-toolbar .notes-btn.has-note{ border-color:var(--accent); color:var(--accent); }
+.chart-toolbar .notes-btn.open{ background:rgba(31,206,216,0.14); border-color:var(--accent); color:var(--accent); }

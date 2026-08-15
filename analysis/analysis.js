@@ -43,14 +43,18 @@
       return;
     }
     state.json = json;
-    // APP-ACT-01 — bind the analyst sidecar (For Action flags + Analyst Rec) to
-    // this assessment by name. Kept out of the canonical JSON by design.
+    // APP-ACT-01 — bind the analyst sidecar (For Action flags + Analyst Rec +
+    // notes) to this assessment by name. Kept out of the canonical JSON by design.
+    // APP-FIX-ANALYST-KEY (Phase 1) — the canonical metadata field is
+    // `assessmentName` (NOT `name`); the earlier `metadata.name` was undefined,
+    // so every assessment collided under the `_unnamed` sidecar key.
     state.analyst = (typeof AnalystMarks !== 'undefined')
-      ? AnalystMarks.forAssessment((json.metadata && json.metadata.name) || '')
+      ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
       : null;
     renderLoadedBanner();
     await runPipelineNow();
     bindGlobalKeys();
+    wireNotes();   // APP-TREND-NOTES — bind the docked notes drawer once
   }
 
   function renderEmpty(){
@@ -348,14 +352,15 @@
     const tbody = rows.map(m => {
       const isReview = state.marked.review.has(m.material);
       const isAction = !!(state.analyst && state.analyst.isAction(m.material));   // APP-ACT-01
+      const isNote   = !!(state.analyst && state.analyst.hasNote(m.material));    // APP-TREND-NOTES
       const rowClasses = [
         state.selectedMaterial === m.material ? 'selected' : '',
-        (isReview || isAction) ? 'marked-any' : '',
+        (isReview || isAction || isNote) ? 'marked-any' : '',
         isReview ? 'marked-review' : '',
         isAction ? 'marked-action' : ''
       ].filter(Boolean).join(' ');
-      const badges = (isReview || isAction)
-        ? `<span class="mark-badges">${isAction ? '<span class="mark-badge action" title="Flagged For Action">★</span>' : ''}${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}</span>`
+      const badges = (isReview || isAction || isNote)
+        ? `<span class="mark-badges">${isAction ? '<span class="mark-badge action" title="Flagged For Action">★</span>' : ''}${isNote ? '<span class="mark-badge note" title="Has an analyst note">✎</span>' : ''}${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}</span>`
         : '';
       return `
       <tr data-material="${escapeAttr(m.material)}" class="${rowClasses}">
@@ -665,6 +670,12 @@
         onToggleAction: () => { state.analyst.toggleAction(mat.material); renderList(); renderDetail(); },
         onChange: (rec) => { state.analyst.setRec(mat.material, rec); }
       } : null,
+      // APP-TREND-NOTES — "✎ Note" toolbar button opens the right-docked drawer.
+      notes: state.analyst ? {
+        enabled: true,
+        hasNote: state.analyst.hasNote(mat.material),
+        onToggle: () => toggleNotes()
+      } : null,
       // APP-ACT-01 — Prev/Next through the on-screen list.
       nav: {
         hasPrev: _idx > 0,
@@ -684,6 +695,59 @@
       // APP-FIX-SNAPSHOT-ALIGN — chart caption when the stock snapshot ≠ MB51 cut-off.
       snapshotAlign: state.result && state.result.snapshotAlign
     });
+    // APP-TREND-NOTES — keep the docked drawer in sync with the shown material.
+    updateNotesDrawer();
+    syncNotesBtn();
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-TREND-NOTES — right-docked per-material notes drawer. Managed page-side
+     (the drawer lives in analysis.html) so it survives detail re-renders and
+     stays on the RIGHT of the screen while the operator reviews.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function notesEls(){ return { drawer:$('#notesDrawer'), area:$('#notesArea'), mat:$('#notesMat') }; }
+  function toggleNotes(){
+    const { drawer, area } = notesEls();
+    if (!drawer) return;
+    if (drawer.classList.contains('hidden')) { drawer.classList.remove('hidden'); updateNotesDrawer(); if (area) area.focus(); }
+    else { drawer.classList.add('hidden'); }
+    syncNotesBtn();
+  }
+  function updateNotesDrawer(){
+    const { drawer, area, mat } = notesEls();
+    if (!drawer || drawer.classList.contains('hidden')) return;
+    const m = state.selectedMaterial;
+    if (!m || !state.analyst) { if (area){ area.value=''; area.disabled=true; } if (mat) mat.textContent='—'; return; }
+    if (area){ area.disabled=false; area.value = state.analyst.getNote(m); }
+    if (mat) mat.textContent = m;
+  }
+  function syncNotesBtn(){
+    const btn = document.querySelector('#notesBtn'); if (!btn) return;
+    const m = state.selectedMaterial;
+    btn.classList.toggle('has-note', !!(m && state.analyst && state.analyst.hasNote(m)));
+    const d = $('#notesDrawer');
+    btn.classList.toggle('open', !!(d && !d.classList.contains('hidden')));
+  }
+  function wireNotes(){
+    const { area } = notesEls();
+    if (area && !area._wired) {
+      area._wired = true;
+      area.addEventListener('input', () => {
+        const m = state.selectedMaterial; if (!m || !state.analyst) return;
+        const prevHad = state.analyst.hasNote(m);
+        state.analyst.setNote(m, area.value);
+        syncNotesBtn();
+        if (prevHad !== state.analyst.hasNote(m)) renderList();  // ✎ badge only flips on status change
+      });
+    }
+    const close = $('#notesClose');
+    if (close && !close._wired) { close._wired = true; close.addEventListener('click', toggleNotes); }
+    if (!window._notesEscWired) {
+      window._notesEscWired = true;
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { const d = $('#notesDrawer'); if (d && !d.classList.contains('hidden')) { d.classList.add('hidden'); syncNotesBtn(); } }
+      });
+    }
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -851,7 +915,17 @@
     if (!state.json) { setExportProgress('No analysis loaded'); return; }
     try {
       const json = state.json;
-      const text = JSON.stringify(json, null, 2);
+      // APP-ACT-PERSIST (Phase 1) — co-package the analyst sidecar (For-Action
+      // flags + Analyst Rec + notes) as a top-level `_analystData` block ALONGSIDE
+      // the canonical object (not inside the schema-validated structure → no
+      // SCHEMA_VERSION change, the pipeline ignores it). The Intake JSON-upload
+      // restores it, so the operator's analyst work round-trips in a single file.
+      const out = Object.assign({}, json);
+      if (state.analyst) {
+        const raw = state.analyst.raw();
+        if (raw && Object.keys(raw).length) out._analystData = raw;
+      }
+      const text = JSON.stringify(out, null, 2);
       const safe = s => String(s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
       const name = safe(json?.metadata?.assessmentName || 'assessment');
       const date = (state.result?.runDate || json?.metadata?.runDate || '').slice(0, 10);

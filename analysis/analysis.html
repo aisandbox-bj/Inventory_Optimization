@@ -86,6 +86,17 @@
 
   </div>
 
+  <!-- ─── APP-TREND-NOTES · right-docked per-material notes drawer ─── -->
+  <aside id="notesDrawer" class="notes-drawer hidden" aria-label="Material notes">
+    <div class="notes-head">
+      <span class="notes-lab">✎ Note</span>
+      <span class="notes-mat" id="notesMat">—</span>
+      <button type="button" class="notes-close" id="notesClose" title="Close (Esc)" aria-label="Close notes">✕</button>
+    </div>
+    <textarea id="notesArea" class="notes-area" placeholder="Notes for this material — saved with your analyst data and shown again when you reopen it."></textarea>
+    <div class="notes-foot">Saved automatically · rides the JSON export</div>
+  </aside>
+
   <!-- ─── Floating "mass review in progress" chip ─── -->
   <div id="massChip" class="mass-chip hidden">
     <span class="mass-chip-spinner"></span>
