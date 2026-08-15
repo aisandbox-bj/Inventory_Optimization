@@ -3,8 +3,8 @@
 **Updated:** 2026-08-15 (APP-ACT-01 — "For Action" flag + Analyst Recommendation column + Prev/Next on Trend; version bump v2.1.4-dev → v2.1.5-dev)
 **Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The 2026-08-15 APP-ACT-01 work is **not yet validated — operator tests off-repo, post-push.** The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only.
 
-## ⏳ BUILT — Phase 1 "Capture & keep" (2026-08-15) — TESTED LOCALLY, **NOT PUSHED** (pending operator approval)
-Built + verified on-machine; **origin/main untouched at `724495b`**; rollback `_rollback/PHASE1-pre/`. Awaiting operator approval to push. Covers:
+## ✅ SHIPPED — Phase 1 "Capture & keep" (2026-08-15, pushed `3511b53`) — pending operator off-repo validation
+Built + verified on-machine, pushed. Rollback: remote `backup/pre-phase1` + `checkpoint/pre-phase1` (both `724495b`) + local `_rollback/PHASE1-pre/`. Covers:
 - **APP-FIX-ANALYST-KEY** (critical, found during build) — the analyst sidecar was keyed by the undefined `metadata.name` → all assessments collided under `_unnamed`. Fixed to `assessmentName` + a one-time `_unnamed`→named migration so pre-fix analyst work is recovered, not lost.
 - **APP-ACT-PERSIST** — analyst inputs + **notes** round-trip in the JSON (`_analystData` block co-packaged on download; restored on Intake upload; no schema change).
 - **APP-TREND-NOTES** — per-material right-docked Notes drawer (stays on the right) + ✎ list badge; rides the round-trip.
