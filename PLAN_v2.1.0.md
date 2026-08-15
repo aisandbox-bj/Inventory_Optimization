@@ -1,6 +1,6 @@
 # Plan — v2.1.0: Tighter LLM Reviews + PDF Pack Selection UX
 
-> **Status:** Pending — build after v2.0.0 ships (manual testing in progress).
+> **Status (updated 2026-08-15):** The v2.1.0 build items shipped long ago — the app is now on dev tip **v2.1.5-dev**. This document is **retained as the canonical LLM data-security reference**: its **§0 (threat model + the seven durable principles)** still governs every LLM-adjacent change. **Read §0 in full before touching anything that sends data to the LLM, persists LLM output, or widens the prompt.** The specific v2.1.0 UI proposals below (§1+) are historical build notes; §0 is the timeless part.
 > **Predecessor:** v2.0.0-dev (mass LLM review, PDF pack via right-click marks, batch mode for reuse).
 > **Read this with:** [`record-of-change.html`](record-of-change.html), [`user-manual.html`](user-manual.html), [`HANDOVER.md`](HANDOVER.md).
 

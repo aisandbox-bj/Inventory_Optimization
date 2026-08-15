@@ -2,7 +2,7 @@
 
 Paste this into a fresh Claude Code session to bring me up to speed on the project state. Don't edit — copy verbatim. Claude will read this, check the listed files, and confirm before doing anything.
 
-> **Note:** This file ships at the repo root (it mirrors `v2.1.4-dev/`). The richer, project-level session-start protocol lives in `CLAUDE.md` and `_Hand-over docs/` in the working folder — prefer those when the full project folder is available. This file is the orientation for a repo-only context.
+> **Note:** This file ships at the repo root (it mirrors `v2.1.5-dev/`). The richer, project-level session-start protocol lives in `CLAUDE.md` and `_Hand-over docs/` in the working folder — prefer those when the full project folder is available. This file is the orientation for a repo-only context.
 
 ---
 
@@ -18,27 +18,27 @@ I'm continuing work on **Calibre Tune** (the Inventory Optimization App) — a b
 
 **Project lives at:** `C:\Users\Test_Home\Documents\ClaudeCode\Projects\2026_05_12 - Inventory Optimization\`
 
-**Active working directory:** `4 - Build Output\Inventory Optimization App\v2.1.4-dev\` (current development). Frozen — do NOT edit: `archive\v1 (frozen)`, `archive\v1.0.0`, `archive\v1.1.0`. Rollback snapshot of the last released tag: `4 - Build Output\Inventory Optimization App\v2.1.1\`.
+**Active working directory:** `4 - Build Output\Inventory Optimization App\v2.1.5-dev\` (current development). Frozen — do NOT edit: `archive\v1 (frozen)`, `archive\v1.0.0`, `archive\v1.1.0`. Immediate rollback snapshot (pre-v2.1.5 bump): `4 - Build Output\Inventory Optimization App\v2.1.4-dev\`. Rollback snapshot of the last released tag: `4 - Build Output\Inventory Optimization App\v2.1.1\`.
 
-**GitHub repo:** [aisandbox-bj/Inventory_Optimization](https://github.com/aisandbox-bj/Inventory_Optimization) — repo root content mirrors `v2.1.4-dev/` (excludes `_rollback/`). Tags `v1.0.0` / `v1.1.0` preserve prior releases for rollback. `gh` CLI authenticated as `aisandbox-bj`.
+**GitHub repo:** [aisandbox-bj/Inventory_Optimization](https://github.com/aisandbox-bj/Inventory_Optimization) — repo root content mirrors `v2.1.5-dev/` (excludes `_rollback/`). Tags `v1.0.0` / `v1.1.0` preserve prior releases for rollback. `gh` CLI authenticated as `aisandbox-bj`.
 
-**Current version:** `v2.1.4-dev`. The current origin/main tip is the **newest entry in `v2.1.4-dev\record-of-change.html`** — don't hard-pin a SHA here, it goes stale (as of the 2026-06-26 doc refresh the tip was the Backlog/doc-refresh commit on top of APP-DOC-SCREENER). Last released tag: `v2.1.1`.
+**Current version:** `v2.1.5-dev` (bumped from v2.1.4-dev on 2026-08-15; v2.1.4-dev frozen as the immediate rollback snapshot). The current origin/main tip is the **newest entry in `v2.1.5-dev\record-of-change.html`** — don't hard-pin a SHA here, it goes stale (as of 2026-08-15 the tip is the APP-ACT-01 commit). Last released tag: `v2.1.1`. Each chunk's pre-push tip also gets a remote `backup/pre-*` branch + annotated `checkpoint/pre-*` tag.
 
 ## Before doing anything
 
 1. Read these in order — they are the source of truth:
-   - `v2.1.4-dev\record-of-change.html` — full changelog with rollback steps (newest entry = current origin/main tip)
-   - `v2.1.4-dev\user-manual.html` — operator manual with the analytical methodology
-   - `v2.1.4-dev\PLAN_v2.1.0.md` ★ — the LLM-boundary plan: threat model + durable LLM data-security principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
-   - `v2.1.4-dev\shared\canonical-schema.js` — JSON contract + parameter defaults (SCHEMA_VERSION 1.0.0)
-   - `v2.1.4-dev\shared\pipeline.js` — the analytical engine (deterministic, no LLM)
+   - `v2.1.5-dev\record-of-change.html` — full changelog with rollback steps (newest entry = current origin/main tip)
+   - `v2.1.5-dev\user-manual.html` — operator manual with the analytical methodology
+   - `v2.1.5-dev\PLAN_v2.1.0.md` ★ — the LLM-boundary plan: threat model + durable LLM data-security principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
+   - `v2.1.5-dev\shared\canonical-schema.js` — JSON contract + parameter defaults (SCHEMA_VERSION 1.0.0)
+   - `v2.1.5-dev\shared\pipeline.js` — the analytical engine (deterministic, no LLM)
 2. Project memory (if present on this machine) is at `C:\Users\Test_Home\.claude\projects\C--Users-Test-Home-Documents-ClaudeCode-Projects-2026-05-12---Inventory-Optimization\memory\MEMORY.md`. It records the GitHub push pattern, the "act, don't narrate" and "never hide issues" feedback rules, and "read source, don't rebuild from doc-comments". **Note: as of 2026-06-25 this memory store was not present at that path on the working machine — don't assume it loaded.**
 3. After reading the above, **summarise what you found in one short paragraph** and ask what I want to work on next — do not start editing files until I've confirmed direction.
 
 ## Architectural sketch (so you don't need to reverse-engineer)
 
 ```
-v2.1.4-dev/
+v2.1.5-dev/
 ├── index.html                  Dashboard (recent intakes + per-row delete, "Clear session data")
 ├── record-of-change.html       The RoC — every release entry, rollback steps
 ├── user-manual.html            Operator manual ★
@@ -51,7 +51,13 @@ v2.1.4-dev/
 │   ├── pipeline.js             Analytical engine — period rates, HCE, lumpy, traffic-light,
 │   │                           Inv Adj detection, 10-rule decision tree (incl PURPLE/WR)
 │   ├── inventory-back-calc.js  SOH back-calculation from MB51 + current snapshot (UTC day-keys)
-│   ├── chart.js                Inline SVG chart (SOH line, stockout wash bands), PNG capture for LLM
+│   ├── chart.js                Inline SVG chart (SOH line, stockout bands, per-event hover), PNG/JPEG capture
+│   ├── material-detail.js      Shared detail render (chart+stats+MRP compare+For-Action/Analyst+Where-used) — Trend + Screener
+│   ├── analyst-marks.js        Sidecar store for For-Action flags + Analyst Recommendation (NOT canonical JSON) — APP-ACT-01
+│   ├── movement-detail.js      Per-material MB51 movement lists for chart-hover tooltips (APP-TREND-HOV)
+│   ├── where-used.js           Consumption destinations by Fleet model × year + WO drill (APP-WU-01/02)
+│   ├── trace-phase.js          Procurement-chain engine (computeChains) + phase-distribution render — Trace/Screener/lamps
+│   ├── consumption-profile.js  Consumption histogram + profile helpers (Sandbox testbed)
 │   ├── llm.js                  Provider-agnostic review (Anthropic + OpenAI), editable template
 │   ├── mass-llm.js             Mass LLM orchestrator (sequential, cancel/pause/resume)
 │   ├── client-context.js       Operational Context library (fixed-pick + capped Custom slot)
@@ -63,8 +69,11 @@ v2.1.4-dev/
                                          phase distribution, procurement-flow funnel, volume cumulative
 ```
 
-## Headline features as of v2.1.4-dev
+## Headline features as of v2.1.5-dev
 
+- **For Action + Analyst Recommendation + Prev/Next** (APP-ACT-01, v2.1.5-dev): on Trend — a gold-★ "For Action" flag (right-click row menu / detail-banner star; ★ badge + gold row cue), an editable **Analyst Recommendation** 3rd column in the MRP Settings table (V1/PD + free-text Min/Max/Safety, live only when flagged), and ‹ Prev / Next › list stepping. Flags + values persist to the **sidecar** `shared/analyst-marks.js` (localStorage per assessment) — deliberately **not** the canonical JSON, so no SCHEMA_VERSION change. *Phase 1 of a 3-phase request; exports carrying the Analyst Rec are queued (APP-ACT-02).*
+- **Where used + intake data-needs flags + per-event stat/hover** (APP-WU-01/02, APP-INT-NEEDS-01, APP-TREND-PEC/-HOV): consumption destinations by Fleet model × year with WO drill; every upload flagged ★/☆/— per assessment type (nothing blocked); "Per event cons" stat + chart-hover movement tooltips.
+- **Output-size deck** (APP-E3): opt-in "trim to materials in use" (54 MB export → ~4 MB), compact JSON download, PDF Pack at JPEG q0.65 + jsPDF compression (~4.7 MB/page → ~75 KB).
 - **Stockout-aware consumption drop detection** (APP-E1): SOH back-calc, violet SOH line, red stockout wash bands, last-consumption marker, P2 stockout-anchored math, cause-aware LLM prompt.
 - **Inventory Master migration to standard SAP Material Master (Fiori)** (APP-T-01) + plant as a real canonical field; multi-plant infrastructure phases 1–3 (detect / cross-file consistency / Settings opt-in, default OFF per D25).
 - **PR History intake** (APP-T-02) — the functional intake link for Trace (`data.prHistory[]`, no schema bump).
@@ -76,7 +85,7 @@ v2.1.4-dev/
 ## Push protocol (DO NOT DEVIATE)
 
 - **NEVER** run `git init` in the working folder. It is a plain folder, not a repo.
-- Clone to `/tmp/push-Inventory_Optimization`, copy files from `v2.1.4-dev/`, commit with explicit identity flags, push:
+- Clone to `/tmp/push-Inventory_Optimization`, copy files from `v2.1.5-dev/`, commit with explicit identity flags, push:
   ```
   git -C /tmp/push-Inventory_Optimization -c user.name='aisandbox-bj' -c user.email='aisandbox-bj@users.noreply.github.com' commit -am "..."
   ```
