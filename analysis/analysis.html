@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.1.4-dev (dev tip; last released tag v2.1.1)
+     Inventory Optimization App · v2.1.5-dev (dev tip; last released tag v2.1.1)
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      Tag  : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.1
      RoC  : ../record-of-change.html     (what changed + how to roll back)
@@ -9,7 +9,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Trend</title>
-<meta name="app-version" content="2.1.4-dev" />
+<meta name="app-version" content="2.1.5-dev" />
 <meta name="app-released" content="2026-05-12" />
 <link rel="stylesheet" href="../shared/brand-tokens.css" />
 <!-- APP-FIX-TREND-CSS — load the shared detail-panel CSS (same as the Screener,
@@ -25,7 +25,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.1.4-dev · Trend</a>
+    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.1.5-dev · Trend</a>
   </div>
   <div class="links">
     <a href="../index.html">Dashboard</a>
@@ -129,6 +129,16 @@
 
   <!-- ─── Custom right-click context menu ─── -->
   <div id="rowContextMenu" class="row-ctx hidden" role="menu" aria-hidden="true">
+    <!-- APP-ACT-01 — "For Action" analyst follow-up flag (yellow star) -->
+    <div class="row-ctx-item action" data-action="mark-action">
+      <span class="ctx-icon">★</span>
+      <span class="ctx-text">Flag for Action</span>
+    </div>
+    <div class="row-ctx-item action" data-action="unmark-action">
+      <span class="ctx-icon">☆</span>
+      <span class="ctx-text">Clear Action flag</span>
+    </div>
+    <div class="row-ctx-sep"></div>
     <div class="row-ctx-item" data-action="mark-review">
       <span class="ctx-icon">✦</span>
       <span class="ctx-text">Mark for LLM review</span>
@@ -198,6 +208,7 @@
 <script src="../shared/trace-phase.js"></script>
 <script src="../shared/where-used.js"></script>
 <script src="../shared/movement-detail.js"></script>
+<script src="../shared/analyst-marks.js"></script>
 <script src="../shared/material-detail.js"></script>
 <script src="analysis.js"></script>
 

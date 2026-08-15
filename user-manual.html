@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Calibre Tune (Inventory Optimization App) · v2.1.4-dev
+     Calibre Tune (Inventory Optimization App) · v2.1.5-dev
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      RoC  : record-of-change.html
      This document is a deep-dive operator + engineering manual — not for
-     client distribution. Rebuilt 2026-06-25 to cover the full v2.1.4-dev
+     client distribution. Rebuilt 2026-06-25 to cover the full v2.1.5-dev
      surface: Inventory Master (Fiori) migration, PR History intake,
      multi-plant infrastructure, stock-on-hand back-calc + stockout-aware
      drop detection (APP-E1), MRP-type reclass recommendation (APP-E8),
@@ -14,7 +14,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Calibre Tune · User Manual</title>
-<meta name="app-version" content="2.1.4-dev" />
+<meta name="app-version" content="2.1.5-dev" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
 .um-shell{ max-width:1140px; margin:0 auto; padding:0 12px 60px; }
@@ -207,7 +207,7 @@
   <div class="brand">
     <span class="dot"></span>
     Inventory Optimization
-    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v2.1.4-dev · Manual</a>
+    <a class="sub" href="record-of-change.html" title="Click for Record of Change">v2.1.5-dev · Manual</a>
   </div>
   <div class="links">
     <a href="index.html">Dashboard</a>
@@ -224,7 +224,7 @@
 <main class="um-shell">
 
   <section class="um-hero">
-    <div class="pre">Operator + engineering manual · internal · v2.1.4-dev</div>
+    <div class="pre">Operator + engineering manual · internal · v2.1.5-dev</div>
     <h1>Calibre Tune · User Manual</h1>
     <div class="sub">
       A complete walkthrough of the tool — from drag-and-drop intake to the Excel / PDF deliverables, the
@@ -310,7 +310,7 @@
           <li><b>Step 5 — Parameters.</b> Per-run override of the saved Settings defaults. Amber cells = overridden. Reset reverts without touching Settings.</li>
           <li><b>Step 6 — Final scope summary.</b> Confirms exactly how many materials will be analysed, bucket-by-bucket, with mismatch advisories.</li>
           <li><b>Step 7 — Review &amp; Export.</b> Save to local storage, download <code>.json</code>, or "Open in Trend →".</li>
-          <li>On <b>Trend</b>: pick a bucket, filter/sort the material list, click a row for the detail panel. <b>Right-click a row</b> to mark for LLM review or PDF print. Export this bucket / Export ALL / PDF Pack / Mass LLM Review.</li>
+          <li>On <b>Trend</b>: pick a bucket, filter/sort the material list, click a row for the detail panel. <b>Right-click a row</b> to flag it <b>For Action</b> (★) or mark it for LLM review / PDF print; <b>‹ Prev / Next ›</b> on the chart toolbar step through the list. Export this bucket / Export ALL / PDF Pack / Mass LLM Review.</li>
           <li>On <b>Trace</b> (if you uploaded PR History): pick a material and read its procurement chain, phase distribution, funnel, and volume views (see §13).</li>
         </ol>
       </section>
@@ -618,6 +618,12 @@
         <h3>Per-event chart hover</h3>
         <p>Hover any point on the consumption (amber) or stock-on-hand (violet) chart line to read that date's movements — see §8 "Per-event hover dots". Pairs with the <b>Per event cons</b> stat above for a quick read of how big a typical draw is and what made it up.</p>
 
+        <h3>For Action flag &amp; Analyst Recommendation (APP-ACT-01)</h3>
+        <p>As you review, mark the materials that need follow-up. A <b>gold ★</b> flags a material <b>For Action</b> — set it from the <b>right-click row menu</b> ("Flag for Action") <em>or</em> the <b>star button in the detail banner</b>. Flagged rows carry a ★ badge and a gold left-edge cue in the list, so your worked-through items stand out at a glance.</p>
+        <p>When a material is flagged, the <b>MRP Settings · Current vs Recommended</b> table gains a third <b>Analyst</b> column — your call, alongside the algorithm's. Enter an <b>MRP type</b> (V1 / PD dropdown) and free-text <b>Min / Max / Safety Stock</b>. These are <em>your</em> overrides; the algorithm's Recommended column is left untouched. Unflagged materials show the column locked ("flag ★ for Action to edit").</p>
+        <p><b>Where it's stored:</b> For-Action flags and Analyst Recommendations are saved <b>locally in your browser</b>, keyed to the assessment name — deliberately <em>separate</em> from the canonical dataset JSON, so the shared dataset stays clean and portable. They persist across reloads on the same machine/browser but are not written into the exported JSON. <em>(Carrying the Analyst Recommendation into the PDF/Excel exports is a queued follow-up — not in this build.)</em></p>
+        <p><b>‹ Prev / Next ›</b> buttons on the chart toolbar step you through the material list one at a time, in the exact order shown on screen (honouring the current traffic-light filter, search, column filters and sort) — so you can work down a filtered list without returning to the table between each.</p>
+
         <h3>Export actions</h3>
         <ul>
           <li><b>Export this bucket</b> · <b>Export ALL (combined)</b> · <b>Export all (separate files)</b> — Excel (§10).</li>
@@ -816,7 +822,7 @@
       <!-- ───────────── 15 · Versions ───────────── -->
       <section class="um-section" id="versions">
         <h2><span class="num">16</span>Versions &amp; rollback</h2>
-        <p>Full release history with per-version change notes + root causes: <a href="record-of-change.html">Record of Change</a>. The current dev tip is <b>v2.1.4-dev</b> (last released tag v2.1.1). Every release is tagged on the GitHub repo for rollback:</p>
+        <p>Full release history with per-version change notes + root causes: <a href="record-of-change.html">Record of Change</a>. The current dev tip is <b>v2.1.5-dev</b> (last released tag v2.1.1). Every release is tagged on the GitHub repo for rollback:</p>
         <pre>
 # Inspect any release (read-only)
 git clone https://github.com/aisandbox-bj/Inventory_Optimization.git /tmp/peek

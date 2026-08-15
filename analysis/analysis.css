@@ -1162,3 +1162,12 @@
 .list-table tr.marked-review.marked-pdf td:first-child::before{
   background:linear-gradient(180deg, #B83CD0 50%, #F5A623 50%);
 }
+
+/* APP-ACT-01 — "For Action" star badge + row cue (gold). The star cue wins the
+   left-edge bar when a row carries multiple marks — Action is the headline. */
+.list-table .mark-badge.action{
+  background:rgba(242,199,68,0.18);
+  color:#F2C744;
+  border:1px solid rgba(242,199,68,0.55);
+}
+.list-table tr.marked-action td:first-child::before{ background:#F2C744; }

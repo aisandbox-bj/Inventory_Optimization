@@ -471,3 +471,83 @@
   font-family:var(--font-body); font-size:12px; line-height:1.45;
   color:var(--text-pri);
 }
+
+/* ═══ APP-ACT-01 (2026-08-15) · For-Action star · Analyst column · Prev/Next ═══
+   All three are Trend-only in practice (the Screener does not pass the analyst
+   or nav opts), but the styling lives here in the shared panel CSS alongside the
+   markup it targets. Star / column accent = gold #F2C744 (the "little yellow
+   star" the request asked for). */
+
+/* Banner "For Action" star toggle */
+.detail-head .action-star{
+  align-self:flex-start;
+  margin-left:2px;
+  width:26px; height:26px;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid rgba(242,199,68,0.45);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-muted);
+  font-size:15px; line-height:1;
+  cursor:pointer;
+  transition:all .12s ease;
+}
+.detail-head .action-star:hover{ border-color:rgba(242,199,68,0.85); color:#F2C744; }
+.detail-head .action-star.on{
+  border-color:rgba(242,199,68,0.85);
+  background:rgba(242,199,68,0.14);
+  color:#F2C744;
+  text-shadow:0 0 8px rgba(242,199,68,0.55);
+}
+.detail-head .action-star:active{ transform:translateY(1px); }
+
+/* Prev/Next navigation on the chart toolbar */
+.chart-toolbar .nav-spacer{ flex:1 1 auto; }
+.chart-toolbar .detail-nav{ display:inline-flex; gap:6px; }
+.chart-toolbar .nav-btn{
+  font-family:var(--font-mono);
+  font-size:11px; letter-spacing:.5px;
+  padding:5px 12px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-pri);
+  cursor:pointer;
+  transition:all .12s ease;
+}
+.chart-toolbar .nav-btn:hover:not(:disabled){ border-color:var(--accent); color:var(--accent); }
+.chart-toolbar .nav-btn:disabled{ opacity:.35; cursor:default; }
+
+/* Analyst Recommendation — 3rd column in the MRP compare table */
+.mrp-compare-table th.analyst-head{
+  color:#F2C744;
+  border-bottom:2px solid rgba(242,199,68,0.40);
+}
+.mrp-compare-table td.analyst{
+  padding:6px 10px;
+  vertical-align:middle;
+  border-left:1px dashed rgba(242,199,68,0.28);
+}
+.mrp-compare-table td.analyst.locked .an-locked{
+  color:var(--text-muted);
+  font-family:var(--font-mono);
+  cursor:help;
+}
+.mrp-compare-table .an-input{
+  width:100%;
+  max-width:120px;
+  box-sizing:border-box;
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  padding:4px 7px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(242,199,68,0.45);
+  border-radius:5px;
+  color:var(--text-pri);
+}
+.mrp-compare-table .an-input:focus{
+  outline:none;
+  border-color:#F2C744;
+  box-shadow:0 0 0 2px rgba(242,199,68,0.20);
+}
+.mrp-compare-table select.an-select{ cursor:pointer; }

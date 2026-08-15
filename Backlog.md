@@ -1,7 +1,27 @@
-# Calibre Tune v2.1.4-dev — Deferred items / next-version backlog
+# Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-06-29 (PDF size — JPEG q0.65 + compress — APP-E3-PDF; JSON trim to materials-in-use — APP-E3-TRIM; addMonths TZ fix — APP-FIX-ADDMONTHS-TZ; earlier 2026-06-28: WO-only batch params + data-ingestion audit tool; second LLM button base/v + batched analysis; histogram nice-buckets; open PO/PR popover reconciliation; Sandbox batched-Min; P1-rate TZ fix; HCE table removed)
-**Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only.
+**Updated:** 2026-08-15 (APP-ACT-01 — "For Action" flag + Analyst Recommendation column + Prev/Next on Trend; version bump v2.1.4-dev → v2.1.5-dev)
+**Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The 2026-08-15 APP-ACT-01 work is **not yet validated — operator tests off-repo, post-push.** The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only.
+
+## Shipped 2026-08-15 (APP-ACT-01 — For Action + Analyst Rec + Prev/Next) — NOT yet validated (operator tests off-repo, post-push)
+- **Version bump v2.1.4-dev → v2.1.5-dev.** v2.1.4-dev frozen as the rollback snapshot; current-version labels relabelled (nav / `<meta app-version>` / build-stamps / the stale `v2.0.0-dev` Trend PDF footer). Historical RoC entries left at their original versions.
+- **APP-ACT-01a — "For Action" flag.** Gold ★ per material — toggle via the right-click row menu *or* the detail-banner star; ★ badge + gold row cue in the list. Stored in a **new sidecar** `shared/analyst-marks.js` (localStorage `tune.analyst.<assessment>`), **not** the canonical JSON — no SCHEMA_VERSION change (locked decision: keep canonical pure).
+- **APP-ACT-01b — Analyst Recommendation column.** 3rd column in the MRP Settings · Current-vs-Recommended table: V1/PD dropdown + free-text Min/Max/Safety, editable only when the material is flagged For Action; persists to the sidecar; survives unflag→reflag.
+- **APP-ACT-01c — Prev/Next.** ‹ Prev / Next › on the chart toolbar, stepping the on-screen (filtered + sorted) list, clamped at the ends.
+- **Verified on-machine:** clean http boot (zero console errors, all modules define); sidecar unit tests (persist across fresh handles / prune empty shells / unflag keeps rec) + shared-render markup tests (flagged → star-on + inputs with saved values + Prev-disabled/Next-enabled; not-flagged → locked column, no inputs) + screenshot. No Node → `node --check` skipped (noted). Rollback: `_rollback/APP-ACT-01-pre/` (= v2.1.4-dev). Files: new `shared/analyst-marks.js`; `shared/material-detail.{js,css}`, `analysis/analysis.{js,css,html}`. **Trend page only.**
+
+## Next on deck — APP-ACT Phase 2 & 3 (operator-requested 2026-08-15, NOT yet built)
+**Phase 2 — Exports:**
+- **APP-ACT-02a** — Export scope buttons for **both PDF and Excel**: *Full set* · *Highlighted for action* (greyed out when nothing is flagged) · *This fleet* (rename from "bucket"; hidden on user-list runs with no fleet/model list).
+- **APP-ACT-02b** — PDF pack + Excel (**summary + full**) must carry the For-Action table **with the Analyst Recommendation**, flagged items only (others stay as they are).
+- **APP-ACT-02c** — Excel: rename the two modes (*Full pack (with graphs)* / *Summary table*).
+- **APP-ACT-02d** — Export box **collapsed by default**, click to expand; restyle the option boxes (coloured outlines, no fill, white text, hover helpers); **"Bucket" → "Fleet"** wherever it appears.
+
+**Phase 3 — Remainder:**
+- **APP-ACT-03** — "See <7-digit>" shortcut: if a material description contains "See " + a 7-digit number, show a jump-link in the title bar **between the Recommendation block and the PR/PO/IT boxes**, active only if that material is in the assessment.
+
+## Open bug — reported 2026-08-15 (NOT yet fixed)
+- **APP-FIX-USERLIST-REUSE** — re-using a saved **manual user-list** dataset: the user list does not repopulate even when selected in the reuse picker. Prime suspect is the Intake reuse/hydrate path (cf. the earlier APP-FIX-REUSE hoisting foot-gun + the `hydrateFromSavedIntake_deprecated_unused` shadow in `intake/intake.js`), but the actual symptom must be reproduced before claiming a cause. Logged; queued as its own fix cycle.
 
 ## Shipped 2026-06-29 (PDF size — JPEG q0.65 + compression) — pending operator validation
 - **APP-E3-PDF** — the "huge PDF" fix, and the **close of APP-E3**. The **PDF Pack** rendered each chart as a lossless PNG with no jsPDF compression — and jsPDF stores PNG as **raw uncompressed pixels** → ~4.7 MB per material page (a 20-material pack ≈ 95 MB). Now: Pack chart → **JPEG q0.65** (new `AppChart.toJpeg`; the on-screen `toPng` render is unchanged) + doc `compress: true`. Screener PDF: chart + 5 box plots q0.92 → **q0.65** + `compress: true`. Verified through the real chart→image→jsPDF path: one page **4,734 KB → 75 KB (~98%)**; both pages boot, zero console errors. Files: `shared/chart.js`, `analysis/analysis.js`, `screener/screener.js`. Snapshot `_rollback/APP-E3-PDF-pre/`. No SCHEMA_VERSION change. **q0.65 is operator-chosen — quality eyeball pending. This CLOSES APP-E3 (JSON half + PDF half both shipped).**

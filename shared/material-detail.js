@@ -117,10 +117,14 @@
   }
 
   /* ─── MRP Settings Comparison: Current (shaded) vs Recommended (shaded) ─ */
-  function renderMrpCompare(mat){
+  function renderMrpCompare(mat, analyst){
     const hasCurrent = mat.mrpType || mat.cmin != null || mat.cmax != null || mat.safetyStock != null;
     const hasRec     = mat.recMrpType || mat.recMin != null || mat.recMax != null;
     if (!hasCurrent && !hasRec) return '';
+    // APP-ACT-01 — optional 3rd "Analyst" column (Trend only). Rendered when the
+    // caller passes an analyst config; the inputs are live only when the material
+    // is flagged For Action, otherwise the column shows a muted lock hint.
+    const anOn = !!(analyst && analyst.enabled);
 
     const eq = (a, b) => {
       if (a == null || b == null) return false;
@@ -141,11 +145,27 @@
     else                          _minRecHtml = `<span class="min-gov">${_minRec}</span>`;
 
     const rows = [
-      { label:'MRP type',     cur: mat.mrpType || '—',                              rec: mat.recMrpType || '—' },
-      { label:'Min',          cur: mat.cmin != null ? mat.cmin : '—',               rec: _minRec != null ? String(_minRec) : '—', recHtml: _minRecHtml },
-      { label:'Max',          cur: mat.cmax != null ? mat.cmax : '—',               rec: mat.recMax != null ? mat.recMax : '—' },
-      { label:'Safety Stock', cur: mat.safetyStock != null ? mat.safetyStock : '—', rec: '—', recOmitted: true }
+      { label:'MRP type',     field:'mrpType', cur: mat.mrpType || '—',                              rec: mat.recMrpType || '—' },
+      { label:'Min',          field:'min',     cur: mat.cmin != null ? mat.cmin : '—',               rec: _minRec != null ? String(_minRec) : '—', recHtml: _minRecHtml },
+      { label:'Max',          field:'max',     cur: mat.cmax != null ? mat.cmax : '—',               rec: mat.recMax != null ? mat.recMax : '—' },
+      { label:'Safety Stock', field:'safety',  cur: mat.safetyStock != null ? mat.safetyStock : '—', rec: '—', recOmitted: true }
     ];
+
+    // Build the analyst cell for a row. Empty string ⇒ no column (anOn false).
+    const anCell = (field) => {
+      if (!anOn) return '';
+      if (!analyst.flagged) {
+        return `<td class="analyst locked"><span class="an-locked" title="Flag ★ for Action to edit">—</span></td>`;
+      }
+      const v = (analyst.values && analyst.values[field] != null) ? analyst.values[field] : '';
+      if (field === 'mrpType') {
+        const opt = (val, lab) => `<option value="${val}"${String(v) === val ? ' selected' : ''}>${lab}</option>`;
+        return `<td class="analyst"><select class="an-input an-select" id="anMrpType" data-an="mrpType">${opt('', '—')}${opt('V1', 'V1')}${opt('PD', 'PD')}</select></td>`;
+      }
+      const ids = { min:'anMin', max:'anMax', safety:'anSafety' };
+      return `<td class="analyst"><input type="text" inputmode="numeric" class="an-input" id="${ids[field]}" data-an="${field}" value="${escapeAttr(String(v))}" placeholder="—" /></td>`;
+    };
+
     const trs = rows.map(r => {
       const changed = !r.recOmitted && r.cur !== '—' && r.rec !== '—' && !eq(r.cur, r.rec);
       return `
@@ -153,6 +173,7 @@
           <td class="lab">${escapeHtml(r.label)}</td>
           <td class="current">${escapeHtml(String(r.cur))}</td>
           <td class="rec">${r.recHtml || escapeHtml(String(r.rec))}</td>
+          ${anCell(r.field)}
         </tr>`;
     }).join('');
 
@@ -160,15 +181,16 @@
       <div class="mrp-compare">
         <div class="mrp-compare-head">
           <h4>MRP Settings · Current vs Recommended</h4>
-          <span class="hint">Yellow rows = recommendation differs from current. The <b>Min</b> shows the governing figure with its two inputs beneath — <b>calc</b> (P2 rate × months) and <b>batch</b> (a typical WO batch × factor). Which one governs is a setting (<i>Batched Min governs</i>). Safety Stock is informational.</span>
+          <span class="hint">Yellow rows = recommendation differs from current. The <b>Min</b> shows the governing figure with its two inputs beneath — <b>calc</b> (P2 rate × months) and <b>batch</b> (a typical WO batch × factor). Which one governs is a setting (<i>Batched Min governs</i>). Safety Stock is informational.${anOn ? ' The <b>Analyst</b> column is your override — flag a material <b>For Action</b> (★) to enter it.' : ''}</span>
         </div>
         ${mat.mrpReclassRecommended ? `<div class="mrp-reclass-note">⚑ ${escapeHtml(mat.mrpReclassNote || '')}</div>` : ''}
-        <table class="mrp-compare-table">
+        <table class="mrp-compare-table${anOn ? ' has-analyst' : ''}">
           <thead>
             <tr>
               <th></th>
               <th class="current-head">Current</th>
               <th class="rec-head">Recommended</th>
+              ${anOn ? '<th class="analyst-head">Analyst</th>' : ''}
             </tr>
           </thead>
           <tbody>${trs}</tbody>
@@ -365,6 +387,7 @@
             <span class="mat">${escapeHtml(mat.material)}</span>
             <button class="mat-copy" id="btnCopyMat" title="Copy material number to clipboard" aria-label="Copy material number">⧉</button>
             ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt" title="Open this material in Calibre Trace">Trace it! &rarr;</button>` : ''}
+            ${(opts.analyst && opts.analyst.enabled) ? `<button class="action-star ${opts.analyst.flagged ? 'on' : ''}" id="btnActionStar" aria-pressed="${opts.analyst.flagged ? 'true' : 'false'}" title="${opts.analyst.flagged ? 'Flagged For Action — click to clear' : 'Flag For Action (analyst follow-up)'}">${opts.analyst.flagged ? '★' : '☆'}</button>` : ''}
           </div>
           <div class="desc">${escapeHtml(mat.description || '')}${mat.manufacturer ? ' <span class="desc-mfr">(' + escapeHtml(mat.manufacturer) + ')</span>' : ''}</div>
         </div>
@@ -380,6 +403,7 @@
         <span class="chart-toolbar-lab">Show:</span>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleConsumption" checked> Consumption</label>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
+        ${opts.nav ? `<span class="nav-spacer"></span><div class="detail-nav"><button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button></div>` : ''}
         ${opts.whereUsedFn ? '<span class="wu-spacer"></span><button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>' : ''}
       </div>
       <div class="chart-host" id="chartHost"></div>
@@ -405,7 +429,7 @@
         ${dropCauseCell}
       </div>
 
-      ${renderMrpCompare(mat)}
+      ${renderMrpCompare(mat, opts.analyst)}
       ${renderInvAdjTable(mat)}
 
       <!-- APP-TREND-HCE-RM — on-screen HCE table removed from the detail panel:
@@ -483,6 +507,39 @@
           window.location.href = '../trace/trace.html#mat=' + encodeURIComponent(mat.material);
         });
       }
+    }
+
+    // APP-ACT-01 — "For Action" star (banner) + Analyst Recommendation inputs +
+    // Prev/Next navigation. All opt-in via opts (Trend passes them; the Screener
+    // does not, so its shared render is unaffected).
+    if (opts.analyst && opts.analyst.enabled) {
+      const starBtn = hostEl.querySelector('#btnActionStar');
+      if (starBtn && typeof opts.analyst.onToggleAction === 'function') {
+        starBtn.addEventListener('click', (e) => { e.stopPropagation(); opts.analyst.onToggleAction(); });
+      }
+      // Live analyst inputs only exist when the material is flagged For Action.
+      if (opts.analyst.flagged && typeof opts.analyst.onChange === 'function') {
+        const collect = () => ({
+          mrpType: (hostEl.querySelector('#anMrpType') || {}).value || '',
+          min:     (hostEl.querySelector('#anMin')     || {}).value || '',
+          max:     (hostEl.querySelector('#anMax')     || {}).value || '',
+          safety:  (hostEl.querySelector('#anSafety')  || {}).value || ''
+        });
+        const sel = hostEl.querySelector('#anMrpType');
+        if (sel) sel.addEventListener('change', () => opts.analyst.onChange(collect()));
+        // 'input' persists every keystroke — safe because onChange only writes to
+        // the sidecar store (no re-render), so the field keeps focus.
+        ['#anMin', '#anMax', '#anSafety'].forEach(id => {
+          const el = hostEl.querySelector(id);
+          if (el) el.addEventListener('input', () => opts.analyst.onChange(collect()));
+        });
+      }
+    }
+    if (opts.nav) {
+      const pBtn = hostEl.querySelector('#navPrev');
+      if (pBtn && typeof opts.nav.onPrev === 'function') pBtn.addEventListener('click', opts.nav.onPrev);
+      const nBtn = hostEl.querySelector('#navNext');
+      if (nBtn && typeof opts.nav.onNext === 'function') nBtn.addEventListener('click', opts.nav.onNext);
     }
 
     // APP-WU-02 — "Where used" button opens a modal (was an inline panel in

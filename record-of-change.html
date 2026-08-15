@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.1.3-dev · 2026-05-16
+     Inventory Optimization App · v2.1.5-dev · 2026-08-15
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      Latest tag : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.1
      This file is the canonical changelog — the version above is the build
@@ -11,8 +11,8 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="2.1.4-dev" />
-<meta name="app-released" content="2026-05-16" />
+<meta name="app-version" content="2.1.5-dev" />
+<meta name="app-released" content="2026-08-15" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <style>
 /* ════════════════════════════════════════════════════════════════════════
@@ -379,6 +379,25 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- v2.1.5-dev - APP-ACT-01 For Action + Analyst Rec + Prev/Next -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-15</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>Version bump &rarr; v2.1.5-dev · APP-ACT-01 — "For Action" flag + Analyst Recommendation column + Prev/Next (Trend)</h4>
+      <ul>
+        <li><b>New version folder.</b> v2.1.4-dev was copied to <b>v2.1.5-dev</b> (now the live dev folder + repo mirror); v2.1.4-dev is frozen as the rollback snapshot. Current-version labels (nav, <code>&lt;meta app-version&gt;</code>, build-stamps, the Trend PDF footer that was stale at <code>v2.0.0-dev</code>) relabelled to 2.1.5-dev; historical RoC entries kept at their original versions.</li>
+        <li><b>APP-ACT-01a · "For Action" flag.</b> A gold ★ marks a material for analyst follow-up — toggle from the right-click row menu ("Flag for Action") <em>or</em> the star button in the detail banner. Flagged rows show a ★ badge + gold left-edge cue in the list. State lives in a new <b>sidecar store</b> (<code>shared/analyst-marks.js</code>, localStorage key <code>tune.analyst.&lt;assessment&gt;</code>), <b>deliberately separate from the canonical JSON</b> — no SCHEMA_VERSION change, the shared dataset stays pure per the locked principles.</li>
+        <li><b>APP-ACT-01b · Analyst Recommendation column.</b> The <b>MRP Settings · Current vs Recommended</b> table gains a 3rd <b>Analyst</b> column: a V1/PD dropdown + free-text Min/Max/Safety inputs. Editable only when the material is flagged For Action (otherwise a muted "flag to edit" lock). Values persist to the same sidecar and survive an unflag&rarr;reflag.</li>
+        <li><b>APP-ACT-01c · Prev/Next.</b> ‹ Prev / Next › on the chart toolbar step through the material list <b>in the on-screen order</b> (current traffic-light filter + search + column filters + sort), clamped at the ends.</li>
+        <li><b>Files.</b> New <code>shared/analyst-marks.js</code>; <code>shared/material-detail.js</code> (Analyst column, banner star, nav — all opt-in via opts, so the Screener's shared render is untouched), <code>shared/material-detail.css</code>, <code>analysis/analysis.js</code>, <code>analysis/analysis.css</code>, <code>analysis/analysis.html</code>. <b>No SCHEMA_VERSION change.</b></li>
+        <li><b>Verified on-machine</b> (no Node on this box, so <code>node --check</code> was skipped — noted). Served the folder over http and booted Trend: <b>zero console errors</b>, all modules define. Unit-tested the sidecar (persists across fresh handles, rec preserved on unflag, empty-shell prune, correct key) and the shared render markup (flagged &rarr; star-on + Analyst inputs carrying the saved values + Prev disabled/Next enabled; not-flagged &rarr; column locked, no inputs). Screenshot captured. Rollback snapshot <code>_rollback/APP-ACT-01-pre/</code> (= v2.1.4-dev).</li>
+        <li><b>Shipped vs still open (credibility).</b> <b>Shipped:</b> the flag, the Analyst column, Prev/Next — on the <b>Trend page only</b>. <b>NOT yet done (queued, Phase 2/3):</b> the Analyst Recommendation does <em>not</em> yet flow into PDF/Excel exports; there is no "Highlighted for action" export scope; the export box is not yet collapsed/restyled; "Bucket"&rarr;"Fleet" rename is pending; the "See &lt;7-digit&gt;" jump is Phase 3. The reported <b>user-list reuse bug</b> (manual list not repopulating on reuse) is logged but <em>not</em> yet fixed. See this version's <code>Backlog.md</code>.</li>
+      </ul>
+    </article>
 
     <!-- ───────── v2.1.4-dev — APP-E3-PDF ───────── -->
     <article class="roc-entry dev">

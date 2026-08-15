@@ -20,6 +20,7 @@
     searchText:      '',
     llmInflight:     false,
     llmByMaterial:   {},         // material → { verdict, notes, suggestedEdits, raw }
+    analyst:         null,       // APP-ACT-01 — AnalystMarks handle (For Action flags + analyst rec); sidecar, not canonical
     colFilters:      {},         // colKey → { type:'set'|'range', values:Set, min, max } — main analysis list
     marked:          {           // user-marked materials (right-click context menu, v2.0)
       review: new Set(),         // → pre-checked in Mass LLM modal
@@ -42,6 +43,11 @@
       return;
     }
     state.json = json;
+    // APP-ACT-01 — bind the analyst sidecar (For Action flags + Analyst Rec) to
+    // this assessment by name. Kept out of the canonical JSON by design.
+    state.analyst = (typeof AnalystMarks !== 'undefined')
+      ? AnalystMarks.forAssessment((json.metadata && json.metadata.name) || '')
+      : null;
     renderLoadedBanner();
     await runPipelineNow();
     bindGlobalKeys();
@@ -273,9 +279,13 @@
     return false;
   }
 
-  function renderList(){
+  // APP-ACT-01 — the filtered + sorted material list currently in view. Extracted
+  // so the detail panel's Prev/Next step through exactly the rows on screen, in
+  // the same order, honouring the active traffic-light filter, search and column
+  // filters.
+  function computeVisibleRows(){
     const bucket = currentBucket();
-    if (!bucket) return;
+    if (!bucket) return [];
     let rows = bucket.materials.slice();
     if (state.filterTl !== 'ALL') rows = rows.filter(m => m.trafficLight === state.filterTl);
     if (state.searchText) {
@@ -291,6 +301,31 @@
       if (typeof av === 'number' && typeof bv === 'number') return dir === 'asc' ? av - bv : bv - av;
       return dir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
     });
+    return rows;
+  }
+
+  // APP-ACT-01 — Prev/Next stepping. Moves the selection one row through the
+  // on-screen list and re-renders both list and detail. Clamps at the ends.
+  function stepMaterial(dir){
+    const rows = computeVisibleRows();
+    if (!rows.length) return;
+    let idx = rows.findIndex(m => m.material === state.selectedMaterial);
+    if (idx < 0) idx = (dir > 0) ? -1 : rows.length;   // nothing selected → land on first/last
+    let ni = idx + dir;
+    if (ni < 0) ni = 0;
+    if (ni > rows.length - 1) ni = rows.length - 1;
+    if (rows[ni].material === state.selectedMaterial) return;
+    state.selectedMaterial = rows[ni].material;
+    renderList();
+    renderDetail();
+    const dEl = document.querySelector('#materialDetail');
+    if (dEl) dEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function renderList(){
+    const bucket = currentBucket();
+    if (!bucket) return;
+    const rows = computeVisibleRows();
 
     const tbl = $('#listTableWrap');
     if (rows.length === 0) {
@@ -313,14 +348,16 @@
     const tbody = rows.map(m => {
       const isReview = state.marked.review.has(m.material);
       const isPdf    = state.marked.pdf.has(m.material);
+      const isAction = !!(state.analyst && state.analyst.isAction(m.material));   // APP-ACT-01
       const rowClasses = [
         state.selectedMaterial === m.material ? 'selected' : '',
-        (isReview || isPdf) ? 'marked-any' : '',
+        (isReview || isPdf || isAction) ? 'marked-any' : '',
         isReview ? 'marked-review' : '',
-        isPdf    ? 'marked-pdf'    : ''
+        isPdf    ? 'marked-pdf'    : '',
+        isAction ? 'marked-action' : ''
       ].filter(Boolean).join(' ');
-      const badges = (isReview || isPdf)
-        ? `<span class="mark-badges">${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}${isPdf ? '<span class="mark-badge pdf" title="Marked for PDF print">⤓</span>' : ''}</span>`
+      const badges = (isReview || isPdf || isAction)
+        ? `<span class="mark-badges">${isAction ? '<span class="mark-badge action" title="Flagged For Action">★</span>' : ''}${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}${isPdf ? '<span class="mark-badge pdf" title="Marked for PDF print">⤓</span>' : ''}</span>`
         : '';
       return `
       <tr data-material="${escapeAttr(m.material)}" class="${rowClasses}">
@@ -382,6 +419,9 @@
     // Toggle which menu items are shown based on existing marks
     const isReview = state.marked.review.has(material);
     const isPdf    = state.marked.pdf.has(material);
+    const isAction = !!(state.analyst && state.analyst.isAction(material));   // APP-ACT-01
+    menu.querySelector('[data-action="mark-action"]').style.display   = isAction ? 'none' : '';
+    menu.querySelector('[data-action="unmark-action"]').style.display = isAction ? '' : 'none';
     menu.querySelector('[data-action="mark-review"]').style.display   = isReview ? 'none' : '';
     menu.querySelector('[data-action="unmark-review"]').style.display = isReview ? '' : 'none';
     menu.querySelector('[data-action="mark-pdf"]').style.display      = isPdf    ? 'none' : '';
@@ -402,6 +442,8 @@
         if (act === 'unmark-review') { state.marked.review.delete(material); }
         if (act === 'mark-pdf')      { state.marked.pdf.add(material);       }
         if (act === 'unmark-pdf')    { state.marked.pdf.delete(material);    }
+        if (act === 'mark-action')   { if (state.analyst) state.analyst.setAction(material, true);  }   // APP-ACT-01
+        if (act === 'unmark-action') { if (state.analyst) state.analyst.setAction(material, false); }
         if (act === 'open-detail')   {
           state.selectedMaterial = material;
           renderDetail();
@@ -410,6 +452,11 @@
         closeRowContextMenu();
         renderList();
         renderBulkCounters();
+        // APP-ACT-01 — if the Action flag changed on the material currently open
+        // in the detail panel, refresh it so the banner star + Analyst column sync.
+        if ((act === 'mark-action' || act === 'unmark-action') && material === state.selectedMaterial) {
+          renderDetail();
+        }
       };
     });
 
@@ -608,11 +655,32 @@
     // bucket + parameters in and receives the LLM result via the callback,
     // caching it back onto state.llmByMaterial so Mass-Review drill-downs and
     // the detail panel keep reading from the same store.
+    // APP-ACT-01 — this material's position in the on-screen list drives the
+    // Prev/Next enablement passed to the detail panel.
+    const _vis = computeVisibleRows();
+    const _idx = _vis.findIndex(m => m.material === mat.material);
+
     MaterialDetail.render(host, mat, {
       bucket,
       parameters: state.json.parameters,
       llm: state.llmByMaterial[mat.material],
       onLlmResult: (material, out) => { state.llmByMaterial[material] = out; },
+      // APP-ACT-01 — "For Action" flag (banner star) + editable Analyst
+      // Recommendation column. Stored in the analyst sidecar, never the canonical JSON.
+      analyst: state.analyst ? {
+        enabled: true,
+        flagged: state.analyst.isAction(mat.material),
+        values:  state.analyst.getRec(mat.material),
+        onToggleAction: () => { state.analyst.toggleAction(mat.material); renderList(); renderDetail(); },
+        onChange: (rec) => { state.analyst.setRec(mat.material, rec); }
+      } : null,
+      // APP-ACT-01 — Prev/Next through the on-screen list.
+      nav: {
+        hasPrev: _idx > 0,
+        hasNext: _idx > -1 && _idx < _vis.length - 1,
+        onPrev: () => stepMaterial(-1),
+        onNext: () => stepMaterial(1)
+      },
       enableTraceLink: true,  // APP-T-07 — "Trace it!" handoff to the Trace page
       // APP-OPI-01 — open-procurement lamps (PR/PO/In-Transit) from the chains.
       openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, mat.material) : null,
@@ -1157,7 +1225,7 @@
     doc.setFontSize(7);
     doc.setTextColor(140, 140, 150);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Generated ${AppLocale.localDateTimeISO().slice(0, 16)}  ·  Inventory Optimization v2.0.0-dev  ·  CAD  ·  github.com/aisandbox-bj/Inventory_Optimization`, M, H - 6);
+    doc.text(`Generated ${AppLocale.localDateTimeISO().slice(0, 16)}  ·  Inventory Optimization v2.1.5-dev  ·  CAD  ·  github.com/aisandbox-bj/Inventory_Optimization`, M, H - 6);
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
