@@ -11,7 +11,7 @@ Post-test operator feedback on the 15-Aug work. Pushed 2026-08-16 as `76b521f` o
 - **#1** Total→"Qty Iss." across Trend; current SAP Min/Max in grey brackets beside Rec on the list.
 - **#18** Trace banner MRP·Min/Max·SS split into 3 centre-aligned columns; "Open Resv." / "Last Cons.".
 - **#14** Fleet picker includes the MULTI · cross-fleet bucket; "Selected fleets ▾" styled as a control.
-- **#16** MRP Request Template: Open-reservations column removed; Current/Recommended/Analyst header groups colour-coded; Basis % Excel cell comment.
+- **#16** MRP Request Template: Open-reservations column removed; Current/Recommended/Analyst header groups colour-coded; Basis % Excel cell comment. **Follow-on (pushed `e3bbf5e`):** rightmost **"Total cost to Max (CAD)"** = target Max × unit cost (moving-avg price); target Max = Analyst › Recommended › current SAP Max; blank when no moving-avg price.
 - **G1** Analyst input blanks + disables Min/Max under PD (V1 keeps all three).
 - **#23a** Dashboard: New intake · Open analysis · **Upload JSON** + compact gear Configure (Upload JSON loads a saved canonical .json straight into Trend, restoring analyst flags/recs/notes).
 - **#6/#8/#9** Notes drawer draggable + remembers position; pop-out resizes **proportionally** (aspect locked); opening pop-out Notes **grows the card to the right** (graph stays put).
