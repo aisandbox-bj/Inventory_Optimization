@@ -12,6 +12,9 @@
      · the ANALYST recommendation (MRP / Min / Max / SS) from the sidecar
      · WHERE-USED population: the fleet models it was issued to, how many units
        it was OBSERVED on, and an ESTIMATED unit population (see estimate rule).
+     · TOTAL COST TO MAX (rightmost): target Max × unit cost (moving-avg price);
+       target Max = Analyst Max › Recommended Max › current SAP Max; blank when
+       no moving-avg price is present.
    (Open reservations column removed 2026-08-16 per operator — #16.)
 
    ── Population estimate (borrowed from the dev-handoff spec, Step 4) ─────────
@@ -89,11 +92,19 @@
       const obs = observedFor(json, m.material, reg);
       const estPop = reg.units.reduce((s, u) => s + (obs.famKeys.has(u.key) ? 1 : 0), 0);
       const rec = (analyst && typeof analyst.getRec === 'function') ? (analyst.getRec(m.material) || {}) : {};
+      // 2026-08-16 (operator) — "Total cost to Max": the target Max quantity × unit
+      // cost (moving-average price). Target Max = Analyst Max if entered, else the
+      // algorithmic Recommended Max, else the current SAP Max. BLANK (null) when the
+      // Inventory Master has no moving-average price for the material — never a fake 0.
+      const unitCost  = n(m.movingAvgPrice);
+      const anMaxN    = (rec.max != null && String(rec.max).trim() !== '' && isFinite(Number(rec.max))) ? Number(rec.max) : null;
+      const targetMax = (anMaxN != null) ? anMaxN : (n(m.recMax) != null ? n(m.recMax) : n(m.cmax));
+      const costToMax = (targetMax != null && unitCost != null) ? Math.round(targetMax * unitCost * 100) / 100 : null;
       return {
         material:    m.material,
         description: m.description || '',
         stock:       n(m.stock),
-        unitCost:    n(m.movingAvgPrice),
+        unitCost:    unitCost,
         reservations: n(m.totalReservation),
         curMrp: m.mrpType || '', curMin: n(m.cmin), curMax: n(m.cmax), curSS: n(m.safetyStock),
         recMrp: m.recMrpType || '', recMin: n(m.recMin), recMax: n(m.recMax),
@@ -102,6 +113,7 @@
         observedUnits: obs.observedUnits,
         estPopulation: estPop,
         basisPct: estPop > 0 ? Math.round((obs.observedUnits / estPop) * 100) : null,
+        costToMax: costToMax,
         unresolvedSf: obs.unresolvedSf
       };
     });
@@ -143,7 +155,8 @@
     { h:'Where used (models)',k:'whereUsedModels',  w:28, t:'text' },
     { h:'Observed units',     k:'observedUnits',    w:13, t:'num'  },
     { h:'Est. unit population',k:'estPopulation',   w:17, t:'num'  },
-    { h:'Basis %',            k:'basisPct',         w:9,  t:'pct'  }
+    { h:'Basis %',            k:'basisPct',         w:9,  t:'pct'  },
+    { h:'Total cost to Max (CAD)', k:'costToMax',   w:18, t:'money'}
   ];
 
   // #16 — header fill per group so Current / Recommended / Analyst read as three
@@ -187,6 +200,17 @@
       cell.font = { bold:true, size:10, color:{ argb:'FFFFFFFF' } };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:(GROUP_FILL[c.g] || DEFAULT_FILL) } };
       cell.alignment = { vertical:'middle', horizontal:(c.t === 'text' ? 'left' : 'center'), wrapText:true };
+      // 2026-08-16 — explain "Total cost to Max" on the header.
+      if (c.k === 'costToMax'){
+        cell.note = {
+          texts: [{ text:
+            'Total cost to Max = target Max quantity x unit cost (moving-average price).\n\n' +
+            'Target Max = the Analyst Max if entered, otherwise the algorithmic Recommended Max, ' +
+            'otherwise the current SAP Max.\n\n' +
+            'Blank when the Inventory Master carries no moving-average price for the material.' }],
+          margins: { insetmode: 'auto' }
+        };
+      }
       // #16 — explain Basis % right on the header, as an Excel cell comment.
       if (c.k === 'basisPct'){
         cell.note = {
