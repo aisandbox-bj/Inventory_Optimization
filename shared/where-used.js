@@ -113,7 +113,7 @@
       if (!v) return `<td class="num">·</td>`;
       const attrs = Object.entries(Object.assign({}, sel, { year: y }))
         .map(([k, val]) => ` data-wu-${k}="${esc(val)}"`).join('');
-      return `<td class="num wu-cell"${attrs} title="Click to list the work orders behind this number">${fmt(v)}</td>`;
+      return `<td class="num wu-cell"${attrs}>${fmt(v)}</td>`;
     }).join('');
   }
 
@@ -163,8 +163,7 @@
     const grand = `<tr class="wu-grand"><td>Total</td>${yearCells(data.grandByYear, years)}<td class="num">${fmt(data.grandTotal)}</td></tr>`;
     const fleetNote = data.hasFleet ? '' : `<div class="wu-note">Fleet Master not loaded — showing Sort Field only (no model rollup).</div>`;
     return `<div class="wu-panel">
-      <div class="wu-h">Where used — net consumption by destination</div>
-      <div class="wu-hint">Click any yearly number to list the work orders behind it.</div>
+      <div class="wu-h">Where used — net consumption by destination<span class="wu-hint-tr"><i>click a number for WO detail</i></span></div>
       ${fleetNote}
       <table class="wu-tbl">
         <thead><tr><th>Destination</th>${yhead}<th class="num">Total</th></tr></thead>

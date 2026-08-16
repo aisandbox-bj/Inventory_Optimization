@@ -849,25 +849,29 @@
   // This makes it pop up adjacent to the graph and scroll with the page content.
   function positionNotesDrawer(){
     const drawer = $('#notesDrawer');
-    const detail = $('#materialDetail');
-    const shell  = document.querySelector('main.shell');
-    if (!drawer || !detail || !shell) return;
-    // #6 (2026-08-16) — if the operator has dragged the drawer, reuse that stored
-    // position (shell-relative) so it reopens where they left it, even on a new
-    // material. Otherwise fall back to docking beside the top of the detail panel.
+    if (!drawer) return;
+    // R2-3 (2026-08-16) — the drawer is now position:fixed and free-dragged anywhere
+    // in the window (like the chart pop-out). If the operator has dragged it, reuse
+    // that stored VIEWPORT position (clamped in case the window is now smaller);
+    // otherwise dock it near the top-right of the detail panel on first open.
     if (state.notesPos && typeof state.notesPos.left === 'number') {
       drawer.style.right = 'auto';
-      const maxLeft = Math.max(0, shell.clientWidth - drawer.offsetWidth);
+      const maxLeft = Math.max(0, window.innerWidth  - drawer.offsetWidth - 8);
+      const maxTop  = Math.max(0, window.innerHeight - 60);
       drawer.style.left = Math.max(0, Math.min(state.notesPos.left, maxLeft)) + 'px';
-      drawer.style.top  = Math.max(0, state.notesPos.top) + 'px';
+      drawer.style.top  = Math.max(0, Math.min(state.notesPos.top,  maxTop))  + 'px';
       return;
     }
-    const dRect = detail.getBoundingClientRect();
-    const sRect = shell.getBoundingClientRect();
-    drawer.style.top = Math.max(8, (dRect.top - sRect.top) + 8) + 'px';
+    const detail = $('#materialDetail');
+    if (detail) {
+      const r = detail.getBoundingClientRect();
+      drawer.style.right = 'auto';
+      drawer.style.left = Math.max(8, r.right - drawer.offsetWidth - 8) + 'px';
+      drawer.style.top  = Math.max(8, r.top + 8) + 'px';
+    }
   }
-  // #6 — drag the notes drawer by its header; persists the last position (session +
-  // localStorage) so it reopens there on the next material.
+  // R2-3 — drag the notes drawer by its header anywhere in the window (viewport
+  // coords, clamped to the window — same as the pop-out); persists the last position.
   function wireNotesDrag(){
     const drawer = $('#notesDrawer');
     const head   = drawer && drawer.querySelector('.notes-head');
@@ -876,17 +880,12 @@
     head.addEventListener('mousedown', (e) => {
       if (e.target.closest('.notes-close')) return;
       e.preventDefault();
-      const shell = document.querySelector('main.shell');
-      if (!shell) return;
-      const sRect = shell.getBoundingClientRect();
-      const dRect = drawer.getBoundingClientRect();
-      const offX = e.clientX - dRect.left, offY = e.clientY - dRect.top;
+      const r = drawer.getBoundingClientRect();
+      const offX = e.clientX - r.left, offY = e.clientY - r.top;
       drawer.style.right = 'auto';
       const move = (ev) => {
-        let left = ev.clientX - offX - sRect.left;
-        let top  = ev.clientY - offY - sRect.top;
-        left = Math.max(0, Math.min(left, shell.clientWidth - drawer.offsetWidth));
-        top  = Math.max(0, top);
+        const left = Math.min(Math.max(0, ev.clientX - offX), window.innerWidth  - 80);
+        const top  = Math.min(Math.max(0, ev.clientY - offY), window.innerHeight - 40);
         drawer.style.left = left + 'px';
         drawer.style.top  = top + 'px';
         state.notesPos = { left, top };
@@ -1058,24 +1057,17 @@
       const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
       document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
     });
-    // Resize by the bottom-right handle — #8 (2026-08-16): PROPORTIONAL. Keep the
-    // card's aspect ratio locked to what it is when the drag starts, so the content
-    // never distorts into a tall-narrow box that squeezed the detail to one word per
-    // line. Width drives; height follows the ratio; both clamp to the viewport.
+    // Resize by the bottom-right handle — R2-1 (2026-08-16): FREE width/height (the
+    // aspect-lock is gone). The chart + tables inside are a FIXED size (gp-detail has
+    // a fixed width), so shrinking the card past the content just scrolls it — the
+    // visuals never reflow/distort. Both dimensions clamp to the viewport.
     if (els.resize) els.resize.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
       const r = els.pop.getBoundingClientRect();
-      const sx = e.clientX, sw = r.width, sh = r.height;
-      const ratio = sw / sh;
+      const sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height;
       const move = (ev) => {
-        let w = Math.max(440, sw + (ev.clientX - sx));
-        let h = w / ratio;
-        const maxW = window.innerWidth  - r.left - 10;
-        const maxH = window.innerHeight - r.top  - 10;
-        if (w > maxW) { w = maxW; h = w / ratio; }
-        if (h > maxH) { h = maxH; w = h * ratio; }
-        els.pop.style.width  = w + 'px';
-        els.pop.style.height = h + 'px';
+        els.pop.style.width  = Math.max(360, Math.min(sw + (ev.clientX - sx), window.innerWidth  - r.left - 8)) + 'px';
+        els.pop.style.height = Math.max(300, Math.min(sh + (ev.clientY - sy), window.innerHeight - r.top  - 8)) + 'px';
       };
       const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
       document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);

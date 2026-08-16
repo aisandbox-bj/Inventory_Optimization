@@ -200,29 +200,9 @@
       cell.font = { bold:true, size:10, color:{ argb:'FFFFFFFF' } };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:(GROUP_FILL[c.g] || DEFAULT_FILL) } };
       cell.alignment = { vertical:'middle', horizontal:(c.t === 'text' ? 'left' : 'center'), wrapText:true };
-      // 2026-08-16 — explain "Total cost to Max" on the header.
-      if (c.k === 'costToMax'){
-        cell.note = {
-          texts: [{ text:
-            'Total cost to Max = target Max quantity x unit cost (moving-average price).\n\n' +
-            'Target Max = the Analyst Max if entered, otherwise the algorithmic Recommended Max, ' +
-            'otherwise the current SAP Max.\n\n' +
-            'Blank when the Inventory Master carries no moving-average price for the material.' }],
-          margins: { insetmode: 'auto' }
-        };
-      }
-      // #16 — explain Basis % right on the header, as an Excel cell comment.
-      if (c.k === 'basisPct'){
-        cell.note = {
-          texts: [{ text:
-            'Basis % = observed units ÷ estimated unit population.\n\n' +
-            'Observed units = fleet units this part was actually issued to (MB51 → work order → fleet unit). ' +
-            'Estimated population = every fleet unit whose (Manufacturer, base-model) matches one it was observed on.\n\n' +
-            'A high % means most of the matching fleet was seen consuming the part (strong evidence); a low % means the ' +
-            'estimate leans on the model match more than observed usage. It is an ESTIMATE — verify against SAP.' }],
-          margins: { insetmode: 'auto' }
-        };
-      }
+      // R2-4 (2026-08-16) — the Basis % and Total-cost header explanations used to be
+      // Excel cell COMMENTS, but those render visible in some Excel versions and block
+      // the header text. Moved to a non-blocking "Column notes" block below the table.
       ws.getColumn(i + 1).width = c.w;
     });
     headRow.height = 30;
@@ -240,6 +220,24 @@
         cell.font = { size:10 };
         if (ri % 2 === 1) cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFF2F6F8' } };
       });
+    });
+
+    // R2-4 — "Column notes" block below the table (replaces the blocking header
+    // comments). Plain visible cells, two rows of clear air above them.
+    const noteRow = 5 + rows.length + 1;
+    const notes = [
+      ['Basis %', 'Observed units ÷ estimated unit population. Observed = fleet units this part was actually issued to (MB51 → work order → fleet unit); estimated population = every fleet unit whose (Manufacturer, base-model) matches one it was observed on. A high % = most of the matching fleet was seen using the part (strong evidence); low % = the estimate leans on the model match. It is an ESTIMATE — verify against SAP.'],
+      ['Total cost to Max', 'Target Max quantity × unit cost (moving-average price). Target Max = the Analyst Max if entered, else the algorithmic Recommended Max, else the current SAP Max. Blank when the Inventory Master carries no moving-average price.']
+    ];
+    const hdr = ws.getCell(noteRow, 1);
+    hdr.value = 'Column notes';
+    hdr.font = { bold:true, size:10, color:{ argb:'FF12303F' } };
+    notes.forEach((nt, k) => {
+      const r = noteRow + 1 + k;
+      const lab = ws.getCell(r, 1); lab.value = nt[0]; lab.font = { bold:true, size:9, color:{ argb:'FF5C7A89' } }; lab.alignment = { vertical:'top' };
+      ws.mergeCells(r, 2, r, Math.min(COLS.length, 8));
+      const txt = ws.getCell(r, 2); txt.value = nt[1]; txt.font = { size:9, color:{ argb:'FF5C7A89' } }; txt.alignment = { wrapText:true, vertical:'top' };
+      ws.getRow(r).height = 40;
     });
 
     return wb;

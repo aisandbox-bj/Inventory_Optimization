@@ -1300,7 +1300,9 @@ main.shell{ position:relative; }
    panel — it pops up adjacent to the graph. The whole drawer is vertically resizable
    from its bottom edge (resize:vertical). */
 .notes-drawer{
-  position:absolute; right:8px; top:118px; z-index:60;
+  /* R2-3 (2026-08-16) — fixed so it floats over the whole window and can be dragged
+     anywhere (like the chart pop-out), instead of being clamped to the shell width. */
+  position:fixed; right:20px; top:150px; z-index:70;
   width:330px; max-width:calc(100vw - 36px);
   height:360px; min-height:190px; max-height:80vh;
   display:flex; flex-direction:column;
@@ -1346,14 +1348,17 @@ main.shell{ position:relative; }
   background:rgba(255,255,255,0.02); flex:0 0 auto;
 }
 .gp-head .gp-grip{ color:var(--text-muted); font-size:13px; }
-.gp-head .gp-title{ font-family:var(--font-mono); font-size:12px; color:var(--text-pri); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gp-head .gp-title{ font-family:var(--font-mono); font-size:12px; color:var(--text-pri); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:520px; }
 .gp-head .gp-spacer{ flex:1 1 auto; }
 .gp-btn{ background:transparent; border:1px solid var(--border); color:var(--text-sec); font-size:11px; font-family:var(--font-mono); cursor:pointer; padding:3px 9px; border-radius:6px; }
 .gp-btn:hover{ border-color:var(--accent); color:var(--accent); }
 .gp-btn.on{ border-color:var(--accent); color:var(--accent); background:rgba(31,206,216,.10); }
 .gp-btn.gp-close{ border:none; font-size:14px; padding:2px 7px; }
-.gp-body{ flex:1 1 auto; display:flex; min-height:0; }
-.gp-detail{ flex:1 1 auto; overflow:auto; padding:12px 14px; min-width:0; }
+/* R2-1 (2026-08-16) — the body is the scroll container; the graph/table pane is a
+   FIXED width (fits the 936px chart + padding) so the visuals never reflow. Shrink
+   the card past the content and gp-body scrolls instead of squeezing the chart. */
+.gp-body{ flex:1 1 auto; display:flex; min-height:0; overflow:auto; }
+.gp-detail{ flex:0 0 auto; width:964px; padding:12px 14px; }
 .gp-notes{ flex:0 0 300px; display:flex; flex-direction:column; border-left:1px solid var(--border); background:rgba(255,255,255,0.015); }
 .gp-notes.hidden{ display:none; }
 .gp-notes-head{ padding:9px 12px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px; letter-spacing:.5px; color:var(--accent); }

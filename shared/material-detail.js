@@ -32,6 +32,13 @@
   function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
   function escapeAttr(s){ return escapeHtml(s).replace(/'/g, '&#39;'); }
 
+  /* R2-2 (2026-08-16) — small "ⓘ" info icon that carries a tooltip, used instead of
+     hovering the whole cell/button. The operator wanted fewer full-element hover
+     helpers — the green-marked items (lamps, colour pill, calc·batch) keep their
+     hover; the yellow-marked ones (Lead time, Per event cons, LLM buttons) move the
+     tooltip onto a discrete ⓘ so the panel isn't a wall of hover targets. */
+  function infoI(text){ return `<span class="stat-i" tabindex="0" role="img" aria-label="Info" title="${escapeAttr(text)}">ⓘ</span>`; }
+
   /* APP-ACT-03 — the Inventory-Master material description can carry a "See
      <7-digit>" reference to another material. Linkify any 7-digit token that is
      actually in the loaded pack (opts.materialJump.has) so it can be clicked to
@@ -411,15 +418,16 @@
         perEventTitle = `Units issued in the single consumptive event (full window)`;
       }
     }
-    const perEventCell = `<div class="stat-cell"${perEventTitle ? ` title="${escapeHtml(perEventTitle)}"` : ''}><span class="lab">Per event cons</span><div class="v">${perEventDisp}</div></div>`;
+    const perEventCell = `<div class="stat-cell"><span class="lab">Per event cons${perEventTitle ? ' ' + infoI(perEventTitle) : ''}</span><div class="v">${perEventDisp}</div></div>`;
 
     const _ranBase = llmCfg && llmCfg.variant !== 'v';
     const _ranV    = llmCfg && llmCfg.variant === 'v';
     const llmActionsHtml = enableLlm
       ? `
       <div class="actions-row">
-        <button id="btnLlm" class="primary" ${_inflight ? 'disabled' : ''} title="Current factory prompt">${_ranBase ? '↻ Re-run' : '✦ Run'} LLM review (base)</button>
-        <button id="btnLlmV" class="primary" ${_inflight ? 'disabled' : ''} title="Enhanced prompt — batched-consumption + 'why now / what to check' framing">${_ranV ? '↻ Re-run' : '✦ Run'} LLM review (v)</button>
+        <button id="btnLlm" class="primary" ${_inflight ? 'disabled' : ''}>${_ranBase ? '↻ Re-run' : '✦ Run'} LLM review (base)</button>
+        <button id="btnLlmV" class="primary" ${_inflight ? 'disabled' : ''}>${_ranV ? '↻ Re-run' : '✦ Run'} LLM review (v)</button>
+        ${infoI("Base = the factory prompt. (v) = enhanced prompt — batched-consumption + 'why now / what to check' framing.")}
         <span id="llmStatus"></span>
       </div>`
       : '';
@@ -447,7 +455,7 @@
         <span class="chart-toolbar-lab">Show:</span>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleConsumption" checked> Consumption</label>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
-        ${(opts.nav || opts.notes || opts.whereUsedFn || opts.enablePopout) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn" title="${opts.notes.hasNote ? 'Notes for this material — has a note (click to view/edit)' : 'Add a note for this material'}">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>` : ''}${opts.enablePopout ? `<button type="button" class="popout-btn" id="popoutBtn" title="Pop this material out into a floating, draggable, resizable card — the full detail (chart + stats/MRP) with notes joined on the right.">⤢ Pop out</button>` : ''}</div>` : ''}
+        ${(opts.nav || opts.notes || opts.whereUsedFn || opts.enablePopout) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn" title="${opts.notes.hasNote ? 'Notes for this material — has a note (click to view/edit)' : 'Add a note for this material'}">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn">⊞ Where used</button>` : ''}${opts.enablePopout ? `<button type="button" class="popout-btn" id="popoutBtn" title="Pop this material out into a floating, draggable, resizable card — the full detail (chart + stats/MRP) with notes joined on the right.">⤢ Pop out</button>` : ''}</div>` : ''}
       </div>
       <div class="chart-host" id="chartHost"></div>
       <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
@@ -464,7 +472,7 @@
         <div class="stat-cell"><span class="lab">Qty Iss. (window)</span><div class="v">${mat.totalNet}</div></div>
         ${perEventCell}
         ${lastConsCell}
-        <div class="stat-cell" title="Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History; Trend only. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red."><span class="lab">Lead time</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div></div>
+        <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History; Trend only. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div></div>
       </div>
       <button type="button" class="stat-expand" id="statExpandBtn" aria-expanded="${_statsExpanded ? 'true' : 'false'}" title="Show / hide the adjusted-rate &amp; stockout diagnostics">
         <span class="tri">${_statsExpanded ? '▾' : '▸'}</span><span class="lbl">${_statsExpanded ? 'Fewer stats' : 'More stats'}</span>

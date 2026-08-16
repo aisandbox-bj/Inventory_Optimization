@@ -1,6 +1,16 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-16 (the "16-Aug feedback pass" — see the SHIPPED section directly below; pushed `76b521f`, pending operator off-repo validation). Prior: 2026-08-15 "no-test sprint" + Phase 3 + Phase 1, all pushed through `1d83614`.
+**Updated:** 2026-08-16 (the "16-Aug **rev02** round-2" pass — see the SHIPPED section directly below; pushed on top of `88112ae`, pending operator off-repo validation). Prior same day: the "16-Aug feedback pass" (`76b521f`) + the "Total cost to Max" column (`e3bbf5e`). Prior: 2026-08-15 sprint + Phase 3 + Phase 1, all pushed through `1d83614`.
+
+## ✅ SHIPPED — 16-Aug rev02 (round-2) feedback (2026-08-16) — pushed on top of `88112ae`, pending operator off-repo validation
+Second round of feedback on the 16-Aug work. Pre-round-2 baseline = origin/main `88112ae`; local snapshot `_rollback/R2-pre/`; refs at push `backup/pre-rev02` + `checkpoint/pre-rev02` at `88112ae`. No SCHEMA_VERSION change. Browser-verified: all pages boot with zero console errors; delimiter balance unchanged.
+- **item 6 — MRP-run cadence rebuilt.** Off `computeChains` (same chains as Raw Data, NOT the suppressed set → never excludes); classified by chain **state** into **Complete / In-flight / Cancelled** (fixes the "all cancelled" bug + count mismatch). **Continuous axis** (every day/week/month slot drawn, empty = gap), **day-number + YYYY-MM** labels, "Empty periods" KPI, Raw-Data reconciliation footnote.
+- **item 7 — analyst work moved to the Screener report.** Sandbox has no PDF export (unwired); the Screener does. For-Action ★ in list/detail + Analyst MRP column + Analyst-when-present comment + ★ in the Screener PDF.
+- **item 1 — pop-out.** Free card resize (aspect-lock reverted); chart/tables **fixed width** so they never reflow → **scroll** when the card is small; **Notes button left-anchored** (doesn't move when notes opens).
+- **item 2 — hover-helper cleanup.** Green keeps hover; Lead time / Per event cons / LLM buttons → **ⓘ** icon; Where-used button no hover; where-used card top-right note + per-cell hovers removed + **year/Total columns centred**.
+- **item 3 — notes card free-drag anywhere** (position:fixed, viewport-clamped, like the pop-out).
+- **item 4 — Excel comments** → non-blocking **"Column notes"** block below the table.
+- **item 5 — sigma:** root-caused (outlier included in its own mean+SD → threshold too high) and **PARKED** (robust estimator fix on task R2-5).
 **Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The 16-Aug feedback pass is **pushed `76b521f` (2026-08-16), pending operator off-repo validation.** The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only. **This file, `record-of-change.html`, and `2 - Reference Docs/Roadmap.html` must stay aligned.**
 
 ## ✅ SHIPPED — 16-Aug feedback pass (2026-08-16, pushed `76b521f`) — pending operator off-repo validation

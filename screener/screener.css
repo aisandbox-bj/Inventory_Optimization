@@ -109,6 +109,12 @@
   font-family:var(--font-mono); font-size:9.5px; font-weight:700; color:var(--status-warn);
   border:1px solid rgba(251,191,36,.4); border-radius:8px; padding:0 5px;
 }
+/* R2-7 (2026-08-16) — For-Action ★ indicators (read-only, from the Trend sidecar). */
+.scr-row-action{ color:#F2C744; font-size:12px; line-height:1; }
+.scr-cell-action{
+  font-family:var(--font-mono); font-size:10px; font-weight:800; letter-spacing:.4px;
+  color:#F2C744; border:1px solid rgba(242,199,68,.5); border-radius:8px; padding:1px 7px; margin-left:6px;
+}
 .scr-row-desc{
   font-family:var(--font-body); font-size:11px; color:var(--text-muted);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;

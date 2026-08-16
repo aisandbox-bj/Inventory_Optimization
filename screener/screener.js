@@ -86,6 +86,11 @@
     if (!json) { renderEmpty(); return; }
     state.json  = json;
     state.hasPr = !!(json.data && json.data.prHistory && json.data.prHistory.length);
+    // R2-7 (2026-08-16) — bind the analyst sidecar (For-Action flags + Analyst Rec)
+    // so the Screener list, detail and PDF export can show the analyst's work.
+    state.analyst = (typeof AnalystMarks !== 'undefined')
+      ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
+      : null;
 
     try {
       state.result = AppPipeline.runPipeline(json, { runDate: AppLocale.localDateISO() });
@@ -384,12 +389,15 @@
       const p2  = m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : '—';
       const rw  = m.runway != null ? m.runway + 'mo' : '—';
       const reclass = m.mrpRecFlag ? `<span class="scr-row-reclass" title="${escapeAttr(m.mrpReclassNote || 'Reclass recommended')}">${escapeHtml(m.mrpRecFlag)}</span>` : '';
+      // R2-7 — For-Action ★ (analyst flag from Trend), read-only indicator here.
+      const isAction = !!(state.analyst && state.analyst.isAction(m.material));
+      const actionBadge = isAction ? `<span class="scr-row-action" title="Flagged For Action">★</span>` : '';
       return `
         <div class="scr-row ${sel} ${flg}" data-mat="${escapeAttr(m.material)}">
           <input type="checkbox" class="scr-row-flag" data-flag="${escapeAttr(m.material)}" ${flg ? 'checked' : ''} title="Flag this material for PDF export" aria-label="Flag ${escapeAttr(m.material)} for export">
           <span class="tl-dot ${m.trafficLight}"></span>
           <div class="scr-row-main">
-            <div class="scr-row-id">${escapeHtml(m.material)}${reclass}</div>
+            <div class="scr-row-id">${escapeHtml(m.material)}${actionBadge}${reclass}</div>
             <div class="scr-row-desc" title="${escapeAttr(m.description)}">${escapeHtml(m.description || '')}</div>
           </div>
           <div class="scr-row-stats">
@@ -431,10 +439,13 @@
       host.innerHTML = `<div class="scr-empty"><div class="scr-empty-big">Pick a material</div>Select a material on the left to load its combined detail.</div>`;
       return;
     }
+    // R2-7 — For-Action ★ on the graph (detail cell): read-only badge from the sidecar.
+    const detIsAction = !!(state.analyst && state.analyst.isAction(entry.m.material));
+    const detActionBadge = detIsAction ? ` <span class="scr-cell-action" title="Flagged For Action on Trend">★ For Action</span>` : '';
     host.innerHTML = `
       <div class="scr-detail-grid">
         <div class="scr-detail-cell">
-          <div class="scr-cell-lab">Consumption detail</div>
+          <div class="scr-cell-lab">Consumption detail${detActionBadge}</div>
           <div id="scrCellDetail"></div>
         </div>
         <div class="scr-detail-cell">
@@ -775,9 +786,17 @@
 
     // ── Consumption detail ───────────────────────────────────────────────
     sectionLabel('Consumption detail');
-    // Algorithmic recommendation
+    // R2-7 — top comment: show the ANALYST recommendation when the analyst entered
+    // one (replacing the algorithmic line); flag For Action if flagged.
+    const anRec = state.analyst ? state.analyst.getRec(m.material) : {};
+    const anHas = !!(anRec && (anRec.mrpType || anRec.min || anRec.max || anRec.safety));
+    const anFlagged = !!(state.analyst && state.analyst.isAction(m.material));
+    const topComment = anHas
+      ? `Analyst recommendation: MRP ${anRec.mrpType || '—'} · Min ${anRec.min || '—'} · Max ${anRec.max || '—'} · SS ${anRec.safety || '—'}`
+      : ('Recommendation: ' + (m.action || '—'));
+    const topLine = (anFlagged ? '★ For Action  —  ' : '') + topComment;
     doc.setTextColor(60, 60, 70); doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5);
-    doc.splitTextToSize(pdfSafe('Recommendation: ' + (m.action || '—')), CW).slice(0, 2).forEach(line => { doc.text(line, M, y); y += 4; });
+    doc.splitTextToSize(pdfSafe(topLine), CW).slice(0, 2).forEach(line => { doc.text(line, M, y); y += 4; });
     doc.setFont('helvetica', 'normal'); y += 1;
 
     // Chart (AppChart → PNG)
@@ -814,22 +833,22 @@
     });
     y = doc.lastAutoTable.finalY + 4;
 
-    // MRP compare
+    // MRP compare — R2-7: + Analyst column (from the sidecar rec; '—' when blank).
     const mrpBody = [
-      ['MRP type', m.mrpType || '—', m.recMrpType || '—'],
-      ['Min', m.cmin != null ? String(m.cmin) : '—', m.recMin != null ? String(m.recMin) : '—'],
-      ['Max', m.cmax != null ? String(m.cmax) : '—', m.recMax != null ? String(m.recMax) : '—'],
-      ['Safety stock', m.safetyStock != null ? String(m.safetyStock) : '—', '—']
+      ['MRP type', m.mrpType || '—', m.recMrpType || '—', anRec.mrpType || '—'],
+      ['Min', m.cmin != null ? String(m.cmin) : '—', m.recMin != null ? String(m.recMin) : '—', anRec.min || '—'],
+      ['Max', m.cmax != null ? String(m.cmax) : '—', m.recMax != null ? String(m.recMax) : '—', anRec.max || '—'],
+      ['Safety stock', m.safetyStock != null ? String(m.safetyStock) : '—', '—', anRec.safety || '—']
     ];
     ensure(26);
     doc.autoTable({
-      startY: y, head: [['MRP setting', 'Current', 'Recommended']], body: mrpBody, theme: 'grid',
+      startY: y, head: [['MRP setting', 'Current', 'Recommended', 'Analyst']], body: mrpBody, theme: 'grid',
       styles: { fontSize: 8, cellPadding: 1.4, lineColor: [210,214,220], lineWidth: 0.1 },
       headStyles: { fillColor: [48,84,150], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      columnStyles: { 0:{fontStyle:'bold',fillColor:[241,243,246]}, 1:{halign:'center'}, 2:{halign:'center',textColor:[22,138,145]} },
+      columnStyles: { 0:{fontStyle:'bold',fillColor:[241,243,246]}, 1:{halign:'center'}, 2:{halign:'center',textColor:[22,138,145]}, 3:{halign:'center',textColor:[176,122,22],fontStyle:'bold'} },
       tableWidth: CW,
       didParseCell: (d) => {
-        if (d.row.section === 'head' && (d.column.index === 1 || d.column.index === 2)) d.cell.styles.halign = 'center';
+        if (d.row.section === 'head' && (d.column.index === 1 || d.column.index === 2 || d.column.index === 3)) d.cell.styles.halign = 'center';
         if (d.row.section === 'body' && d.column.index >= 1 && d.row.index < 3) { const cur = mrpBody[d.row.index][1], rec = mrpBody[d.row.index][2]; if (cur !== '—' && rec !== '—' && cur !== rec) d.cell.styles.fillColor = [255,243,205]; }
       },
       margin: { left: M, right: M }

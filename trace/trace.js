@@ -747,67 +747,86 @@
      TracePhase). Reads raw prHistory — independent of the material rail. Honest:
      no PR History, or no MRP-created PRs, says so rather than drawing empty bars.
   ═════════════════════════════════════════════════════════════════════════ */
-  function isMrpCreated(r){ return (String(r.creationIndicator || '').trim() || 'B') === 'B'; }
-  function prCancelled(r){
-    const di = String(r.deletionIndicator || '').trim();
-    return di !== '' && di !== '0';
+  function isMrpChain(c){ return (String(c.creationIndicator || '').trim() || 'B') === 'B'; }
+  // Map a chain's state to one of the three cadence outcomes — the SAME states the
+  // Raw Data table shows, so the two reconcile. Received/complete → Complete;
+  // PO-raised or PR-pending → In-flight; deleted PR with no PO → Cancelled.
+  function chainOutcome(c){
+    if (c.state === 'CANCELLED') return 'cancelled';
+    if (c.state === 'COMPLETE' || c.state === 'NOT_YET_CONSUMED') return 'complete';
+    return 'inflight';   // IN_FLIGHT · PR_ONLY
   }
-  function mfPeriodKey(dateStr, period){
+  function mfPad(x){ return ('0' + x).slice(-2); }
+  // Slot start (ms, UTC) for a PR date at the chosen granularity; null if undated.
+  function mfSlotStart(dateStr, period){
     const s = String(dateStr || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-    if (period === 'month') return s.slice(0, 7);
-    if (period === 'week'){
-      const d = new Date(s + 'T00:00:00Z');
-      if (isNaN(d.getTime())) return null;
-      const dow = (d.getUTCDay() + 6) % 7;          // Mon = 0
-      d.setUTCDate(d.getUTCDate() - dow);           // back to Monday
-      return d.toISOString().slice(0, 10);          // week labelled by its Monday
-    }
-    return s;                                       // day
+    const y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10);
+    if (period === 'month') return Date.UTC(y, m - 1, 1);
+    if (period === 'week'){ const dow = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; return Date.UTC(y, m - 1, d) - dow * 864e5; }
+    return Date.UTC(y, m - 1, d);
+  }
+  function mfNextSlot(ms, period){
+    const dt = new Date(ms);
+    if (period === 'month') return Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 1);
+    if (period === 'week')  return ms + 7 * 864e5;
+    return ms + 864e5;
   }
 
   function renderMrpCadence(host){
-    // APP-FIX-MRPFREQ-MATERIAL (2026-08-16) — the cadence must be for the material
-    // on the rail, not the whole run. Previously it read every PR in the extract,
-    // so every material showed the identical run-wide total (e.g. 11,005). Filter
-    // to state.scopeSingle before bucketing.
-    const allPrs = (state.json && state.json.data && state.json.data.prHistory) || [];
+    // APP-FIX-MRPFREQ-REBUILD (2026-08-16) — rebuilt on the SAME chains as Raw Data
+    // (TracePhase.computeChains — NOT the active/suppressed set, so the outlier
+    // exclusion from the lead-time calc has no effect here) and classified by chain
+    // STATE, so the counts reconcile with Raw Data and the outcome split is correct.
+    // (The old code read raw PR rows and mis-flagged nearly everything cancelled.)
+    // Continuous time axis: every period slot is drawn, empty ones show as gaps so
+    // the operator can see when MRP did NOT run.
     const mat = state.scopeSingle;
-    const prs = mat
-      ? allPrs.filter(r => String(r.material || '').trim() === String(mat).trim())
-      : allPrs;
-    state.mrpFreqPeriod = state.mrpFreqPeriod || 'day';
+    const allPrs = (state.json && state.json.data && state.json.data.prHistory) || [];
+    state.mrpFreqPeriod = state.mrpFreqPeriod || 'week';
     if (state.chart) { state.chart.destroy(); state.chart = null; }
     if (!allPrs.length){
-      host.innerHTML = `<div class="view-empty"><h3>No PR History loaded</h3><p>The MRP-run cadence reads the PR-to-PO history. Load PR History in Intake to see how many MRP-created PRs land each period and whether they convert to a PO or get cancelled.</p></div>`;
+      host.innerHTML = `<div class="view-empty"><h3>No PR History loaded</h3><p>The MRP-run cadence reads the PR-to-PO history. Load PR History in Intake to see when MRP raised requisitions for this material and what became of them.</p></div>`;
       return;
     }
-    if (!prs.length){
-      host.innerHTML = `<div class="view-empty"><h3>No PRs for material ${escapeHtml(String(mat || ''))}</h3><p>This material has no PR History rows in the loaded run, so there is no MRP-run cadence to chart.</p></div>`;
-      return;
-    }
-    const mrpPrs = prs.filter(isMrpCreated);
-    if (!mrpPrs.length){
-      host.innerHTML = `<div class="view-empty"><h3>No MRP-created PRs</h3><p>None of the ${prs.length.toLocaleString()} loaded PRs carry the MRP creation indicator (EBAN-ESTKZ = B). This view charts MRP-driven requisitions only.</p></div>`;
+    const chains    = (typeof TracePhase !== 'undefined' && TracePhase.computeChains) ? TracePhase.computeChains(state.json, mat) : [];
+    const mrpChains = chains.filter(isMrpChain);
+    const manualCt  = chains.length - mrpChains.length;
+    if (!mrpChains.length){
+      host.innerHTML = `<div class="view-empty"><h3>No MRP-created requisitions</h3><p>Material <b>${escapeHtml(String(mat || ''))}</b> has ${chains.length.toLocaleString()} requisition chain${chains.length === 1 ? '' : 's'} in the run, but none carry the MRP creation indicator (EBAN-ESTKZ = B). This view charts MRP-driven requisitions only.</p></div>`;
       return;
     }
     const period = state.mrpFreqPeriod;
-    const map = new Map();
-    let undated = 0, conv = 0, canc = 0, opn = 0;
-    for (const r of mrpPrs){
-      const key = mfPeriodKey(r.prDate, period);
-      if (!key){ undated++; continue; }
-      let e = map.get(key); if (!e){ e = { conv:0, canc:0, open:0 }; map.set(key, e); }
-      if (prCancelled(r)){ e.canc++; canc++; }
-      else if (String(r.purchaseOrder || '').trim()){ e.conv++; conv++; }
-      else { e.open++; opn++; }
+    const agg = new Map();
+    let undated = 0, complete = 0, inflight = 0, cancelled = 0;
+    for (const c of mrpChains){
+      const start = mfSlotStart(c.prDate, period);
+      if (start == null){ undated++; continue; }
+      const oc = chainOutcome(c);
+      let e = agg.get(start); if (!e){ e = { complete:0, inflight:0, cancelled:0 }; agg.set(start, e); }
+      e[oc]++;
+      if (oc === 'complete') complete++; else if (oc === 'inflight') inflight++; else cancelled++;
     }
-    const keys = [...map.keys()].sort();
-    const convData = keys.map(k => map.get(k).conv);
-    const cancData = keys.map(k => map.get(k).canc);
-    const openData = keys.map(k => map.get(k).open);
-    const total = conv + canc + opn;
-    const cancRate = total ? (canc / total * 100) : 0;
+    const charted = complete + inflight + cancelled;
+    if (!charted){
+      host.innerHTML = `<div class="view-empty"><h3>No dated MRP requisitions</h3><p>All ${mrpChains.length.toLocaleString()} MRP-created chains for material <b>${escapeHtml(String(mat || ''))}</b> are missing a valid requisition date, so there is nothing to place on the timeline.</p></div>`;
+      return;
+    }
+    // Continuous slots from the first to the last dated slot — empties kept as gaps.
+    const used = [...agg.keys()].sort((a, b) => a - b);
+    const slots = []; let cur = used[0]; const end = used[used.length - 1]; let guard = 0;
+    while (cur <= end && guard++ < 6000){ slots.push(cur); cur = mfNextSlot(cur, period); }
+    const emptySlots = slots.filter(ms => !agg.has(ms)).length;
+    const labels = slots.map((ms, i) => {
+      const dt = new Date(ms), ym = dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1);
+      if (period === 'month') return ym;
+      let prevYm = '';
+      if (i > 0){ const p = new Date(slots[i - 1]); prevYm = p.getUTCFullYear() + '-' + mfPad(p.getUTCMonth() + 1); }
+      return [mfPad(dt.getUTCDate()), ym !== prevYm ? ym : ''];   // [day-number, YYYY-MM at month turn]
+    });
+    const dCom = slots.map(ms => (agg.get(ms) || {}).complete  || 0);
+    const dInf = slots.map(ms => (agg.get(ms) || {}).inflight  || 0);
+    const dCan = slots.map(ms => (agg.get(ms) || {}).cancelled || 0);
 
     const pBtn = (p, lab) => `<button type="button" class="mf-period ${period === p ? 'active' : ''}" data-mf="${p}">${lab}</button>`;
     host.innerHTML = `
@@ -816,34 +835,37 @@
         ${pBtn('day','Day')}${pBtn('week','Week')}${pBtn('month','Month')}
       </div>
       <div class="vol-kpi-strip">
-        <div class="vk-cell"><span class="lab">MRP PRs</span><span class="v">${total.toLocaleString()}</span><span class="sub">creation ind. B</span></div>
-        <div class="vk-cell"><span class="lab">Converted to PO</span><span class="v">${conv.toLocaleString()}</span><span class="sub">has a PO</span></div>
-        <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${canc ? 'warn' : ''}">${canc.toLocaleString()}</span><span class="sub">deletion flag</span></div>
-        <div class="vk-cell"><span class="lab">Open</span><span class="v">${opn.toLocaleString()}</span><span class="sub">no PO yet</span></div>
-        <div class="vk-cell"><span class="lab">Cancellation rate</span><span class="v ${cancRate > 30 ? 'warn' : ''}">${cancRate.toFixed(1)}%</span><span class="sub">cancelled ÷ MRP PRs</span></div>
+        <div class="vk-cell"><span class="lab">MRP PRs</span><span class="v">${charted.toLocaleString()}</span><span class="sub">creation ind. B</span></div>
+        <div class="vk-cell"><span class="lab">Complete</span><span class="v" style="color:#2FBF88">${complete.toLocaleString()}</span><span class="sub">received at site</span></div>
+        <div class="vk-cell"><span class="lab">In-flight</span><span class="v" style="color:#FBBF24">${inflight.toLocaleString()}</span><span class="sub">PO raised / PR pending</span></div>
+        <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${cancelled ? 'warn' : ''}">${cancelled.toLocaleString()}</span><span class="sub">deleted, no PO</span></div>
+        <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no MRP run</span></div>
       </div>
       <div class="vol-chart-host"><canvas id="mfChart"></canvas></div>
-      <div class="chart-caveat">Each bar = MRP-created PRs (EBAN creation indicator <b>B</b>; blank treated as B) whose requisition date falls in that ${period}. Stacked by outcome: <b>Converted</b> (a PO number is present) · <b>Cancelled</b> (deletion indicator set) · <b>Open</b> (no PO, not cancelled). ${undated ? `<b>${undated}</b> PR${undated === 1 ? '' : 's'} had no valid requisition date and are omitted. ` : ''}Reads the PR History for material <b>${escapeHtml(String(mat || ''))}</b> only.</div>
+      <div class="chart-caveat">Each bar = MRP-created requisition chains (EBAN creation indicator <b>B</b>) whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no MRP run). Stacked by outcome: <b style="color:#2FBF88">Complete</b> (received at site) · <b style="color:#FBBF24">In-flight</b> (PO raised or PR pending) · <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO) — the same states as Raw Data. This view <b>never excludes</b> a chain (Trace outlier suppression does not apply). ${undated ? `<b>${undated}</b> MRP chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}${manualCt ? `${manualCt.toLocaleString()} manual PR${manualCt === 1 ? '' : 's'} (creation R) are not MRP-driven and are not charted — Raw Data shows all ${chains.length.toLocaleString()} chains. ` : ''}For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
     `;
     host.querySelectorAll('.mf-period').forEach(b => b.addEventListener('click', () => { state.mrpFreqPeriod = b.dataset.mf; renderActiveView(); }));
 
     state.chart = new Chart($('#mfChart'), {
       type: 'bar',
       data: {
-        labels: keys,
+        labels,
         datasets: [
-          { label: 'Converted to PO', data: convData, backgroundColor: '#1FCED8' },
-          { label: 'Open',            data: openData, backgroundColor: '#FBBF24' },
-          { label: 'Cancelled',       data: cancData, backgroundColor: '#EF4444' }
+          { label: 'Complete',  data: dCom, backgroundColor: '#2FBF88', stack: 's' },
+          { label: 'In-flight', data: dInf, backgroundColor: '#FBBF24', stack: 's' },
+          { label: 'Cancelled', data: dCan, backgroundColor: '#EF4444', stack: 's' }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         scales: {
-          x: { stacked: true, ticks: { color:'#9BABA8', maxTicksLimit: 16, autoSkip: true, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } },
+          x: { stacked: true, grid: { display: false }, ticks: { color:'#9BABA8', maxRotation: 0, autoSkip: true, maxTicksLimit: 26, font:{ family:'JetBrains Mono', size:9 } } },
           y: { stacked: true, beginAtZero: true, ticks: { color:'#9BABA8', precision:0, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
         },
-        plugins: { legend: { labels: { color:'#DBE9F0', font:{ family:'JetBrains Mono', size:11 } } } }
+        plugins: {
+          legend: { labels: { color:'#DBE9F0', font:{ family:'JetBrains Mono', size:11 }, boxWidth:12 } },
+          tooltip: { callbacks: { title: (items) => { const l = items[0].label; return Array.isArray(l) ? l.filter(Boolean).join(' · ') : l; } } }
+        }
       }
     });
   }
