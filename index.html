@@ -116,10 +116,12 @@
 
 .tile-grid{
   display:grid;
-  grid-template-columns:1fr 1fr 1fr;
+  /* #23a — three primary actions + a compact gear Configure */
+  grid-template-columns:1fr 1fr 1fr minmax(150px,0.62fr);
   gap:18px;
   margin-bottom:24px;
 }
+@media (max-width:980px){ .tile-grid{ grid-template-columns:1fr 1fr; } }
 @media (max-width:780px){ .tile-grid{ grid-template-columns:1fr; } }
 
 .tile{
@@ -140,6 +142,7 @@
 .tile:hover{ border-color:var(--accent); transform:translateY(-2px); }
 .tile.tile-2{ border-top-color:var(--accent-green); }
 .tile.tile-3{ border-top-color:var(--status-warn); }
+.tile.tile-json{ border-top-color:#B07CC6; }        /* #23a — Upload JSON (violet) */
 .tile .badge{
   font-family:var(--font-mono);
   font-size:10px;
@@ -149,6 +152,16 @@
 }
 .tile.tile-2 .badge{ color:var(--accent-green); }
 .tile.tile-3 .badge{ color:var(--status-warn); }
+.tile.tile-json .badge{ color:#C79BD6; }
+
+/* #23a — compact gear Configure tile: smaller, centred, no body copy */
+.tile.tile-config{
+  border-top-color:var(--text-muted);
+  padding:18px 20px; gap:8px; justify-content:center;
+}
+.tile.tile-config .badge.gear{ font-size:26px; line-height:1; letter-spacing:0; color:var(--text-sec); }
+.tile.tile-config h3{ font-size:17px; }
+.tile.tile-config .arrow{ margin-top:6px; color:var(--text-sec); }
 .tile h3{
   font-family:var(--font-display);
   font-weight:700;
@@ -354,7 +367,11 @@
     </div>
   </div>
 
-  <!-- ─── ENGINE TILES ─── -->
+  <!-- ─── ENGINE TILES ───
+       #23a/#23b (2026-08-16) — three primary actions (New intake · Open analysis ·
+       Upload JSON) + a compact gear Configure. "Upload JSON" loads a saved canonical
+       .json straight into Trend so the operator no longer has to scroll to the bottom
+       of Intake to resume. The stale "Phase 4 build →" CTA on Open analysis is gone. -->
   <div class="tile-grid">
     <a href="intake/intake.html" class="tile">
       <span class="badge">01 · Intake engine</span>
@@ -366,15 +383,21 @@
       <span class="badge">02 · Trend</span>
       <h3>Open analysis</h3>
       <p>Run period rates, HCE detection, traffic-light recommendations on the saved JSON. LLM review on rendered charts. Excel export.</p>
-      <span class="arrow">Phase 4 build →</span>
+      <span class="arrow">Open →</span>
     </a>
-    <a href="settings/settings.html" class="tile tile-3">
-      <span class="badge">03 · Settings</span>
+    <a href="#" id="tileUploadJson" class="tile tile-json">
+      <span class="badge">03 · Resume</span>
+      <h3>Upload JSON</h3>
+      <p>Load a previously-saved canonical <code>.json</code> straight into Trend — your For-Action flags, analyst recs and notes restore with it. Skips the long Intake scroll.</p>
+      <span class="arrow">Choose file →</span>
+    </a>
+    <a href="settings/settings.html" class="tile tile-config" title="Settings — parameter defaults, LLM keys + model, column-alias overrides, factory reset">
+      <span class="badge gear">⚙</span>
       <h3>Configure</h3>
-      <p>Parameter defaults, LLM provider keys + model selection, persistent column-alias overrides, factory reset.</p>
       <span class="arrow">Open →</span>
     </a>
   </div>
+  <input type="file" id="dashUploadJson" accept=".json" class="hidden" />
 
   <!-- ─── RECENT INTAKES ─── -->
   <div class="recent">
@@ -409,6 +432,7 @@
 <script src="shared/storage.js"></script>
 <script src="shared/locale.js"></script>
 <script src="shared/config.js"></script>
+<script src="shared/analyst-marks.js"></script><!-- #23a — restore co-packaged analyst data on Upload JSON -->
 
 <script>
 (async () => {
@@ -498,6 +522,40 @@
 
   function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
   function escapeAttr(s){ return escapeHtml(s).replace(/'/g, '&#39;'); }
+
+  /* #23a (2026-08-16) — Upload JSON straight from the Dashboard, so resuming a
+     saved assessment no longer means scrolling to the bottom of Intake. Mirrors
+     Intake's "Open in Trend" path: restore any co-packaged analyst data (For-Action
+     flags + Analyst Rec + notes) to the sidecar, strip it so the canonical stays
+     clean, validate the shape, write intake.current, then navigate to Trend. No
+     intakes.index write — that's "Save" on Intake; this is a quick load-and-go. */
+  const upTile  = $('#tileUploadJson');
+  const upInput = $('#dashUploadJson');
+  if (upTile && upInput) {
+    upTile.addEventListener('click', (ev) => { ev.preventDefault(); upInput.click(); });
+    upInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const json = JSON.parse(await file.text());
+        if (json._analystData && typeof json._analystData === 'object') {
+          try {
+            const nm = (json.metadata && json.metadata.assessmentName) || '';
+            if (typeof AnalystMarks !== 'undefined' && AnalystMarks.restore) AnalystMarks.restore(nm, json._analystData);
+          } catch (err) { console.warn('analyst restore:', err); }
+          delete json._analystData;
+        }
+        const v = (typeof CanonicalSchema !== 'undefined' && CanonicalSchema.validateShape)
+          ? CanonicalSchema.validateShape(json) : { ok:true, errors:[] };
+        if (!v.ok) { alert('That file is not a valid canonical assessment JSON:\n\n' + (v.errors || []).join('\n')); upInput.value = ''; return; }
+        await AppStorage.set('intake.current', json);
+        window.location.href = 'analysis/analysis.html';
+      } catch (err) {
+        alert('Could not read that file as JSON:\n\n' + err.message);
+        upInput.value = '';
+      }
+    });
+  }
 
   /* ─── Clear all session data (keeps Settings) ─── */
   const csBtn = $('#btnClearSession');

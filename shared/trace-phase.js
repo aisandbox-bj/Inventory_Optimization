@@ -235,6 +235,27 @@
     return { n, min, max, q1, q2, q3, mean, iqr, upperFence, whiskerUpper, outliers };
   }
 
+  /* APP-FIX-TREND-LT-TIE (2026-08-16) — single source of truth for the "total to
+     site" average (phases A–D), so the Trace phase-decomposition headline and the
+     Trend "Lead time" figure are computed identically and always tie.
+       flowMean = Σ over flow phases (A–D) of the per-phase MEAN across the drawn
+       (active + Site-WH) chains, nulls excluded.
+     This deliberately differs from averaging each chain's `totalToSite`, because
+     totalToSite folds a missing phase in as 0 ((A||0)+(B||0)+…). A chain with an
+     invalid release date (releaseBad → A/B dropped to null) would then understate
+     the per-chain total and drag the simple mean below the phase-decomposition
+     headline. Summing per-phase means (each over only the chains where that phase
+     is dated) is the figure the operator sees on Trace. */
+  function totalToSiteMean(drawn){
+    let sum = 0;
+    for (const ph of PHASE_KEYS){
+      if (ph === 'E') continue;                 // E = time-to-first-use (shelf), not "to site"
+      const s = boxStats((drawn || []).map(c => c[ph]));
+      if (s) sum += s.mean;
+    }
+    return sum;
+  }
+
   // "Nice" axis tick generator — 1/2/5 × 10^n stepping for round numbers
   function niceTicks(min, max, target){
     if (max <= min) return [min];
@@ -375,7 +396,9 @@
     const totalMean  = phaseMeans.reduce((s, v) => s + v, 0);
     const flowPhases = phaseStats.filter(p => p.key !== 'E');
     const ePhase     = phaseStats.find(p => p.key === 'E');
-    const flowMean   = flowPhases.reduce((s, p) => s + (p.stats ? p.stats.mean : 0), 0);
+    // APP-FIX-TREND-LT-TIE — via the shared helper so Trend's "Lead time" matches
+    // this headline exactly (identical to the old inline sum-of-phase-means).
+    const flowMean   = totalToSiteMean(drawn);
     const eMean      = (ePhase && ePhase.stats) ? ePhase.stats.mean : 0;
     const flowPct    = flowPhases.map(p => (flowMean > 0 ? (p.stats ? p.stats.mean : 0) / flowMean : 0));
     // APP-PD-SPREAD (2026-06-27) — spread of the total-to-site (A–D) across chains
@@ -535,6 +558,7 @@
     renderBoxPlotSvg,
     renderPhaseEmpty,
     renderPhaseVisual,
+    totalToSiteMean,
     render
   };
 

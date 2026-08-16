@@ -305,8 +305,11 @@
         const act      = TracePhase.activeChains(chains, traceFiltersFor(m.material));
         const complete = act.filter(c => !!c.siteWH);
         if (complete.length) {
-          const tot = complete.reduce((s, c) => s + (c.A + c.B + c.C + c.D), 0);
-          avgLT = tot / complete.length;                 // mean phase A–D total (days to site)
+          // #22-tie (2026-08-16) — use the shared sum-of-phase-means helper so this
+          // avg lead time matches the corrected Trend figure and the Trace headline.
+          // The old mean of per-chain (A+B+C+D) folded a missing phase in as 0 and
+          // read low on materials with invalid-release (releaseBad) chains.
+          avgLT = TracePhase.totalToSiteMean(complete);  // days to site (post-suppression)
         }
         poOpen = chains.some(c => c.state === 'IN_FLIGHT' && !c.adminCancelled); // PO placed, not yet received at site
         prOpen = chains.some(c => c.state === 'PR_ONLY');                        // PR raised, no PO yet
@@ -848,7 +851,9 @@
       return;
     }
     const chains = TracePhase.computeChains(state.json, m.material);
-    const act = TracePhase.activeChains(chains, {});
+    // #22-tie (2026-08-16) — honour the operator's Trace outlier suppression in the
+    // PDF too (was empty filters → the PDF drew UN-suppressed durations).
+    const act = TracePhase.activeChains(chains, traceFiltersFor(m.material));
     const drawn = act.filter(c => !!c.siteWH);
     if (drawn.length < 2) {
       doc.setTextColor(120,80,0); doc.setFontSize(9);
@@ -857,7 +862,7 @@
     }
     const PK = TracePhase.PHASE_KEYS, PL = TracePhase.PHASE_LABELS;
     const pstats = PK.map(ph => ({ key: ph, label: PL[ph], s: TracePhase.boxStats(drawn.map(c => c[ph])) }));
-    const flowMean = pstats.filter(x => x.key !== 'E').reduce((a, x) => a + (x.s ? x.s.mean : 0), 0);
+    const flowMean = TracePhase.totalToSiteMean(drawn);   // #22-tie — shared corrected calc (= Σ phase means A–D)
     const ePh = pstats.find(x => x.key === 'E');
     const eMean = (ePh && ePh.s) ? ePh.s.mean : 0;
 

@@ -12,7 +12,7 @@
      · the ANALYST recommendation (MRP / Min / Max / SS) from the sidecar
      · WHERE-USED population: the fleet models it was issued to, how many units
        it was OBSERVED on, and an ESTIMATED unit population (see estimate rule).
-     · open RESERVATIONS (from the Inventory Master), for planner context.
+   (Open reservations column removed 2026-08-16 per operator — #16.)
 
    ── Population estimate (borrowed from the dev-handoff spec, Step 4) ─────────
    1. Build a fleet register from Fleet Master: every unit → (Manufacturer,
@@ -120,28 +120,36 @@
   }
 
   /* ─── Excel build + download ─────────────────────────────────────────────── */
+  /* #16 (2026-08-16) — Open reservations column removed (operator). The three MRP
+     parameter sets (Current · Recommended · Analyst) are tagged with a `g` group so
+     each header band gets its own fill colour — makes the "3 different datasets"
+     obvious at a glance. Basis % header carries a cell comment explaining it. */
   const COLS = [
     { h:'SAP material #',     k:'material',        w:16, t:'text' },
     { h:'Description',        k:'description',      w:38, t:'text' },
     { h:'Stock on hand',      k:'stock',            w:13, t:'num'  },
     { h:'Unit cost (CAD)',    k:'unitCost',         w:14, t:'money'},
-    { h:'Open reservations',  k:'reservations',     w:15, t:'num'  },
-    { h:'Current MRP',        k:'curMrp',           w:11, t:'text' },
-    { h:'Current Min',        k:'curMin',           w:11, t:'num'  },
-    { h:'Current Max',        k:'curMax',           w:11, t:'num'  },
-    { h:'Current SS',         k:'curSS',            w:11, t:'num'  },
-    { h:'Recommended MRP',    k:'recMrp',           w:14, t:'text' },
-    { h:'Recommended Min',    k:'recMin',           w:14, t:'num'  },
-    { h:'Recommended Max',    k:'recMax',           w:14, t:'num'  },
-    { h:'Analyst MRP',        k:'anMrp',            w:12, t:'text' },
-    { h:'Analyst Min',        k:'anMin',            w:12, t:'text' },
-    { h:'Analyst Max',        k:'anMax',            w:12, t:'text' },
-    { h:'Analyst SS',         k:'anSS',             w:12, t:'text' },
+    { h:'Current MRP',        k:'curMrp',           w:11, t:'text', g:'cur' },
+    { h:'Current Min',        k:'curMin',           w:11, t:'num',  g:'cur' },
+    { h:'Current Max',        k:'curMax',           w:11, t:'num',  g:'cur' },
+    { h:'Current SS',         k:'curSS',            w:11, t:'num',  g:'cur' },
+    { h:'Recommended MRP',    k:'recMrp',           w:14, t:'text', g:'rec' },
+    { h:'Recommended Min',    k:'recMin',           w:14, t:'num',  g:'rec' },
+    { h:'Recommended Max',    k:'recMax',           w:14, t:'num',  g:'rec' },
+    { h:'Analyst MRP',        k:'anMrp',            w:12, t:'text', g:'an'  },
+    { h:'Analyst Min',        k:'anMin',            w:12, t:'text', g:'an'  },
+    { h:'Analyst Max',        k:'anMax',            w:12, t:'text', g:'an'  },
+    { h:'Analyst SS',         k:'anSS',             w:12, t:'text', g:'an'  },
     { h:'Where used (models)',k:'whereUsedModels',  w:28, t:'text' },
     { h:'Observed units',     k:'observedUnits',    w:13, t:'num'  },
     { h:'Est. unit population',k:'estPopulation',   w:17, t:'num'  },
     { h:'Basis %',            k:'basisPct',         w:9,  t:'pct'  }
   ];
+
+  // #16 — header fill per group so Current / Recommended / Analyst read as three
+  // distinct datasets. Ungrouped identity/where-used columns keep the teal default.
+  const GROUP_FILL = { cur:'FF4A6274', rec:'FF2E7D57', an:'FFB07A16' };
+  const DEFAULT_FILL = 'FF0E8F9B';
 
   function cellVal(row, col){
     const v = row[col.k];
@@ -177,8 +185,20 @@
       const cell = headRow.getCell(i + 1);
       cell.value = c.h;
       cell.font = { bold:true, size:10, color:{ argb:'FFFFFFFF' } };
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF0E8F9B' } };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:(GROUP_FILL[c.g] || DEFAULT_FILL) } };
       cell.alignment = { vertical:'middle', horizontal:(c.t === 'text' ? 'left' : 'center'), wrapText:true };
+      // #16 — explain Basis % right on the header, as an Excel cell comment.
+      if (c.k === 'basisPct'){
+        cell.note = {
+          texts: [{ text:
+            'Basis % = observed units ÷ estimated unit population.\n\n' +
+            'Observed units = fleet units this part was actually issued to (MB51 → work order → fleet unit). ' +
+            'Estimated population = every fleet unit whose (Manufacturer, base-model) matches one it was observed on.\n\n' +
+            'A high % means most of the matching fleet was seen consuming the part (strong evidence); a low % means the ' +
+            'estimate leans on the model match more than observed usage. It is an ESTIMATE — verify against SAP.' }],
+          margins: { insetmode: 'auto' }
+        };
+      }
       ws.getColumn(i + 1).width = c.w;
     });
     headRow.height = 30;

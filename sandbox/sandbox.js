@@ -88,6 +88,12 @@
     if (!json) { renderEmpty(); return; }
     state.json  = json;
     state.hasPr = !!(json.data && json.data.prHistory && json.data.prHistory.length);
+    // #24 (2026-08-16) — bind the analyst sidecar (For-Action flags + Analyst Rec)
+    // so the Sandbox list, detail and PDF export can show the analyst's work. Read
+    // only here — the Sandbox is a what-if surface; editing stays on Trend.
+    state.analyst = (typeof AnalystMarks !== 'undefined')
+      ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
+      : null;
 
     try {
       state.result = AppPipeline.runPipeline(json, { runDate: AppLocale.localDateISO() });
@@ -312,8 +318,10 @@
         const act      = TracePhase.activeChains(chains, traceFiltersFor(m.material));
         const complete = act.filter(c => !!c.siteWH);
         if (complete.length) {
-          const tot = complete.reduce((s, c) => s + (c.A + c.B + c.C + c.D), 0);
-          avgLT = tot / complete.length;                 // mean phase A–D total (days to site)
+          // #22-tie (2026-08-16) — shared sum-of-phase-means helper so this avg lead
+          // time matches the corrected Trend figure + the Trace headline (was mean of
+          // per-chain A+B+C+D, which folds a missing phase in as 0).
+          avgLT = TracePhase.totalToSiteMean(complete);  // days to site (post-suppression)
         }
         poOpen = chains.some(c => c.state === 'IN_FLIGHT' && !c.adminCancelled); // PO placed, not yet received at site
         prOpen = chains.some(c => c.state === 'PR_ONLY');                        // PR raised, no PO yet
@@ -388,12 +396,15 @@
       const p2  = m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : '—';
       const rw  = m.runway != null ? m.runway + 'mo' : '—';
       const reclass = m.mrpRecFlag ? `<span class="scr-row-reclass" title="${escapeAttr(m.mrpReclassNote || 'Reclass recommended')}">${escapeHtml(m.mrpRecFlag)}</span>` : '';
+      // #24 — For-Action ★ (analyst flag from Trend), read-only indicator here.
+      const isAction = !!(state.analyst && state.analyst.isAction(m.material));
+      const actionBadge = isAction ? `<span class="scr-row-action" title="Flagged For Action">★</span>` : '';
       return `
         <div class="scr-row ${sel} ${flg}" data-mat="${escapeAttr(m.material)}">
           <input type="checkbox" class="scr-row-flag" data-flag="${escapeAttr(m.material)}" ${flg ? 'checked' : ''} title="Flag this material for PDF export" aria-label="Flag ${escapeAttr(m.material)} for export">
           <span class="tl-dot ${m.trafficLight}"></span>
           <div class="scr-row-main">
-            <div class="scr-row-id">${escapeHtml(m.material)}${reclass}</div>
+            <div class="scr-row-id">${escapeHtml(m.material)}${actionBadge}${reclass}</div>
             <div class="scr-row-desc" title="${escapeAttr(m.description)}">${escapeHtml(m.description || '')}</div>
           </div>
           <div class="scr-row-stats">
@@ -435,10 +446,13 @@
       host.innerHTML = `<div class="scr-empty"><div class="scr-empty-big">Pick a material</div>Select a material on the left to load its combined detail.</div>`;
       return;
     }
+    // #24 — For-Action ★ on the graph (detail cell): read-only badge from the sidecar.
+    const detIsAction = !!(state.analyst && state.analyst.isAction(entry.m.material));
+    const detActionBadge = detIsAction ? ` <span class="sbx-action-badge" title="Flagged For Action on Trend">★ For Action</span>` : '';
     host.innerHTML = `
       <div class="scr-detail-grid">
         <div class="scr-detail-cell">
-          <div class="scr-cell-lab">Consumption detail</div>
+          <div class="scr-cell-lab">Consumption detail${detActionBadge}</div>
           <div id="scrCellDetail"></div>
         </div>
         <div class="scr-detail-cell">
@@ -909,9 +923,17 @@
 
     // ── Consumption detail ───────────────────────────────────────────────
     sectionLabel('Consumption detail');
-    // Algorithmic recommendation
+    // #24 — top comment: show the ANALYST recommendation when the analyst has
+    // entered one (replacing the algorithmic line); flag For Action if flagged.
+    const anRec = state.analyst ? state.analyst.getRec(m.material) : {};
+    const anHas = !!(anRec && (anRec.mrpType || anRec.min || anRec.max || anRec.safety));
+    const anFlagged = !!(state.analyst && state.analyst.isAction(m.material));
+    const topComment = anHas
+      ? `Analyst recommendation: MRP ${anRec.mrpType || '—'} · Min ${anRec.min || '—'} · Max ${anRec.max || '—'} · SS ${anRec.safety || '—'}`
+      : ('Recommendation: ' + (m.action || '—'));
+    const topLine = (anFlagged ? '★ For Action  —  ' : '') + topComment;
     doc.setTextColor(60, 60, 70); doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5);
-    doc.splitTextToSize(pdfSafe('Recommendation: ' + (m.action || '—')), CW).slice(0, 2).forEach(line => { doc.text(line, M, y); y += 4; });
+    doc.splitTextToSize(pdfSafe(topLine), CW).slice(0, 2).forEach(line => { doc.text(line, M, y); y += 4; });
     doc.setFont('helvetica', 'normal'); y += 1;
 
     // Chart (AppChart → PNG)
@@ -948,19 +970,19 @@
     });
     y = doc.lastAutoTable.finalY + 4;
 
-    // MRP compare
+    // MRP compare — #24: + Analyst column (from the sidecar rec; '—' when blank).
     const mrpBody = [
-      ['MRP type', m.mrpType || '—', m.recMrpType || '—'],
-      ['Min', m.cmin != null ? String(m.cmin) : '—', m.recMin != null ? String(m.recMin) : '—'],
-      ['Max', m.cmax != null ? String(m.cmax) : '—', m.recMax != null ? String(m.recMax) : '—'],
-      ['Safety stock', m.safetyStock != null ? String(m.safetyStock) : '—', '—']
+      ['MRP type', m.mrpType || '—', m.recMrpType || '—', anRec.mrpType || '—'],
+      ['Min', m.cmin != null ? String(m.cmin) : '—', m.recMin != null ? String(m.recMin) : '—', anRec.min || '—'],
+      ['Max', m.cmax != null ? String(m.cmax) : '—', m.recMax != null ? String(m.recMax) : '—', anRec.max || '—'],
+      ['Safety stock', m.safetyStock != null ? String(m.safetyStock) : '—', '—', anRec.safety || '—']
     ];
     ensure(26);
     doc.autoTable({
-      startY: y, head: [['MRP setting', 'Current', 'Recommended']], body: mrpBody, theme: 'grid',
+      startY: y, head: [['MRP setting', 'Current', 'Recommended', 'Analyst']], body: mrpBody, theme: 'grid',
       styles: { fontSize: 8, cellPadding: 1.4, lineColor: [210,214,220], lineWidth: 0.1 },
       headStyles: { fillColor: [48,84,150], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      columnStyles: { 0:{fontStyle:'bold',fillColor:[241,243,246]}, 1:{halign:'center'}, 2:{halign:'center',textColor:[22,138,145]} },
+      columnStyles: { 0:{fontStyle:'bold',fillColor:[241,243,246]}, 1:{halign:'center'}, 2:{halign:'center',textColor:[22,138,145]}, 3:{halign:'center',textColor:[176,122,22],fontStyle:'bold'} },
       tableWidth: CW,
       didParseCell: (d) => {
         if (d.row.section === 'head' && (d.column.index === 1 || d.column.index === 2)) d.cell.styles.halign = 'center';
@@ -985,7 +1007,9 @@
       return;
     }
     const chains = TracePhase.computeChains(state.json, m.material);
-    const act = TracePhase.activeChains(chains, {});
+    // #22-tie (2026-08-16) — honour the operator's Trace outlier suppression in the
+    // PDF too (was empty filters → the PDF drew UN-suppressed durations).
+    const act = TracePhase.activeChains(chains, traceFiltersFor(m.material));
     const drawn = act.filter(c => !!c.siteWH);
     if (drawn.length < 2) {
       doc.setTextColor(120,80,0); doc.setFontSize(9);
@@ -994,7 +1018,7 @@
     }
     const PK = TracePhase.PHASE_KEYS, PL = TracePhase.PHASE_LABELS;
     const pstats = PK.map(ph => ({ key: ph, label: PL[ph], s: TracePhase.boxStats(drawn.map(c => c[ph])) }));
-    const flowMean = pstats.filter(x => x.key !== 'E').reduce((a, x) => a + (x.s ? x.s.mean : 0), 0);
+    const flowMean = TracePhase.totalToSiteMean(drawn);   // #22-tie — shared corrected calc (= Σ phase means A–D)
     const ePh = pstats.find(x => x.key === 'E');
     const eMean = (ePh && ePh.s) ? ePh.s.mean : 0;
 

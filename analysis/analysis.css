@@ -215,6 +215,9 @@
   padding:8px 12px;border-bottom:1px solid rgba(155,171,168,.05);
   color:var(--text-sec);vertical-align:middle;
 }
+/* #1 (2026-08-16) — current SAP Min/Max shown beside the Rec value in small
+   italic grey brackets, so the recommendation reads against what's set today. */
+.list-table td .cur-brk{ font-size:10px; font-style:italic; color:var(--text-muted); }
 /* Allow long description to wrap rather than overflow */
 .list-table td.desc{
   color:var(--text-sec);
@@ -1214,12 +1217,16 @@
   font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
   color:var(--text-muted); text-align:center;
 }
-/* APP-ACT-02b — the "Selected fleets ▾" scope header is a clickable toggle. */
+/* APP-ACT-02b — the "Selected fleets ▾" scope header is a clickable toggle.
+   APP-FIX-FLEETPICK-CTA (2026-08-16) — it's a function button, not a header, so
+   give it the accent look by default (was transparent → only lit on hover, which
+   read as inert text). Draws attention that there's something to open here. */
 .export-grid-head .export-scope-head.scope-fleets-head{
-  font-family:inherit; cursor:pointer; background:transparent;
-  border:1px solid var(--border-soft); border-radius:6px; padding:3px 6px;
+  font-family:inherit; cursor:pointer; font-weight:600; letter-spacing:.2px;
+  background:rgba(31,206,216,.10); color:var(--accent);
+  border:1px solid var(--accent); border-radius:6px; padding:3px 8px;
 }
-.export-grid-head .export-scope-head.scope-fleets-head:hover{ border-color:var(--accent); color:var(--accent); }
+.export-grid-head .export-scope-head.scope-fleets-head:hover{ background:rgba(31,206,216,.20); }
 .exp-btn.exp-fleets{ border-color:rgba(155,124,198,0.6); }
 .exp-btn.exp-fleets:hover:not(:disabled){ border-color:#B07CC6; background:rgba(155,89,182,.10); }
 
@@ -1303,7 +1310,7 @@ main.shell{ position:relative; }
   box-shadow:0 14px 44px rgba(0,0,0,.45);
 }
 .notes-drawer.hidden{ display:none; }
-.notes-head{ display:flex; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--border); }
+.notes-head{ display:flex; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--border); cursor:move; user-select:none; }
 .notes-head .notes-lab{ font-family:var(--font-mono); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--accent); }
 .notes-head .notes-mat{ font-family:var(--font-mono); font-size:12px; color:var(--text-pri); }
 .notes-head .notes-close{ margin-left:auto; background:transparent; border:none; color:var(--text-muted); font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:5px; }

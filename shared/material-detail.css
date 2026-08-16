@@ -334,8 +334,13 @@
 /* APP-TREND-STATX (2026-08-15) — the secondary 2×4 stat block collapses behind a
    blue-triangle toggle so the detail defaults to a compact 2×4. Shown on Trend and
    Screener (shared render), so both stay in sync. */
-.stat-grid-extra{ display:none; margin-top:4px; }
-.stat-grid-extra.open{ display:grid; }
+/* APP-FIX-STATX-TOGGLE (2026-08-16) — the extra grid carries BOTH .stat-grid and
+   .stat-grid-extra. A bare `.stat-grid{display:grid}` in analysis.css loads after
+   this file, so at equal specificity it won the cascade and the block never hid.
+   Qualify the hide/show rules with both classes (0,2,0 / 0,3,0) so they beat any
+   single-class .stat-grid regardless of stylesheet load order. */
+.stat-grid.stat-grid-extra{ display:none; margin-top:4px; }
+.stat-grid.stat-grid-extra.open{ display:grid; }
 .stat-expand{
   display:inline-flex; align-items:center; gap:7px;
   margin:0 0 9px; padding:3px 9px;
@@ -345,6 +350,18 @@
 }
 .stat-expand:hover{ border-color:var(--accent); color:var(--accent); }
 .stat-expand .tri{ color:var(--accent); font-size:11px; line-height:1; }
+
+/* APP-TREND-LT-COLOUR (2026-08-16) — day-band conditional colour for the lead-time
+   figure, shared by the Trend stat cell (.stat-cell .v.*) and the list column
+   (.lead-fig.*). Bands (calendar days): ≤21 default · ≤35 yellow · ≤45 orange ·
+   ≤60 red · >60 bold red. Specificity on the stat variant beats the base .v colour. */
+.stat-cell .v.lead-warn,  .lead-fig.lead-warn { color:#FBBF24; }
+.stat-cell .v.lead-hi,    .lead-fig.lead-hi   { color:#FB923C; }
+.stat-cell .v.lead-crit,  .lead-fig.lead-crit { color:#EF4444; }
+.stat-cell .v.lead-xcrit, .lead-fig.lead-xcrit{ color:#EF4444; font-weight:800; }
+
+/* G1 (2026-08-16) — analyst Min/Max disabled under PD (planned/deterministic). */
+.an-input.pd-locked{ opacity:.42; cursor:not-allowed; }
 
 /* HCE table */
 .hce-table{

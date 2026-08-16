@@ -373,9 +373,11 @@
   display:flex; flex-wrap:wrap; gap:4px 22px; align-items:center;
 }
 .content-banner .banner-details .bd-cell{ min-width:0; }
-/* APP-FIX-TRACE-BANNER — numeric cells centre their value (labels/text stay left). */
+/* APP-FIX-TRACE-BANNER-ALIGN (2026-08-16) — numeric cells centre the WHOLE column:
+   header centred over value, so MRP | Min/Max | SS | SoH | … line up as tidy
+   centred columns (was: value centred but label pinned left → looked misaligned). */
 .content-banner .banner-details .bd-cell.num{ min-width:74px; text-align:center; }
-.content-banner .banner-details .bd-cell.num .banner-lab{ text-align:left; }
+.content-banner .banner-details .bd-cell.num .banner-lab{ text-align:center; }
 .content-banner .banner-details .bd-v{
   font-family:var(--font-mono); font-size:12px; color:var(--text-sec);
   letter-spacing:.3px; white-space:nowrap;

@@ -65,6 +65,8 @@
         state.traceExcl.sigmaLimit  = (typeof tvs.sigmaLimit === 'number') ? tvs.sigmaLimit : null;
       }
     } catch (e) { /* no Trace state yet → un-suppressed */ }
+    // #6 — restore the last dragged notes-drawer position (shell-relative).
+    try { const np = JSON.parse(localStorage.getItem('tune.notesDrawerPos') || 'null'); if (np && typeof np.left === 'number') state.notesPos = np; } catch (e) {}
     await runPipelineNow();
     bindGlobalKeys();
     wireNotes();   // APP-TREND-NOTES — bind the docked notes drawer once
@@ -240,14 +242,13 @@
       if (typeof TracePhase === 'undefined' || !TracePhase.computeChains) return;
       const pr = (state.json.data && state.json.data.prHistory) || [];
       const allMats = [].concat(...state.result.buckets.map(b => b.materials));
-      if (!pr.length) { allMats.forEach(m => { m.leadMonths = null; }); return; }
+      if (!pr.length) { allMats.forEach(m => { m.leadDays = null; }); return; }
       const prMats = new Set();
       for (const r of pr){ const k = String(r.material == null ? '' : r.material).trim(); if (k) prMats.add(k); }
-      const DAYS_PER_MO = 30.44;
       const tx = state.traceExcl || { manualByMat:{}, sigmaLimit:null };
       const cache = new Map();
       for (const m of allMats){
-        if (cache.has(m.material)) { m.leadMonths = cache.get(m.material); continue; }
+        if (cache.has(m.material)) { m.leadDays = cache.get(m.material); continue; }
         let lm = null;
         if (prMats.has(m.material)){
           const chains = TracePhase.computeChains(state.json, m.material);
@@ -261,13 +262,19 @@
                 manualExcl: new Set((tx.manualByMat && tx.manualByMat[m.material]) || [])
               })
             : chains;
-          const complete = active.filter(c => !!c.siteWH);
-          if (complete.length){
-            const meanDays = complete.reduce((s,c)=> s + (c.totalToSite||0), 0) / complete.length;
-            lm = Math.round((meanDays / DAYS_PER_MO) * 10) / 10;
+          // APP-FIX-TREND-LT-TIE (2026-08-16) — use the SAME drawn set (active +
+          // Site-WH) and the SAME sum-of-phase-means helper as Trace's phase-
+          // decomposition headline, so the Trend "Lead time" figure ties exactly
+          // with the "Total to site" number on Trace. Previously we averaged each
+          // chain's totalToSite, which folds a missing phase in as 0 and read low
+          // (e.g. 36.5d here vs Trace's 44.6d). Now in calendar DAYS per the 16-Aug
+          // feedback (was months).
+          const drawn = active.filter(c => !!c.siteWH);
+          if (drawn.length && typeof TracePhase.totalToSiteMean === 'function'){
+            lm = Math.round(TracePhase.totalToSiteMean(drawn) * 10) / 10;
           }
         }
-        m.leadMonths = lm;
+        m.leadDays = lm;
         cache.set(m.material, lm);
       }
     } catch(e){ console.warn('enrichLeadTimes:', e); }
@@ -355,13 +362,13 @@
     { k:'trafficLight', l:'TL',          type:'set',  picker:'set'   },
     { k:'material',     l:'Material',    type:'text', picker:'set'   },
     { k:'description',  l:'Description', type:'text', picker:'text'  },
-    { k:'totalNet',     l:'Total',       type:'num',  picker:'range', center:true },
+    { k:'totalNet',     l:'Qty Iss.',    type:'num',  picker:'range', center:true },
     { k:'p1Rate',       l:'P1/mo',       type:'num',  picker:'range', center:true },
     { k:'p2Rate',       l:'P2/mo',       type:'num',  picker:'range', center:true },
     { k:'mrpType',      l:'MRP',         type:'text', picker:'set',   center:true },
     { k:'recMin',       l:'Rec Min',     type:'num',  picker:'range', center:true },
     { k:'recMax',       l:'Rec Max',     type:'num',  picker:'range', center:true },
-    { k:'leadMonths',   l:'Lead (mo)',   type:'num',  picker:'range', center:true },
+    { k:'leadDays',     l:'Lead (d)',    type:'num',  picker:'range', center:true },
     { k:'mrpRecFlag',   l:'Reclass',     type:'text', picker:'set',   center:true },
     { k:'pattern',      l:'Pattern',     type:'text', picker:'set',   center:true }
   ];
@@ -492,9 +499,9 @@
         <td class="num">${m.p1Flag === 'OK' ? m.p1Rate.toFixed(1) : `<span class="amber">${escapeHtml(m.p1Flag || '—')}</span>`}</td>
         <td class="num">${m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : `<span class="amber">${escapeHtml(m.p2Flag || '—')}</span>`}</td>
         <td class="num" style="color:var(--text-muted)">${escapeHtml(m.mrpType || '—')}</td>
-        <td class="num">${m.recMin ?? '—'}</td>
-        <td class="num">${m.recMax ?? '—'}</td>
-        <td class="num" title="Avg total-to-site procurement lead time (completed chains, phases A–D). Honours your Trace outlier suppression — trim POs in Trace, return here, and this updates.">${m.leadMonths != null ? m.leadMonths.toFixed(1) : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td class="num">${m.recMin ?? '—'}${m.cmin != null ? ` <span class="cur-brk" title="Current SAP Min">(${escapeHtml(String(m.cmin))})</span>` : ''}</td>
+        <td class="num">${m.recMax ?? '—'}${m.cmax != null ? ` <span class="cur-brk" title="Current SAP Max">(${escapeHtml(String(m.cmax))})</span>` : ''}</td>
+        <td class="num" title="Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Honours your Trace outlier suppression — trim POs in Trace, return here, and this updates. Colour: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.">${m.leadDays != null ? `<span class="lead-fig ${MaterialDetail.leadBandClass(m.leadDays)}">${m.leadDays.toFixed(1)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="num">${m.mrpRecFlag ? `<span class="mrp-reclass" title="${escapeAttr(m.mrpReclassNote || '')}">${escapeHtml(m.mrpRecFlag)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${escapeHtml(m.pattern || '—')}</td>
       </tr>`;
@@ -845,9 +852,53 @@
     const detail = $('#materialDetail');
     const shell  = document.querySelector('main.shell');
     if (!drawer || !detail || !shell) return;
+    // #6 (2026-08-16) — if the operator has dragged the drawer, reuse that stored
+    // position (shell-relative) so it reopens where they left it, even on a new
+    // material. Otherwise fall back to docking beside the top of the detail panel.
+    if (state.notesPos && typeof state.notesPos.left === 'number') {
+      drawer.style.right = 'auto';
+      const maxLeft = Math.max(0, shell.clientWidth - drawer.offsetWidth);
+      drawer.style.left = Math.max(0, Math.min(state.notesPos.left, maxLeft)) + 'px';
+      drawer.style.top  = Math.max(0, state.notesPos.top) + 'px';
+      return;
+    }
     const dRect = detail.getBoundingClientRect();
     const sRect = shell.getBoundingClientRect();
     drawer.style.top = Math.max(8, (dRect.top - sRect.top) + 8) + 'px';
+  }
+  // #6 — drag the notes drawer by its header; persists the last position (session +
+  // localStorage) so it reopens there on the next material.
+  function wireNotesDrag(){
+    const drawer = $('#notesDrawer');
+    const head   = drawer && drawer.querySelector('.notes-head');
+    if (!head || head._dragWired) return;
+    head._dragWired = true;
+    head.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.notes-close')) return;
+      e.preventDefault();
+      const shell = document.querySelector('main.shell');
+      if (!shell) return;
+      const sRect = shell.getBoundingClientRect();
+      const dRect = drawer.getBoundingClientRect();
+      const offX = e.clientX - dRect.left, offY = e.clientY - dRect.top;
+      drawer.style.right = 'auto';
+      const move = (ev) => {
+        let left = ev.clientX - offX - sRect.left;
+        let top  = ev.clientY - offY - sRect.top;
+        left = Math.max(0, Math.min(left, shell.clientWidth - drawer.offsetWidth));
+        top  = Math.max(0, top);
+        drawer.style.left = left + 'px';
+        drawer.style.top  = top + 'px';
+        state.notesPos = { left, top };
+      };
+      const up = () => {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        try { if (state.notesPos) localStorage.setItem('tune.notesDrawerPos', JSON.stringify(state.notesPos)); } catch (err) {}
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
   }
   function toggleNotes(){
     const { drawer, area } = notesEls();
@@ -873,6 +924,7 @@
     btn.classList.toggle('open', !!(d && !d.classList.contains('hidden')));
   }
   function wireNotes(){
+    wireNotesDrag();   // #6 — header drag + position persistence
     const { area } = notesEls();
     if (area && !area._wired) {
       area._wired = true;
@@ -935,10 +987,21 @@
   }
 
   function toggleGpNotes(){
-    const { notes, notesToggle } = gpEls();
-    if (!notes) return;
+    const { pop, notes, notesToggle } = gpEls();
+    if (!notes || !pop) return;
     const showing = notes.classList.toggle('hidden') === false;
     if (notesToggle) notesToggle.classList.toggle('on', showing);
+    // #9 (2026-08-16) — grow the card to the RIGHT by the notes-panel width when
+    // opening (shrink back on close) so the graph keeps its size + screen position
+    // instead of being squeezed. gp-notes is flex:0 0 300px → match that width.
+    const NOTES_W = 300;
+    const r = pop.getBoundingClientRect();
+    if (showing) {
+      const maxW = window.innerWidth - r.left - 10;
+      pop.style.width = Math.min(maxW, r.width + NOTES_W) + 'px';
+    } else {
+      pop.style.width = Math.max(440, r.width - NOTES_W) + 'px';
+    }
     gpSyncNotes();
   }
   function gpSyncNotes(){
@@ -995,14 +1058,24 @@
       const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
       document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
     });
-    // Resize by the bottom-right handle
+    // Resize by the bottom-right handle — #8 (2026-08-16): PROPORTIONAL. Keep the
+    // card's aspect ratio locked to what it is when the drag starts, so the content
+    // never distorts into a tall-narrow box that squeezed the detail to one word per
+    // line. Width drives; height follows the ratio; both clamp to the viewport.
     if (els.resize) els.resize.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
       const r = els.pop.getBoundingClientRect();
-      const sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height;
+      const sx = e.clientX, sw = r.width, sh = r.height;
+      const ratio = sw / sh;
       const move = (ev) => {
-        els.pop.style.width  = Math.max(440, sw + (ev.clientX - sx)) + 'px';
-        els.pop.style.height = Math.max(320, sh + (ev.clientY - sy)) + 'px';
+        let w = Math.max(440, sw + (ev.clientX - sx));
+        let h = w / ratio;
+        const maxW = window.innerWidth  - r.left - 10;
+        const maxH = window.innerHeight - r.top  - 10;
+        if (w > maxW) { w = maxW; h = w / ratio; }
+        if (h > maxH) { h = maxH; w = h * ratio; }
+        els.pop.style.width  = w + 'px';
+        els.pop.style.height = h + 'px';
       };
       const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
       document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
@@ -1136,12 +1209,17 @@
   }
 
   /* APP-ACT-02b — the fleet checkbox picker (per bucket: material count + unit
-     count). Selections drive the "Fleets" export buttons. The MULTI aggregate
-     bucket is excluded — it's a combined view, not a fleet. */
+     count). Selections drive the "Fleets" export buttons.
+     APP-FIX-FLEETPICK-CROSS (2026-08-16) — INCLUDE the MULTI · cross-fleet bucket.
+     Per-model fleet buckets deliberately exclude materials used by 2+ fleets
+     (pipeline.js buckets those into MULTI), so without this the cross-fleet
+     materials couldn't be selected for a Fleets export at all — ticking every
+     fleet still missed them. It has no single unit count (spans fleets) → the
+     unit tally is simply omitted for it. */
   function renderFleetPicker(){
     const host = $('#fleetPicker');
     if (!host || !state.result) return;
-    const buckets = state.result.buckets.filter(b => b.kind !== 'multi');
+    const buckets = state.result.buckets;
     const units = fleetUnitCounts();
     const rows = buckets.map(b => {
       const checked = state.selectedFleets.has(b.key);
@@ -1448,7 +1526,7 @@
 
     const cols = [
       { l:'' }, { l:'TL' }, { l:'Material' }, { l:'Description' },
-      { l:'Total' }, { l:'P2/mo' }, { l:'Pattern' }
+      { l:'Qty Iss.' }, { l:'P2/mo' }, { l:'Pattern' }
     ];
     const thead = cols.map(c => `<th>${c.l}</th>`).join('');
     const tbody = bucket.materials.map(m => {

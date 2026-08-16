@@ -64,6 +64,21 @@
     return ({ GREEN:'ok', BLUE:'cyan', ORANGE:'warn', RED:'crit', PURPLE:'wr', GREY:'' })[tl] || '';
   }
 
+  /* APP-TREND-LT-COLOUR (2026-08-16) — day-band conditional colour for the
+     procurement lead-time figure (operator spec): ≤21 default · ≤35 yellow ·
+     ≤45 orange · ≤60 red · >60 bold red. Returns a CSS class (defined in
+     material-detail.css) shared by the Trend stat cell AND the list column so
+     both read consistently. '' → default figure colour (fast lead time). */
+  function leadBandClass(days){
+    const n = (typeof days === 'number') ? days : parseFloat(days);
+    if (!isFinite(n)) return '';
+    if (n <= 21) return '';
+    if (n <= 35) return 'lead-warn';
+    if (n <= 45) return 'lead-hi';
+    if (n <= 60) return 'lead-crit';
+    return 'lead-xcrit';
+  }
+
   /* ─── APP-OPI-01 (2026-06-27) · open-procurement 3-lamp indicator ──────────
      opts.openProc comes from TracePhase.openProcurement(json, material):
        { hasPr, openPR[], onOrder[], inTransit[], imOpenPO, imInTransit }
@@ -187,7 +202,12 @@
         return `<td class="analyst"><select class="an-input an-select" id="anMrpType" data-an="mrpType">${opt('', '—')}${opt('V1', 'V1')}${opt('PD', 'PD')}</select></td>`;
       }
       const ids = { min:'anMin', max:'anMax', safety:'anSafety' };
-      return `<td class="analyst"><input type="text" inputmode="numeric" class="an-input" id="${ids[field]}" data-an="${field}" value="${escapeAttr(String(v))}" placeholder="—" /></td>`;
+      // G1 (2026-08-16) — Min/Max don't apply under PD (planned/deterministic).
+      // When the analyst MRP type is PD, render Min & Max blanked + disabled; all
+      // three stay open for V1. The live lock (wireDetail) mirrors this on change.
+      const anMrpVal = (analyst.values && analyst.values.mrpType) || '';
+      const pdLock = (field === 'min' || field === 'max') && anMrpVal === 'PD';
+      return `<td class="analyst"><input type="text" inputmode="numeric" class="an-input${pdLock ? ' pd-locked' : ''}" id="${ids[field]}" data-an="${field}" value="${pdLock ? '' : escapeAttr(String(v))}" placeholder="${pdLock ? 'n/a · PD' : '—'}"${pdLock ? ' disabled title="Min/Max do not apply under PD (planned/deterministic) — switch the analyst MRP type to V1 to enter them"' : ''} /></td>`;
     };
 
     const trs = rows.map(r => {
@@ -441,10 +461,10 @@
         <div class="stat-cell"><span class="lab">Unit cost (CAD)</span><div class="v">${mat.movingAvgPrice != null ? AppLocale.fmtCAD(mat.movingAvgPrice) : '—'}</div></div>
         <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
         <div class="stat-cell"><span class="lab">P2 rate</span><div class="v ${mat.p2Flag !== 'OK' ? 'warn' : ''}">${mat.p2Flag === 'OK' ? mat.p2Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
-        <div class="stat-cell"><span class="lab">Total (window)</span><div class="v">${mat.totalNet}</div></div>
+        <div class="stat-cell"><span class="lab">Qty Iss. (window)</span><div class="v">${mat.totalNet}</div></div>
         ${perEventCell}
         ${lastConsCell}
-        <div class="stat-cell" title="Avg total-to-site procurement lead time (completed chains, phases A–D). Needs PR History; Trend only."><span class="lab">Lead time</span><div class="v">${mat.leadMonths != null ? mat.leadMonths.toFixed(1) + ' mo' : '—'}</div></div>
+        <div class="stat-cell" title="Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History; Trend only. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red."><span class="lab">Lead time</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div></div>
       </div>
       <button type="button" class="stat-expand" id="statExpandBtn" aria-expanded="${_statsExpanded ? 'true' : 'false'}" title="Show / hide the adjusted-rate &amp; stockout diagnostics">
         <span class="tri">${_statsExpanded ? '▾' : '▸'}</span><span class="lbl">${_statsExpanded ? 'Fewer stats' : 'More stats'}</span>
@@ -591,7 +611,22 @@
           safety:  (hostEl.querySelector('#anSafety')  || {}).value || ''
         });
         const sel = hostEl.querySelector('#anMrpType');
-        if (sel) sel.addEventListener('change', () => opts.analyst.onChange(collect()));
+        // G1 (2026-08-16) — Min/Max blank + disable when the analyst MRP type is PD
+        // (planned/deterministic); re-enable for V1 / —. Applied on every change and
+        // once on wire so a PD value restored from the sidecar starts locked.
+        const applyPdLock = () => {
+          const isPd = !!sel && sel.value === 'PD';
+          ['#anMin', '#anMax'].forEach(id => {
+            const el = hostEl.querySelector(id);
+            if (!el) return;
+            el.disabled = isPd;
+            el.classList.toggle('pd-locked', isPd);
+            if (isPd) { el.value = ''; el.placeholder = 'n/a · PD'; }
+            else if (el.placeholder === 'n/a · PD') { el.placeholder = '—'; }
+          });
+        };
+        if (sel) sel.addEventListener('change', () => { applyPdLock(); opts.analyst.onChange(collect()); });
+        applyPdLock();
         // 'input' persists every keystroke — safe because onChange only writes to
         // the sidecar store (no re-render), so the field keeps focus.
         ['#anMin', '#anMax', '#anSafety'].forEach(id => {
@@ -717,6 +752,6 @@
     showTable();
   }
 
-  window.MaterialDetail = { render, pillCls };
+  window.MaterialDetail = { render, pillCls, leadBandClass };
 
 })();
