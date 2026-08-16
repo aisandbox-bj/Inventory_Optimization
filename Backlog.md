@@ -1,6 +1,6 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-16 (the "16-Aug feedback pass" — see the SHIPPED section directly below; built + browser-verified clean, NOT yet pushed, awaiting operator push approval). Prior: 2026-08-15 "no-test sprint" + Phase 3 + Phase 1, all pushed through `1d83614`.
+**Updated:** 2026-08-16 (the "16-Aug feedback pass" — see the SHIPPED section directly below; pushed `76b521f`, pending operator off-repo validation). Prior: 2026-08-15 "no-test sprint" + Phase 3 + Phase 1, all pushed through `1d83614`.
 **Status:** origin/main tip = the newest entry in `record-of-change.html` (don't hard-pin a SHA here — it goes stale). Everything from `966e045` onward is **pending operator validation** except the Screener trio (`966e045`), which was operator-validated 2026-06-26 ("working pretty well"). The 16-Aug feedback pass is **pushed `76b521f` (2026-08-16), pending operator off-repo validation.** The canonical, blow-by-blow log is `record-of-change.html`; this file is the forward-looking tracker only. **This file, `record-of-change.html`, and `2 - Reference Docs/Roadmap.html` must stay aligned.**
 
 ## ✅ SHIPPED — 16-Aug feedback pass (2026-08-16, pushed `76b521f`) — pending operator off-repo validation
