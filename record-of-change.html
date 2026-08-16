@@ -380,14 +380,14 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
-    <!-- v2.1.5-dev - "No-test sprint": MRP Request Template + LLM-split/Selected-fleets + pop-out + See-jump + Trace tidy/demand/cadence + Lead-time suppression - BUILT, NOT PUSHED -->
+    <!-- v2.1.5-dev - "No-test sprint": MRP Request Template + LLM-split/Selected-fleets + pop-out + See-jump + Trace tidy/demand/cadence + Lead-time suppression - PUSHED 74baea5 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
         <span class="date">2026-08-15</span>
         <span class="tag dev">dev</span>
       </div>
-      <h4>"No-test sprint" — MRP Request Template export · LLM-review panel split + Selected-fleets scope · floating graph pop-out · See-&lt;7-digit&gt; jump · Trace banner tidy + open-demand + MRP-run cadence · Trend lead-time honours Trace suppression — <b>built, pending push + operator validation</b></h4>
+      <h4>"No-test sprint" — MRP Request Template export · LLM-review panel split + Selected-fleets scope · floating graph pop-out · See-&lt;7-digit&gt; jump · Trace banner tidy + open-demand + MRP-run cadence · Trend lead-time honours Trace suppression — <b>pushed <code>74baea5</code> (2026-08-15), pending operator off-repo validation</b></h4>
       <ul>
         <li><b>APP-MRP-REQ (Part B).</b> A new <b>"⤓ MRP Request Template"</b> button on the Trend Exports panel (new module <code>shared/mrp-request.js</code>) builds an Excel for the <b>★ For-Action</b> SAP inventory materials — one row each with: SAP # · description · Stock on hand · Unit cost (moving-average price) · Open reservations · <b>current</b> MRP/Min/Max/Safety · <b>algorithmic recommended</b> MRP/Min/Max · <b>Analyst</b> MRP/Min/Max/Safety · where-used models · Observed units · <b>Estimated unit population</b> (Manufacturer + base-model match over the Fleet register — e.g. F350 XL → the F350 population) · Basis %. It <b>greys out with a plain reason</b> unless <b>Fleet Master + IW39</b> are loaded <b>AND</b> at least one material is flagged For Action. Deterministic (no web-research fields). The population is an <b>estimate</b> — the sheet carries a "verify against SAP" caveat, never presented as exact. Files: <code>shared/mrp-request.js</code>, <code>shared/pipeline.js</code> (adds <code>movingAvgPrice</code> + <code>totalReservation</code> onto each material), <code>analysis/analysis.{js,css,html}</code>.
           <ul>
@@ -401,18 +401,18 @@ git -C /tmp/peek push --force-with-lease origin main
         <li><b>APP-TRACE-DEMAND.</b> <b>Open reservations</b> (unsatisfied demand) now show in the Trace banner, from the Inventory Master's <code>totalReservation</code> field. Shows <b>"—"</b> when the extract doesn't carry that field — never fabricated. Files: <code>shared/pipeline.js</code>, <code>trace/trace.{js,css}</code>.</li>
         <li><b>APP-T-MRPFREQ · MRP-run cadence (Trace view).</b> A new Trace view: a <b>stacked bar of MRP-created PRs</b> (EBAN creation indicator <code>B</code>) per <b>Day / Week / Month</b> (toggle), split by outcome — <b>Converted-to-PO / Cancelled / Open</b>. It reads all PR History and is independent of the single-material rail, with honest empty states when there's no PR History or no MRP-created PRs. Files: <code>trace/trace.{html,js,css}</code>.</li>
         <li><b>APP-FIX-TREND-LT-SUPPRESS.</b> The Trend <b>"Lead (mo)"</b> list column and the <b>"Lead time"</b> stat cell now <b>honour the operator's Trace outlier suppression</b> (manual PO excludes + sigma) — loaded from <code>trace.viewState</code> at boot and applied via <code>TracePhase.activeChains</code> (Screener parity). Because Trend re-boots when you navigate to it, suppressing a PO in Trace and returning to Trend re-reads the state and the figure moves. This <b>corrects the just-shipped APP-TREND-LT</b>, which showed an un-suppressed mean. Files: <code>analysis/analysis.js</code>.</li>
-        <li><b>Rollback / status.</b> All eight items are <b>built and verified on-machine but NOT pushed</b> — origin/main is still <code>57219eb</code>; this is the operator's off-repo validation pass. No SCHEMA_VERSION change. (Called the "no-test sprint" as a batch of features intended for the operator's own click-through test.)</li>
+        <li><b>Rollback / status.</b> All eight items are <b>pushed 2026-08-15</b> — origin/main <code>74baea5</code> (three area-grouped commits on top of <code>57219eb</code>: Trace <code>0f342be</code> · Trend+shared <code>8d3f2ae</code> · Docs <code>74baea5</code>); pending the operator's off-repo validation pass. No SCHEMA_VERSION change. Rollback: <code>backup/pre-phase3-sprint</code> branch + <code>checkpoint/pre-phase3-sprint</code> tag (both <code>57219eb</code>) + local <code>_rollback/PHASE3-pre/</code>. (Called the "no-test sprint" as a batch of features intended for the operator's own click-through test.)</li>
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - Phase 3 follow-up: stat-grid unit cost + operator layout + Lead time - BUILT, NOT PUSHED -->
+    <!-- v2.1.5-dev - Phase 3 follow-up: stat-grid unit cost + operator layout + Lead time - PUSHED 74baea5 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
         <span class="date">2026-08-15</span>
         <span class="tag dev">dev</span>
       </div>
-      <h4>Phase 3 follow-up — stat grid: Unit cost replaces Stock value · operator-arranged layout · Lead time promoted into the always-shown block — <b>built, pending push + operator validation</b></h4>
+      <h4>Phase 3 follow-up — stat grid: Unit cost replaces Stock value · operator-arranged layout · Lead time promoted into the always-shown block — <b>pushed <code>74baea5</code> (2026-08-15), pending operator off-repo validation</b></h4>
       <ul>
         <li><b>APP-TREND-UNITCOST.</b> In the material-detail <b>stat grid</b>, the <b>"Stock value (CAD)"</b> cell is replaced by <b>"Unit cost (CAD)"</b> — sourced from the Inventory Master <b>moving average price</b> (per unit), not stock quantity × price. Shows <b>"—"</b> when the moving-average-price column isn't in the extract (never a fabricated 0). Because the detail panel is shared, this also appears on the Screener and Sandbox. Files: <code>shared/pipeline.js</code> (carries <code>movingAvgPrice</code> onto each material), <code>shared/material-detail.js</code>.</li>
         <li><b>Stat grid — operator-arranged layout + Lead time added.</b> The expandable stat grid (from APP-TREND-STATX above) is re-laid-out to the operator's chosen order:
@@ -424,14 +424,14 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - Phase 3 (Everything on one screen) + review-screen tweaks - BUILT, NOT PUSHED -->
+    <!-- v2.1.5-dev - Phase 3 (Everything on one screen) + review-screen tweaks - PUSHED 74baea5 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
         <span class="date">2026-08-15</span>
         <span class="tag dev">dev</span>
       </div>
-      <h4>Phase 3 (Everything on one screen) + review-screen tweaks — ★ Action filter · Lead-time column · expandable stat block · Trace view re-order + Back-to-Trend · Notes-dock &amp; list-column fixes — <b>built, pending push + operator validation</b></h4>
+      <h4>Phase 3 (Everything on one screen) + review-screen tweaks — ★ Action filter · Lead-time column · expandable stat block · Trace view re-order + Back-to-Trend · Notes-dock &amp; list-column fixes — <b>pushed <code>74baea5</code> (2026-08-15), pending operator off-repo validation</b></h4>
 
       <h4>Review-screen tweaks (Phase 1 follow-up feedback)</h4>
       <ul>
@@ -447,11 +447,11 @@ git -C /tmp/peek push --force-with-lease origin main
         <li><b>APP-TREND-STATX.</b> The material-detail <b>stat block</b> is now a compact <b>primary 2×4</b> — Stock on hand · Stock value · P1 rate · P2 rate · Runway @ P2 · P1→P2 change · Pattern · Total window — that's always shown, plus a <b>secondary 2×4</b> — Adj P2 · Per-event cons · Last consumption · Stockouts · Drop cause — collapsed behind a <b>blue-triangle "More stats / Fewer stats" toggle</b>. The expanded/collapsed choice is remembered as you step Prev/Next. Because the detail panel is shared, this also appears on the Screener and Sandbox. Files: <code>shared/material-detail.{js,css}</code>.</li>
         <li><b>APP-TRACE-VIEWORDER.</b> The Calibre <b>Trace</b> single-material views are re-ordered to <b>Phase Distribution · Procurement Chain · Raw Data · Volume · Year-on-Year</b> — Phase Distribution now leads and is the default view. Files: <code>trace/trace.{html,js}</code>.</li>
         <li><b>APP-TRACE-BACK.</b> A <b>"← Back to Trend"</b> link in the Trace single-material banner returns to that same material on the Trend page (Trend now reads a <code>#mat=&lt;material&gt;</code> deep link on load and re-selects it, scrolling it into view). Pairs with the existing "Trace it!" button for round-trip navigation. Files: <code>trace/trace.{js,css}</code>, <code>analysis/analysis.js</code>.</li>
-        <li><b>Rollback.</b> Pre-chunk clean baseline = origin/main <code>57219eb</code> (this work is unpushed). Local snapshot at <code>_rollback/PHASE3-pre/</code> (a clean copy of <code>57219eb</code>); at push time a <code>backup/pre-phase3</code> branch + <code>checkpoint/pre-phase3</code> tag are cut at <code>57219eb</code>. No SCHEMA_VERSION change.</li>
+        <li><b>Rollback.</b> Clean baseline = origin/main <code>57219eb</code>; this work was <b>pushed 2026-08-15</b> as part of <code>74baea5</code>. Local snapshot at <code>_rollback/PHASE3-pre/</code> (a clean copy of <code>57219eb</code>); the refs actually cut at push are <code>backup/pre-phase3-sprint</code> branch + <code>checkpoint/pre-phase3-sprint</code> tag (both <code>57219eb</code>). No SCHEMA_VERSION change.</li>
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - Phase 1 (Capture & keep) - BUILT + TESTED LOCALLY, NOT PUSHED -->
+    <!-- v2.1.5-dev - Phase 1 (Capture & keep) - PUSHED 3511b53 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
