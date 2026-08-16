@@ -32,9 +32,33 @@
   function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
   function escapeAttr(s){ return escapeHtml(s).replace(/'/g, '&#39;'); }
 
+  /* APP-ACT-03 — the Inventory-Master material description can carry a "See
+     <7-digit>" reference to another material. Linkify any 7-digit token that is
+     actually in the loaded pack (opts.materialJump.has) so it can be clicked to
+     jump there; leave everything else (dates, non-pack part numbers) as plain
+     text. Runs on the already-escaped description (digits aren't affected by
+     escaping). The jump is wired only when the caller passes materialJump (Trend
+     does; Screener/Sandbox don't → the numbers stay plain text). */
+  function descHtml(mat, opts){
+    let d = escapeHtml(mat.description || '');
+    const mj = opts && opts.materialJump;
+    if (mj && typeof mj.has === 'function') {
+      d = d.replace(/\b(\d{7})\b/g, (full, num) =>
+        (num !== String(mat.material) && mj.has(num))
+          ? `<button type="button" class="see-jump" data-see="${num}" title="Jump to material ${num} (referenced in this description)">${num}</button>`
+          : full);
+    }
+    const mfr = mat.manufacturer ? ' <span class="desc-mfr">(' + escapeHtml(mat.manufacturer) + ')</span>' : '';
+    return d + mfr;
+  }
+
   // Tracks an in-flight single-material LLM review so a re-render keeps the
   // button disabled (mirrors analysis.js state.llmInflight semantics).
   let _inflight = false;
+
+  // APP-TREND-STATX — remembers whether the secondary 2×4 stat block is expanded,
+  // so stepping Prev/Next (which re-renders) keeps the operator's chosen state.
+  let _statsExpanded = false;
 
   function pillCls(tl){
     return ({ GREEN:'ok', BLUE:'cyan', ORANGE:'warn', RED:'crit', PURPLE:'wr', GREY:'' })[tl] || '';
@@ -190,7 +214,7 @@
               <th></th>
               <th class="current-head">Current</th>
               <th class="rec-head">Recommended</th>
-              ${anOn ? `<th class="analyst-head clickable" id="anActionHdr" title="Click to ${analyst.flagged ? 'clear the' : 'set the'} For Action flag">Analyst${analyst.flagged ? ' ★' : ''}</th>` : ''}
+              ${anOn ? `<th class="analyst-head clickable ${analyst.flagged ? 'flagged' : 'unflagged'}" id="anActionHdr" title="Click to ${analyst.flagged ? 'clear the' : 'set the'} For Action flag">Analyst</th>` : ''}
             </tr>
           </thead>
           <tbody>${trs}</tbody>
@@ -389,7 +413,7 @@
             ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt" title="Open this material in Calibre Trace">Trace it! &rarr;</button>` : ''}
             ${(opts.analyst && opts.analyst.enabled) ? `<button class="action-star ${opts.analyst.flagged ? 'on' : ''}" id="btnActionStar" aria-pressed="${opts.analyst.flagged ? 'true' : 'false'}" title="${opts.analyst.flagged ? 'Flagged For Action — click to clear' : 'Flag For Action (analyst follow-up)'}">${opts.analyst.flagged ? '★' : '☆'}</button>` : ''}
           </div>
-          <div class="desc">${escapeHtml(mat.description || '')}${mat.manufacturer ? ' <span class="desc-mfr">(' + escapeHtml(mat.manufacturer) + ')</span>' : ''}</div>
+          <div class="desc">${descHtml(mat, opts)}</div>
         </div>
         <div class="detail-head-rec">
           <span class="rec-lab">Algorithmic recommendation</span>
@@ -403,29 +427,36 @@
         <span class="chart-toolbar-lab">Show:</span>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleConsumption" checked> Consumption</label>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
-        ${(opts.nav || opts.notes || opts.whereUsedFn) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn" title="${opts.notes.hasNote ? 'Notes for this material — has a note (click to view/edit)' : 'Add a note for this material'}">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>` : ''}</div>` : ''}
+        ${(opts.nav || opts.notes || opts.whereUsedFn || opts.enablePopout) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn" title="${opts.notes.hasNote ? 'Notes for this material — has a note (click to view/edit)' : 'Add a note for this material'}">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn" title="Where has this material been consumed? Work-order issues by Sort Field / Fleet model + cost centre, net of reversals, by year. Needs IW39.">⊞ Where used</button>` : ''}${opts.enablePopout ? `<button type="button" class="popout-btn" id="popoutBtn" title="Pop this material out into a floating, draggable, resizable card — the full detail (chart + stats/MRP) with notes joined on the right.">⤢ Pop out</button>` : ''}</div>` : ''}
       </div>
       <div class="chart-host" id="chartHost"></div>
       <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
       ${(opts.snapshotAlign && opts.snapshotAlign.hasImDate && !opts.snapshotAlign.aligned) ? `<div class="chart-caveat soh-misalign">⚠ Stock snapshot dated <b>${escapeHtml(opts.snapshotAlign.imDate)}</b> but MB51 runs to <b>${escapeHtml(opts.snapshotAlign.lastMb51Date)}</b> — ${Math.abs(opts.snapshotAlign.gapDays)} day${Math.abs(opts.snapshotAlign.gapDays) === 1 ? '' : 's'} of movements ${opts.snapshotAlign.gapDays > 0 ? 'after' : 'before'} the stock snapshot. The Stock-on-Hand line and stockout flags are offset by the net of those movements — re-extract both on the same SAP run date.</div>` : ''}
 
+      <!-- APP-TREND-STATX — the stat block is a primary 2×4 (always shown) plus a
+           secondary 2×4 of adjusted/diagnostic stats behind a blue-triangle toggle. -->
       <div class="stat-grid">
-        <!-- Row 1 · headline raw values -->
+        <!-- Primary 2×4 (operator-arranged 2026-08-15) -->
         <div class="stat-cell"><span class="lab">Stock on hand</span><div class="v">${mat.stock ?? '—'}</div></div>
-        <div class="stat-cell"><span class="lab">Stock value (CAD)</span><div class="v">${AppLocale.fmtCAD(mat.totValueOh)}</div></div>
-        <div class="stat-cell"><span class="lab">P1 rate</span><div class="v ${mat.p1Flag !== 'OK' ? 'warn' : ''}">${mat.p1Flag === 'OK' ? mat.p1Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
-        <div class="stat-cell"><span class="lab">P2 rate</span><div class="v ${mat.p2Flag !== 'OK' ? 'warn' : ''}">${mat.p2Flag === 'OK' ? mat.p2Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
-        <!-- Row 2 · derived / time -->
+        <div class="stat-cell"><span class="lab">Unit cost (CAD)</span><div class="v">${mat.movingAvgPrice != null ? AppLocale.fmtCAD(mat.movingAvgPrice) : '—'}</div></div>
         <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
-        ${lastConsCell}
-        <div class="stat-cell"><span class="lab">P1 → P2 change</span><div class="v ${(mat.rateChange||0) > 200 ? 'warn' : ''}">${rcDisp}</div></div>
-        <div class="stat-cell"><span class="lab">Pattern</span><div class="v ${mat.pattern === 'LUMPY' ? 'warn' : ''}">${mat.pattern}</div></div>
-        <!-- Row 3 · adjusted / data-quality -->
-        <div class="stat-cell"><span class="lab">Adj P2 (HCE excl)</span><div class="v">${adjDisp} <small>${mat.hceP2 && mat.hceP2.length ? '/ mo' : ''}</small></div></div>
+        <div class="stat-cell"><span class="lab">P2 rate</span><div class="v ${mat.p2Flag !== 'OK' ? 'warn' : ''}">${mat.p2Flag === 'OK' ? mat.p2Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
         <div class="stat-cell"><span class="lab">Total (window)</span><div class="v">${mat.totalNet}</div></div>
-        ${stockoutsCell}
         ${perEventCell}
+        ${lastConsCell}
+        <div class="stat-cell" title="Avg total-to-site procurement lead time (completed chains, phases A–D). Needs PR History; Trend only."><span class="lab">Lead time</span><div class="v">${mat.leadMonths != null ? mat.leadMonths.toFixed(1) + ' mo' : '—'}</div></div>
+      </div>
+      <button type="button" class="stat-expand" id="statExpandBtn" aria-expanded="${_statsExpanded ? 'true' : 'false'}" title="Show / hide the adjusted-rate &amp; stockout diagnostics">
+        <span class="tri">${_statsExpanded ? '▾' : '▸'}</span><span class="lbl">${_statsExpanded ? 'Fewer stats' : 'More stats'}</span>
+      </button>
+      <div class="stat-grid stat-grid-extra${_statsExpanded ? ' open' : ''}" id="statGridExtra">
+        <!-- Secondary 2×4 (operator-arranged 2026-08-15) -->
+        <div class="stat-cell"><span class="lab">P1 → P2 change</span><div class="v ${(mat.rateChange||0) > 200 ? 'warn' : ''}">${rcDisp}</div></div>
+        <div class="stat-cell"><span class="lab">Adj P2 (HCE excl)</span><div class="v">${adjDisp} <small>${mat.hceP2 && mat.hceP2.length ? '/ mo' : ''}</small></div></div>
+        ${stockoutsCell}
         ${dropCauseCell}
+        <div class="stat-cell"><span class="lab">Pattern</span><div class="v ${mat.pattern === 'LUMPY' ? 'warn' : ''}">${mat.pattern}</div></div>
+        <div class="stat-cell"><span class="lab">P1 rate</span><div class="v ${mat.p1Flag !== 'OK' ? 'warn' : ''}">${mat.p1Flag === 'OK' ? mat.p1Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
       </div>
 
       ${renderMrpCompare(mat, opts.analyst)}
@@ -450,6 +481,35 @@
     }
     AppChart.render(hostEl.querySelector('#chartHost'), mat, { width: chartWidth, height: chartHeight, movements: chartMovements });
     wireChartToggles(hostEl);
+
+    // APP-ACT-03 — wire the "See <7-digit>" jump links in the description (only
+    // present when the caller passed materialJump, i.e. on Trend).
+    if (opts.materialJump && typeof opts.materialJump.onJump === 'function') {
+      hostEl.querySelectorAll('.see-jump').forEach(b => {
+        b.addEventListener('click', (e) => { e.stopPropagation(); opts.materialJump.onJump(b.dataset.see); });
+      });
+    }
+
+    // APP-ACT-04 — "⤢ Pop out" opens the floating card (page-side, so it survives
+    // re-renders and can mirror this exact detail).
+    if (opts.enablePopout && typeof opts.onPopout === 'function') {
+      const pb = hostEl.querySelector('#popoutBtn');
+      if (pb) pb.addEventListener('click', (e) => { e.stopPropagation(); opts.onPopout(); });
+    }
+
+    // APP-TREND-STATX — expand/collapse the secondary 2×4 stat block. Toggles in
+    // place (no re-render) and remembers the state module-side for Prev/Next.
+    const statBtn = hostEl.querySelector('#statExpandBtn');
+    const statExtra = hostEl.querySelector('#statGridExtra');
+    if (statBtn && statExtra) {
+      statBtn.addEventListener('click', () => {
+        _statsExpanded = !_statsExpanded;
+        statExtra.classList.toggle('open', _statsExpanded);
+        statBtn.setAttribute('aria-expanded', _statsExpanded ? 'true' : 'false');
+        const tri = statBtn.querySelector('.tri'); if (tri) tri.textContent = _statsExpanded ? '▾' : '▸';
+        const lbl = statBtn.querySelector('.lbl'); if (lbl) lbl.textContent = _statsExpanded ? 'Fewer stats' : 'More stats';
+      });
+    }
 
     // Bind LLM (only when the run button is present)
     if (enableLlm) {

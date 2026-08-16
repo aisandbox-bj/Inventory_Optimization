@@ -796,6 +796,8 @@
         const materialGroup = masterRow ? (masterRow.materialGroup || '') : '';
         const manufacturer  = masterRow ? (masterRow.manufacturer  || '') : '';
         const totValueOh    = masterRow ? masterRow.totValueOh : null;
+        const movingAvgPrice= masterRow ? masterRow.movingAvgPrice : null;   // APP-TREND-UNITCOST — Inv Master moving average price (per unit)
+        const totalReservation = masterRow ? masterRow.totalReservation : null;  // APP-TRACE-DEMAND / APP-MRP-REQ — open reservations from Inv Master
 
         // ── Signal scan: net issues/returns + last consumption date ───────
         // Pulled up so APP-E11's P2-anchoring decision can see lastConsDate.
@@ -1088,6 +1090,8 @@
           materialGroup,
           manufacturer,
           totValueOh,
+          movingAvgPrice,
+          totalReservation,
           totalNet:     Math.round(q.totalNet * 10) / 10,
           p1Net:        Math.round((tx.filter(r => inRange(r.postingDate, p1Start, p1End) && VALID_TYPES.has(String(r.movementType || '').trim())).reduce((s, r) => {
                           const mt = String(r.movementType || '').trim();

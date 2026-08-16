@@ -15,6 +15,9 @@
     selectedBucket:  null,       // bucket key
     selectedMaterial:null,       // material no
     filterTl:        'ALL',
+    filterAction:    false,       // APP-TREND-ACTFILTER — show only For-Action-flagged materials
+    selectedFleets:  new Set(),   // APP-ACT-02b — buckets ticked for the "Selected fleets" exports
+    traceExcl:       { manualByMat:{}, sigmaLimit:null },  // APP-FIX-TREND-LT-SUPPRESS — Trace outlier suppression (from trace.viewState)
     sortKey:         'totalNet',
     sortDir:         'desc',
     searchText:      '',
@@ -52,9 +55,56 @@
       ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
       : null;
     renderLoadedBanner();
+    // APP-FIX-TREND-LT-SUPPRESS — load Trace's persisted outlier suppression (manual
+    // PO excludes + sigma) so the lead-time figures reflect what the operator trimmed
+    // in Trace, matching the Screener. Re-read on each Trend boot, so it's current.
+    try {
+      const tvs = await AppStorage.get('trace.viewState');
+      if (tvs) {
+        state.traceExcl.manualByMat = (tvs.manualExclByMat && typeof tvs.manualExclByMat === 'object') ? tvs.manualExclByMat : {};
+        state.traceExcl.sigmaLimit  = (typeof tvs.sigmaLimit === 'number') ? tvs.sigmaLimit : null;
+      }
+    } catch (e) { /* no Trace state yet → un-suppressed */ }
     await runPipelineNow();
     bindGlobalKeys();
     wireNotes();   // APP-TREND-NOTES — bind the docked notes drawer once
+    wireGraphPopout();   // APP-ACT-04 — bind the floating pop-out card once
+    applyHashMaterial();   // APP-TRACE-BACK — honour analysis.html#mat=<n> deep link
+  }
+
+  // APP-TRACE-BACK (2026-08-15) — Calibre Trace's "← Back to Trend" link lands here
+  // as analysis.html#mat=<material>. Select that material (finding its bucket) once
+  // the pipeline has run, scroll it into view, then consume the hash so a later
+  // manual reload respects the normal selection.
+  function readHashMaterial(){
+    const h = (window.location.hash || '').replace(/^#/, '');
+    const m = /(?:^|&)mat=([^&]+)/.exec(h);
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+  // APP-ACT-03 / APP-TRACE-BACK — select a material by number (find its bucket,
+  // render, scroll into view). Returns true if it was in the pack.
+  function jumpToMaterial(mat){
+    mat = String(mat == null ? '' : mat);
+    if (!mat || !state.result || !state.result.buckets) return false;
+    let foundKey = null;
+    for (const b of state.result.buckets) {
+      if (b.materials.some(m => String(m.material) === mat)) { foundKey = b.key; break; }
+    }
+    if (!foundKey) return false;
+    if (state.selectedBucket !== foundKey) selectBucket(foundKey);
+    state.selectedMaterial = mat;
+    renderList();
+    renderDetail();
+    const dEl = document.querySelector('#materialDetail');
+    if (dEl) dEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return true;
+  }
+  function applyHashMaterial(){
+    const mat = readHashMaterial();
+    if (!mat) return;
+    jumpToMaterial(mat);
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { /* ignore */ }
   }
 
   function renderEmpty(){
@@ -139,6 +189,10 @@
     try {
       const t0 = performance.now();
       state.result = AppPipeline.runPipeline(state.json, { runDate: AppLocale.localDateISO() });
+      enrichLeadTimes();   // APP-TREND-LT — attach m.leadMonths for the list column
+      // APP-ACT-03 — set of every material in the pack, for the "See <7-digit>"
+      // description jump (only linkify references that are actually navigable).
+      state.packMatSet = new Set([].concat(...state.result.buckets.map(b => b.materials.map(m => String(m.material)))));
       const t1 = performance.now();
       const ia = state.result.invAdjAnalysis || { candidates: [] };
       const iaCount = ia.candidates.length;
@@ -168,6 +222,55 @@
       console.error(e);
       status.querySelector('.meta').innerHTML = `<span class="crit">error: ${escapeHtml(e.message || String(e))}</span>`;
     }
+  }
+
+  // APP-TREND-LT (2026-08-15) — attach avg total-to-site procurement lead time
+  // (months) to every material for the "Lead (mo)" list column + stat cell. Gated:
+  // only materials present in PR History get a chain compute (cached across
+  // buckets); everything else stays null → shows "—". Value = mean of COMPLETED
+  // chains' total-to-site (phases A–D — excludes shelf / time-to-first-use), in
+  // months (÷30.44). NA when no PR History (credibility: never 0).
+  // APP-FIX-TREND-LT-SUPPRESS (2026-08-15) — honours the operator's Trace outlier
+  // suppression (manual PO excludes + sigma trim), loaded from trace.viewState into
+  // state.traceExcl at boot, exactly like the Screener (screener.js activeChains).
+  // Because Trend re-boots each time it's navigated to, suppressing a PO in Trace
+  // then returning to Trend re-reads the excludes and the figure moves to match.
+  function enrichLeadTimes(){
+    try {
+      if (typeof TracePhase === 'undefined' || !TracePhase.computeChains) return;
+      const pr = (state.json.data && state.json.data.prHistory) || [];
+      const allMats = [].concat(...state.result.buckets.map(b => b.materials));
+      if (!pr.length) { allMats.forEach(m => { m.leadMonths = null; }); return; }
+      const prMats = new Set();
+      for (const r of pr){ const k = String(r.material == null ? '' : r.material).trim(); if (k) prMats.add(k); }
+      const DAYS_PER_MO = 30.44;
+      const tx = state.traceExcl || { manualByMat:{}, sigmaLimit:null };
+      const cache = new Map();
+      for (const m of allMats){
+        if (cache.has(m.material)) { m.leadMonths = cache.get(m.material); continue; }
+        let lm = null;
+        if (prMats.has(m.material)){
+          const chains = TracePhase.computeChains(state.json, m.material);
+          // Apply Trace's manual + sigma exclusions before averaging (APP-FIX-SCR-EXCL
+          // parity) so this reconciles with the Trace view and moves when POs are
+          // suppressed. Falls back to raw chains if activeChains isn't available.
+          const active = (typeof TracePhase.activeChains === 'function')
+            ? TracePhase.activeChains(chains, {
+                yearFilter: 'All',
+                sigmaLimit: tx.sigmaLimit,
+                manualExcl: new Set((tx.manualByMat && tx.manualByMat[m.material]) || [])
+              })
+            : chains;
+          const complete = active.filter(c => !!c.siteWH);
+          if (complete.length){
+            const meanDays = complete.reduce((s,c)=> s + (c.totalToSite||0), 0) / complete.length;
+            lm = Math.round((meanDays / DAYS_PER_MO) * 10) / 10;
+          }
+        }
+        m.leadMonths = lm;
+        cache.set(m.material, lm);
+      }
+    } catch(e){ console.warn('enrichLeadTimes:', e); }
   }
 
   function renderSummaryTiles(){
@@ -227,24 +330,40 @@
   function renderFilterButtons(){
     const host = $('#tlFilter');
     const labels = ['ALL','GREEN','BLUE','ORANGE','RED','PURPLE','GREY'];
-    host.innerHTML = labels.map(l => `<button data-tl="${l}" class="${state.filterTl === l ? 'active' : ''}">${l}</button>`).join('');
-    $$('#tlFilter button').forEach(b => {
+    const tlHtml = labels.map(l => `<button data-tl="${l}" class="${state.filterTl === l ? 'active' : ''}">${l}</button>`).join('');
+    // APP-TREND-ACTFILTER (2026-08-15) — a separate "★ Action" toggle (orange),
+    // ANDed with the traffic-light filter, so the operator can isolate exactly the
+    // materials they've flagged For Action. Only shown when an analyst store exists.
+    const actHtml = state.analyst
+      ? `<span class="tl-sep"></span><button data-actfilter="1" class="act-filter${state.filterAction ? ' active' : ''}" title="Show only materials flagged For Action (★)">★ Action</button>`
+      : '';
+    host.innerHTML = tlHtml + actHtml;
+    $$('#tlFilter button[data-tl]').forEach(b => {
       b.addEventListener('click', () => { state.filterTl = b.dataset.tl; renderList(); renderFilterButtons(); });
     });
+    const af = host.querySelector('button[data-actfilter]');
+    if (af) af.addEventListener('click', () => { state.filterAction = !state.filterAction; renderList(); renderFilterButtons(); });
   }
 
+  // APP-TREND-LISTCOLS (2026-08-15) — MRP moved to sit right after P2/mo (operator
+  // request); the numeric/attribute columns from Total onward are centre-aligned
+  // (center:true → a class on the th; the td.num rule centres the cells). Reorder
+  // here MUST stay in lock-step with the tbody <td> order in renderList().
+  // APP-TREND-LT (2026-08-15) — new "Lead time" column: avg total-to-site procurement
+  // lead time in months (TracePhase), NA without PR History.
   const LIST_COLS = [
     { k:'trafficLight', l:'TL',          type:'set',  picker:'set'   },
     { k:'material',     l:'Material',    type:'text', picker:'set'   },
     { k:'description',  l:'Description', type:'text', picker:'text'  },
-    { k:'totalNet',     l:'Total',       type:'num',  picker:'range' },
-    { k:'p1Rate',       l:'P1/mo',       type:'num',  picker:'range' },
-    { k:'p2Rate',       l:'P2/mo',       type:'num',  picker:'range' },
-    { k:'recMin',       l:'Rec Min',     type:'num',  picker:'range' },
-    { k:'recMax',       l:'Rec Max',     type:'num',  picker:'range' },
-    { k:'mrpType',      l:'MRP',         type:'text', picker:'set'   },
-    { k:'mrpRecFlag',   l:'Reclass',     type:'text', picker:'set'   },
-    { k:'pattern',      l:'Pattern',     type:'text', picker:'set'   }
+    { k:'totalNet',     l:'Total',       type:'num',  picker:'range', center:true },
+    { k:'p1Rate',       l:'P1/mo',       type:'num',  picker:'range', center:true },
+    { k:'p2Rate',       l:'P2/mo',       type:'num',  picker:'range', center:true },
+    { k:'mrpType',      l:'MRP',         type:'text', picker:'set',   center:true },
+    { k:'recMin',       l:'Rec Min',     type:'num',  picker:'range', center:true },
+    { k:'recMax',       l:'Rec Max',     type:'num',  picker:'range', center:true },
+    { k:'leadMonths',   l:'Lead (mo)',   type:'num',  picker:'range', center:true },
+    { k:'mrpRecFlag',   l:'Reclass',     type:'text', picker:'set',   center:true },
+    { k:'pattern',      l:'Pattern',     type:'text', picker:'set',   center:true }
   ];
 
   /* v2.1.1: passesColFilters and colFilterActive now accept an optional
@@ -292,6 +411,8 @@
     if (!bucket) return [];
     let rows = bucket.materials.slice();
     if (state.filterTl !== 'ALL') rows = rows.filter(m => m.trafficLight === state.filterTl);
+    // APP-TREND-ACTFILTER — isolate materials flagged For Action (ANDed with TL/search).
+    if (state.filterAction && state.analyst) rows = rows.filter(m => state.analyst.isAction(m.material));
     if (state.searchText) {
       const q = state.searchText.toLowerCase();
       rows = rows.filter(m => (m.material || '').toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q));
@@ -341,7 +462,7 @@
       const sorted = state.sortKey === c.k ? `sorted ${state.sortDir === 'asc' ? 'asc' : ''}` : '';
       const fActive = colFilterActive(c.k);
       return `
-        <th class="sortable ${sorted}" data-k="${c.k}">
+        <th class="sortable ${c.center ? 'center' : ''} ${sorted}" data-k="${c.k}">
           <span class="th-inner">
             <span class="th-label" data-sort="${c.k}">${c.l}</span>
             <button class="th-filter ${fActive ? 'active' : ''}" data-filter="${c.k}" title="Filter ${c.l}">▾</button>
@@ -370,9 +491,10 @@
         <td class="num">${m.totalNet?.toLocaleString?.() ?? m.totalNet ?? '—'}</td>
         <td class="num">${m.p1Flag === 'OK' ? m.p1Rate.toFixed(1) : `<span class="amber">${escapeHtml(m.p1Flag || '—')}</span>`}</td>
         <td class="num">${m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : `<span class="amber">${escapeHtml(m.p2Flag || '—')}</span>`}</td>
+        <td class="num" style="color:var(--text-muted)">${escapeHtml(m.mrpType || '—')}</td>
         <td class="num">${m.recMin ?? '—'}</td>
         <td class="num">${m.recMax ?? '—'}</td>
-        <td class="num" style="color:var(--text-muted)">${escapeHtml(m.mrpType || '—')}</td>
+        <td class="num" title="Avg total-to-site procurement lead time (completed chains, phases A–D). Honours your Trace outlier suppression — trim POs in Trace, return here, and this updates.">${m.leadMonths != null ? m.leadMonths.toFixed(1) : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="num">${m.mrpRecFlag ? `<span class="mrp-reclass" title="${escapeAttr(m.mrpReclassNote || '')}">${escapeHtml(m.mrpRecFlag)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${escapeHtml(m.pattern || '—')}</td>
       </tr>`;
@@ -653,16 +775,28 @@
     // the detail panel keep reading from the same store.
     // APP-ACT-01 — this material's position in the on-screen list drives the
     // Prev/Next enablement passed to the detail panel.
+    const opts = buildDetailOpts(mat, bucket);
+    opts.enablePopout = true;               // APP-ACT-04 — show the "⤢ Pop out" button
+    opts.onPopout = openGraphPopout;
+    MaterialDetail.render(host, mat, opts);
+    // APP-TREND-NOTES — keep the docked drawer in sync with the shown material.
+    updateNotesDrawer();
+    syncNotesBtn();
+    updateGraphPopout();                    // APP-ACT-04 — live-link the pop-out card
+  }
+
+  /* APP-SCR-01 / APP-ACT-04 — the detail render-options object, extracted so the
+     inline panel (#materialDetail) and the pop-out card (#gpDetail) render the
+     SAME full detail from one place. */
+  function buildDetailOpts(mat, bucket){
     const _vis = computeVisibleRows();
     const _idx = _vis.findIndex(m => m.material === mat.material);
-
-    MaterialDetail.render(host, mat, {
+    return {
       bucket,
       parameters: state.json.parameters,
       llm: state.llmByMaterial[mat.material],
       onLlmResult: (material, out) => { state.llmByMaterial[material] = out; },
-      // APP-ACT-01 — "For Action" flag (banner star) + editable Analyst
-      // Recommendation column. Stored in the analyst sidecar, never the canonical JSON.
+      // APP-ACT-01 — "For Action" flag (banner star) + editable Analyst Rec column.
       analyst: state.analyst ? {
         enabled: true,
         flagged: state.analyst.isAction(mat.material),
@@ -684,20 +818,17 @@
         onNext: () => stepMaterial(1)
       },
       enableTraceLink: true,  // APP-T-07 — "Trace it!" handoff to the Trace page
-      // APP-OPI-01 — open-procurement lamps (PR/PO/In-Transit) from the chains.
+      // APP-ACT-03 — linkify "See <7-digit>" references present in the pack.
+      materialJump: {
+        has: (m) => !!(state.packMatSet && state.packMatSet.has(String(m))),
+        onJump: (m) => jumpToMaterial(m)
+      },
       openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, mat.material) : null,
-      // APP-WU-01 — "Where used" button (lazy compute on click). Only when IW39 is loaded.
       whereUsedFn: (typeof WhereUsed !== 'undefined' && state.json.data && state.json.data.iw39 && state.json.data.iw39.length) ? () => WhereUsed.compute(state.json, mat.material) : null,
-      // APP-WU-02 — per-cell drill into the underlying work orders.
       whereUsedDrillFn: (typeof WhereUsed !== 'undefined') ? (sel) => WhereUsed.drill(state.json, mat.material, sel) : null,
-      // APP-TREND-HOV — per-event movement detail for the chart hover tooltips.
       chartMovementsFn: (typeof MovementDetail !== 'undefined') ? () => MovementDetail.forMaterial(state.json, mat.material) : null,
-      // APP-FIX-SNAPSHOT-ALIGN — chart caption when the stock snapshot ≠ MB51 cut-off.
       snapshotAlign: state.result && state.result.snapshotAlign
-    });
-    // APP-TREND-NOTES — keep the docked drawer in sync with the shown material.
-    updateNotesDrawer();
-    syncNotesBtn();
+    };
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -706,16 +837,29 @@
      stays on the RIGHT of the screen while the operator reviews.
   ═════════════════════════════════════════════════════════════════════════ */
   function notesEls(){ return { drawer:$('#notesDrawer'), area:$('#notesArea'), mat:$('#notesMat') }; }
+  // APP-FIX-NOTES-DOCK — line the drawer up with the top of the detail/chart panel
+  // (it's position:absolute inside main.shell, so top is measured from the shell).
+  // This makes it pop up adjacent to the graph and scroll with the page content.
+  function positionNotesDrawer(){
+    const drawer = $('#notesDrawer');
+    const detail = $('#materialDetail');
+    const shell  = document.querySelector('main.shell');
+    if (!drawer || !detail || !shell) return;
+    const dRect = detail.getBoundingClientRect();
+    const sRect = shell.getBoundingClientRect();
+    drawer.style.top = Math.max(8, (dRect.top - sRect.top) + 8) + 'px';
+  }
   function toggleNotes(){
     const { drawer, area } = notesEls();
     if (!drawer) return;
-    if (drawer.classList.contains('hidden')) { drawer.classList.remove('hidden'); updateNotesDrawer(); if (area) area.focus(); }
+    if (drawer.classList.contains('hidden')) { drawer.classList.remove('hidden'); positionNotesDrawer(); updateNotesDrawer(); if (area) area.focus(); }
     else { drawer.classList.add('hidden'); }
     syncNotesBtn();
   }
   function updateNotesDrawer(){
     const { drawer, area, mat } = notesEls();
     if (!drawer || drawer.classList.contains('hidden')) return;
+    positionNotesDrawer();
     const m = state.selectedMaterial;
     if (!m || !state.analyst) { if (area){ area.value=''; area.disabled=true; } if (mat) mat.textContent='—'; return; }
     if (area){ area.disabled=false; area.value = state.analyst.getNote(m); }
@@ -751,6 +895,126 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
+     APP-ACT-04 — floating material-detail pop-out. ONE draggable/resizable card
+     showing the FULL detail (chart + stats/MRP, the same render as the inline
+     panel) with the notes pad joined on the RIGHT. Live-linked: selecting another
+     material (list click / Prev-Next / See-jump) re-renders it. Close via the ✕
+     or a click outside the card — list clicks keep it open so live-link works.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function gpEls(){ return {
+    pop:$('#graphPopout'), head:$('#gpHead'), title:$('#gpTitle'), detail:$('#gpDetail'),
+    notes:$('#gpNotes'), notesMat:$('#gpNotesMat'), notesArea:$('#gpNotesArea'),
+    notesToggle:$('#gpNotesToggle'), close:$('#gpClose'), resize:$('#gpResize')
+  }; }
+  function gpIsOpen(){ const p = $('#graphPopout'); return !!(p && !p.classList.contains('hidden')); }
+
+  function openGraphPopout(){
+    const { pop } = gpEls();
+    const backdrop = $('#gpBackdrop');
+    if (!pop) return;
+    if (backdrop) backdrop.classList.remove('hidden');   // darken + block the page
+    if (pop.classList.contains('hidden')){
+      if (!pop._placed){                       // first open → sensible default size/position
+        pop._placed = true;
+        pop.style.width  = Math.min(1040, window.innerWidth - 60) + 'px';
+        pop.style.height = Math.min(700, window.innerHeight - 70) + 'px';
+        pop.classList.remove('hidden');        // unhide so offsetWidth is real
+        pop.style.left = Math.max(16, (window.innerWidth  - pop.offsetWidth ) / 2) + 'px';
+        pop.style.top  = Math.max(16, (window.innerHeight - pop.offsetHeight) / 2) + 'px';
+      } else {
+        pop.classList.remove('hidden');
+      }
+    }
+    updateGraphPopout();
+  }
+  function closeGraphPopout(){
+    const { pop } = gpEls();
+    const backdrop = $('#gpBackdrop');
+    if (pop) pop.classList.add('hidden');
+    if (backdrop) backdrop.classList.add('hidden');
+  }
+
+  function toggleGpNotes(){
+    const { notes, notesToggle } = gpEls();
+    if (!notes) return;
+    const showing = notes.classList.toggle('hidden') === false;
+    if (notesToggle) notesToggle.classList.toggle('on', showing);
+    gpSyncNotes();
+  }
+  function gpSyncNotes(){
+    const { notes, notesMat, notesArea } = gpEls();
+    if (!notes || notes.classList.contains('hidden')) return;
+    const m = state.selectedMaterial;
+    if (notesMat) notesMat.textContent = m || '—';
+    if (notesArea){
+      notesArea.disabled = !(m && state.analyst);
+      notesArea.value = (m && state.analyst) ? state.analyst.getNote(m) : '';
+    }
+  }
+  function updateGraphPopout(){
+    const { pop, title, detail } = gpEls();
+    if (!pop || pop.classList.contains('hidden') || !detail) return;
+    const bucket = currentBucket();
+    const mat = bucket && bucket.materials.find(m => String(m.material) === String(state.selectedMaterial));
+    if (!mat){
+      detail.innerHTML = '<div class="detail-empty"><div class="big">Select a material</div></div>';
+      if (title) title.textContent = '—';
+      return;
+    }
+    if (title) title.textContent = mat.material + (mat.description ? ' · ' + mat.description : '');
+    const opts = buildDetailOpts(mat, bucket);
+    opts.notes = null;          // the pop-out owns its own notes panel (right side)
+    opts.enablePopout = false;  // no nested pop-out button
+    MaterialDetail.render(detail, mat, opts);
+    gpSyncNotes();
+  }
+
+  function wireGraphPopout(){
+    const els = gpEls();
+    if (!els.pop || els.pop._wired) return;
+    els.pop._wired = true;
+    if (els.close) els.close.addEventListener('click', closeGraphPopout);
+    if (els.notesToggle) els.notesToggle.addEventListener('click', toggleGpNotes);
+    if (els.notesArea) els.notesArea.addEventListener('input', () => {
+      const m = state.selectedMaterial; if (!m || !state.analyst) return;
+      const prevHad = state.analyst.hasNote(m);
+      state.analyst.setNote(m, els.notesArea.value);
+      if (prevHad !== state.analyst.hasNote(m)) renderList();
+      syncNotesBtn();
+    });
+    // Drag by the header (buttons excluded)
+    if (els.head) els.head.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.gp-btn')) return;
+      e.preventDefault();
+      const r = els.pop.getBoundingClientRect();
+      const offX = e.clientX - r.left, offY = e.clientY - r.top;
+      const move = (ev) => {
+        els.pop.style.left = Math.min(Math.max(0, ev.clientX - offX), window.innerWidth  - 80) + 'px';
+        els.pop.style.top  = Math.min(Math.max(0, ev.clientY - offY), window.innerHeight - 40) + 'px';
+      };
+      const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+      document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+    });
+    // Resize by the bottom-right handle
+    if (els.resize) els.resize.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const r = els.pop.getBoundingClientRect();
+      const sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height;
+      const move = (ev) => {
+        els.pop.style.width  = Math.max(440, sw + (ev.clientX - sx)) + 'px';
+        els.pop.style.height = Math.max(320, sh + (ev.clientY - sy)) + 'px';
+      };
+      const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+      document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+    });
+    // Modal: clicking the darkened backdrop closes the card. The list underneath
+    // is inert while open — in-card navigation is Prev/Next only.
+    const backdrop = $('#gpBackdrop');
+    if (backdrop) backdrop.addEventListener('click', closeGraphPopout);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && gpIsOpen()) closeGraphPopout(); });
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
      EXPORT
   ═════════════════════════════════════════════════════════════════════════ */
   function renderExportActions(){
@@ -761,7 +1025,26 @@
     // APP-ACT-02 (Phase 2a) — collapsed Exports panel: a format × scope grid.
     // Scopes: Full set (all fleets) · ★ For action (flagged only). The
     // Selected-fleets picker arrives in Phase 2b. Bucket → Fleet throughout.
+    // APP-ACT-02b — prune any fleet selections whose bucket no longer exists.
+    if (!state.selectedFleets) state.selectedFleets = new Set();
+    state.selectedFleets = new Set([...state.selectedFleets].filter(k => state.result.buckets.some(b => b.key === k)));
     host.innerHTML = `
+      <!-- APP-ACT-02b — LLM review split into its own collapsible panel, above Exports. -->
+      <div class="export-panel llm-panel-wrap collapsed" id="llmPanel">
+        <button type="button" class="export-toggle" id="llmToggle" aria-expanded="false" title="Show the LLM review tools">
+          <span class="export-caret">▸</span>
+          <span class="export-toggle-lab">LLM review</span>
+          <span class="export-toggle-hint">Mass review · reload — in-memory only</span>
+        </button>
+        <div class="export-body" id="llmBody" hidden>
+          <div class="export-aux export-aux-flush">
+            <button id="btnMassReview" class="exp-btn exp-llm" title="Run the LLM over up to 50 materials in the current fleet, in sequence — produces an Excel + JSON deliverable. In-memory only, wiped on close unless you download.">✦ Mass review</button>
+            <button id="btnLoadMassReview" class="exp-btn exp-llm-ghost" title="Reload a previously-downloaded Mass-Review JSON to view its LLM annotations again. The matching canonical intake must already be loaded here.">⤒ Reload saved review</button>
+            <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
+          </div>
+        </div>
+      </div>
+
       <div class="export-panel collapsed" id="exportPanel">
         <button type="button" class="export-toggle" id="exportToggle" aria-expanded="false" title="Show the export options">
           <span class="export-caret">▸</span>
@@ -774,47 +1057,63 @@
               <span class="export-fmt"></span>
               <span class="export-scope-head">Full set</span>
               <span class="export-scope-head">★ For action</span>
+              <button type="button" class="export-scope-head scope-fleets-head" id="fleetPickToggle" title="Choose which fleets to include, then use the Fleets buttons in each row">Selected fleets ▾</button>
             </div>
             <div class="export-grid-row">
               <span class="export-fmt">PDF Pack</span>
               <button class="exp-btn exp-pdf" data-fmt="pdf" data-scope="full" title="One PDF, one page per material — chart, key stats, MRP comparison (your Analyst Recommendation shown on flagged items), plus HCE + Inv-Adj tables. Covers every analysed material.">Full set</button>
               <button class="exp-btn exp-pdf exp-action" data-fmt="pdf" data-scope="action" title="PDF pages for the materials you flagged For Action only — each carrying its Analyst Recommendation.">★ For action</button>
+              <button class="exp-btn exp-pdf exp-fleets" data-fmt="pdf" data-scope="fleets" title="PDF pages for every material in the fleets you selected above.">Fleets</button>
             </div>
             <div class="export-grid-row">
               <span class="export-fmt">Excel · Full pack <small>with graphs</small></span>
               <button class="exp-btn exp-xlsx" data-fmt="xlsxFull" data-scope="full" title="Excel workbook: an Index plus one sheet per material with its chart, stats and MRP comparison (Analyst Recommendation on flagged items). Every analysed material — can be a large file.">Full set</button>
               <button class="exp-btn exp-xlsx exp-action" data-fmt="xlsxFull" data-scope="action" title="Excel Full pack (with graphs) for flagged materials only, each with its Analyst Recommendation.">★ For action</button>
+              <button class="exp-btn exp-xlsx exp-fleets" data-fmt="xlsxFull" data-scope="fleets" title="Excel Full pack (with graphs) for the fleets you selected above.">Fleets</button>
             </div>
             <div class="export-grid-row">
               <span class="export-fmt">Excel · Summary <small>table only</small></span>
               <button class="exp-btn exp-xlsx" data-fmt="xlsxSummary" data-scope="full" title="Excel workbook: a single flat Index table — no per-material sheets, no charts, so it is fast and small. For-Action + Analyst Recommendation columns are filled on flagged items.">Full set</button>
               <button class="exp-btn exp-xlsx exp-action" data-fmt="xlsxSummary" data-scope="action" title="Excel Summary table of the flagged materials only, with the Analyst Recommendation columns.">★ For action</button>
+              <button class="exp-btn exp-xlsx exp-fleets" data-fmt="xlsxSummary" data-scope="fleets" title="Excel Summary table for the fleets you selected above.">Fleets</button>
             </div>
           </div>
+          <div class="fleet-picker hidden" id="fleetPicker"></div>
           <div class="export-action-note" id="exportActionNote"></div>
           <div class="export-aux">
+            <button id="btnMrpReq" class="exp-btn exp-mrpreq" title="MRP Request Template">⤓ MRP Request Template</button>
             <button id="btnDownloadJson" class="exp-btn exp-json" title="Download the canonical intake JSON (everything the pipeline read in — parsed SAP data, parameters, metadata). Safe to share / reload later via Intake.">⤓ Canonical dataset (JSON)</button>
             <button id="btnInvAdj" class="exp-btn exp-dq" title="Open the Inventory Adjustment review — flags MB51 dates with anomalously high issue counts (likely cycle counts) so they can be excluded from rate math. A heads-up, not an error.">✦ Inv Adj review</button>
-            <button id="btnMassReview" class="exp-btn exp-llm" title="Run the LLM over up to 50 materials in the current fleet, in sequence — produces an Excel + JSON deliverable. In-memory only, wiped on close unless you download.">✦ Mass review</button>
-            <button id="btnLoadMassReview" class="exp-btn exp-llm-ghost" title="Reload a previously-downloaded Mass-Review JSON to view its LLM annotations again. The matching canonical intake must already be loaded here.">⤒ Reload saved review</button>
           </div>
           <span id="exportProgress" class="export-progress" style="display:none;"></span>
-          <input type="file" id="loadMassReviewInput" accept=".json" style="display:none;" />
         </div>
       </div>
     `;
-    // Collapse toggle (collapsed by default)
-    const panel = $('#exportPanel'), body = $('#exportBody'), toggle = $('#exportToggle');
-    toggle.addEventListener('click', () => {
-      const open = panel.classList.toggle('collapsed') === false;
-      body.hidden = !open;
-      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      const caret = toggle.querySelector('.export-caret');
-      if (caret) caret.textContent = open ? '▾' : '▸';
-    });
-    // Scoped format × scope buttons
+    // Collapse toggles (both panels collapsed by default; LLM sits above Exports)
+    const wireToggle = (panelSel, toggleSel, bodySel) => {
+      const panel = $(panelSel), body = $(bodySel), toggle = $(toggleSel);
+      if (!panel || !toggle) return;
+      toggle.addEventListener('click', () => {
+        const open = panel.classList.toggle('collapsed') === false;
+        if (body) body.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        const caret = toggle.querySelector('.export-caret');
+        if (caret) caret.textContent = open ? '▾' : '▸';
+      });
+    };
+    wireToggle('#llmPanel', '#llmToggle', '#llmBody');
+    wireToggle('#exportPanel', '#exportToggle', '#exportBody');
+    // Scoped format × scope buttons (full / action / fleets)
     host.querySelectorAll('.exp-btn[data-fmt]').forEach(btn => {
       btn.addEventListener('click', () => exportScoped(btn.dataset.fmt, btn.dataset.scope));
+    });
+    // APP-ACT-02b — the "Selected fleets ▾" header toggles the fleet picker.
+    const fpToggle = $('#fleetPickToggle');
+    if (fpToggle) fpToggle.addEventListener('click', () => {
+      const fp = $('#fleetPicker'); if (!fp) return;
+      const showing = fp.classList.toggle('hidden') === false;
+      if (showing) renderFleetPicker();
+      fpToggle.textContent = 'Selected fleets ' + (showing ? '▴' : '▾');
     });
     // Aux buttons
     $('#btnInvAdj').addEventListener('click', openInvAdjModal);
@@ -822,8 +1121,74 @@
     $('#btnLoadMassReview').addEventListener('click', () => $('#loadMassReviewInput').click());
     $('#loadMassReviewInput').addEventListener('change', handleMassReviewUpload);
     $('#btnDownloadJson').addEventListener('click', downloadCanonicalJson);
+    const mrpBtn = $('#btnMrpReq');
+    if (mrpBtn) mrpBtn.addEventListener('click', downloadMrpRequestTemplate);
     renderBulkCounters();
     refreshExportActionState();
+  }
+
+  /* APP-ACT-02b — count of fleet units per model, from Fleet Master (for the picker). */
+  function fleetUnitCounts(){
+    const m = new Map();
+    const fleet = (state.json && state.json.data && state.json.data.fleetMaster) || [];
+    for (const u of fleet){ const model = String(u.model || '').trim(); if (model) m.set(model, (m.get(model) || 0) + 1); }
+    return m;
+  }
+
+  /* APP-ACT-02b — the fleet checkbox picker (per bucket: material count + unit
+     count). Selections drive the "Fleets" export buttons. The MULTI aggregate
+     bucket is excluded — it's a combined view, not a fleet. */
+  function renderFleetPicker(){
+    const host = $('#fleetPicker');
+    if (!host || !state.result) return;
+    const buckets = state.result.buckets.filter(b => b.kind !== 'multi');
+    const units = fleetUnitCounts();
+    const rows = buckets.map(b => {
+      const checked = state.selectedFleets.has(b.key);
+      const u = units.get(b.name);
+      return `<label class="fleet-pick-item"><input type="checkbox" data-fleet="${escapeAttr(b.key)}"${checked ? ' checked' : ''}><span class="fp-name">${escapeHtml(b.name)}</span><span class="fp-meta">${b.materials.length} mat${u != null ? ` · ${u} unit${u === 1 ? '' : 's'}` : ''}</span></label>`;
+    }).join('');
+    host.innerHTML = `<div class="fleet-pick-head">Include which fleets in the “Fleets” exports?</div>` +
+      `<div class="fleet-pick-list">${rows || '<span class="fp-empty">No fleets in this run.</span>'}</div>` +
+      `<div class="fleet-pick-foot"><button type="button" class="fp-mini" id="fpAll">All</button><button type="button" class="fp-mini" id="fpNone">None</button><span class="fp-count" id="fpCount"></span></div>`;
+    host.querySelectorAll('input[data-fleet]').forEach(cb => cb.addEventListener('change', () => {
+      if (cb.checked) state.selectedFleets.add(cb.dataset.fleet); else state.selectedFleets.delete(cb.dataset.fleet);
+      refreshExportActionState();
+    }));
+    const all = $('#fpAll'), none = $('#fpNone');
+    if (all)  all.addEventListener('click',  () => { buckets.forEach(b => state.selectedFleets.add(b.key)); renderFleetPicker(); refreshExportActionState(); });
+    if (none) none.addEventListener('click', () => { state.selectedFleets.clear(); renderFleetPicker(); refreshExportActionState(); });
+    refreshExportActionState();
+  }
+
+  /* APP-MRP-REQ — the flagged material OBJECTS (deduped across fleets), for the
+     MRP Request Template. */
+  function gatherFlaggedMaterialObjects(){
+    const flagged = (state.analyst && state.result) ? new Set(state.analyst.actionMaterials()) : new Set();
+    if (!state.result) return [];
+    return gatherScopedMaterials(state.result.buckets, flagged).map(r => r.mat);
+  }
+
+  /* APP-MRP-REQ — build + download the planner-facing MRP Request Template for
+     the ★ For-Action materials. Gated: needs Fleet Master + IW39 + ≥1 flagged. */
+  async function downloadMrpRequestTemplate(){
+    if (!state.result || !state.json || typeof AppMrpRequest === 'undefined') return;
+    const prog = $('#exportProgress');
+    const flaggedObjs = gatherFlaggedMaterialObjects();
+    const gate = AppMrpRequest.canDownload(state.json, flaggedObjs.length);
+    if (prog) prog.style.display = '';
+    if (!gate.ok){ if (prog) prog.textContent = gate.reason; return; }
+    if (prog) prog.textContent = 'Building MRP Request Template…';
+    try {
+      const res = await AppMrpRequest.download(state.json, flaggedObjs, state.analyst, {
+        assessmentName: state.json.metadata && state.json.metadata.assessmentName,
+        runDate: state.result.runDate
+      });
+      if (prog) prog.textContent = `✓ MRP Request Template — ${res.count} material${res.count === 1 ? '' : 's'}.`;
+    } catch (e) {
+      console.error(e);
+      if (prog) prog.textContent = '✗ ' + (e.message || String(e));
+    }
   }
 
   /* APP-ACT-02 — enable/disable the ★ For-action export buttons by how many
@@ -836,6 +1201,21 @@
     if (note) note.textContent = n === 0
       ? 'Flag materials For Action (★) to enable the “For action” exports.'
       : `${n} material${n === 1 ? '' : 's'} flagged For Action.`;
+    // APP-MRP-REQ — grey the MRP Request Template button unless Fleet Master + IW39
+    // are loaded AND ≥1 material is flagged; the tooltip explains what's missing.
+    const mrpBtn = document.querySelector('#btnMrpReq');
+    if (mrpBtn && typeof AppMrpRequest !== 'undefined') {
+      const gate = state.json ? AppMrpRequest.canDownload(state.json, n) : { ok:false, reason:'Load a dataset first.' };
+      mrpBtn.disabled = !gate.ok;
+      mrpBtn.title = gate.ok
+        ? 'MRP Request Template (Excel) for the ★ For-Action SAP inventory materials: current + recommended + analyst MRP/Min/Max/SS, open reservations, and the where-used fleet population estimate.'
+        : 'MRP Request Template — ' + gate.reason;
+    }
+    // APP-ACT-02b — the "Fleets" export buttons enable once ≥1 fleet is ticked.
+    const fleetCount = state.selectedFleets ? state.selectedFleets.size : 0;
+    document.querySelectorAll('.exp-btn.exp-fleets').forEach(b => { b.disabled = fleetCount === 0; });
+    const fpCount = document.querySelector('#fpCount');
+    if (fpCount) fpCount.textContent = fleetCount ? `${fleetCount} fleet${fleetCount === 1 ? '' : 's'} selected` : 'none selected';
   }
 
   /* APP-ACT-02 — resolve the material set for a scope, deduped across fleets.
@@ -856,13 +1236,19 @@
   async function exportScoped(format, scope){
     if (!state.result || !state.json) return;
     const prog = $('#exportProgress'); if (prog) prog.style.display = '';
-    const buckets = state.result.buckets;
+    let buckets = state.result.buckets;
     let materialFilter = null, scopeLabel = 'All fleets', scopeTag = 'FullSet';
     if (scope === 'action'){
       const flagged = state.analyst ? state.analyst.actionMaterials() : [];
       if (!flagged.length){ if (prog) prog.textContent = 'Nothing flagged For Action.'; return; }
       materialFilter = new Set(flagged);
       scopeLabel = `For action (${flagged.length})`; scopeTag = 'ForAction';
+    } else if (scope === 'fleets'){
+      // APP-ACT-02b — restrict to the fleets the operator ticked in the picker.
+      const sel = state.selectedFleets || new Set();
+      buckets = buckets.filter(b => sel.has(b.key));
+      if (!buckets.length){ if (prog) prog.textContent = 'No fleets selected — open “Selected fleets ▾” and tick some.'; return; }
+      scopeLabel = `Selected fleets (${buckets.length})`; scopeTag = 'SelectedFleets';
     }
     const assess = (state.json.metadata.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
     try {

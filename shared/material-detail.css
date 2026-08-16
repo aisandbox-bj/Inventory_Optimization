@@ -83,6 +83,13 @@
 .detail-head .desc-mfr{
   color:var(--text-muted);font-weight:400;font-size:12.5px;
 }
+/* APP-ACT-03 — clickable "See <7-digit>" material reference inside the description. */
+.detail-head .desc .see-jump{
+  font:inherit; cursor:pointer; padding:0 1px; margin:0;
+  background:transparent; border:none;
+  color:#7fe3ea; border-bottom:1px dashed rgba(31,206,216,.7);
+}
+.detail-head .desc .see-jump:hover{ background:rgba(31,206,216,.14); color:#bff3f6; }
 .detail-head .detail-head-rec{
   flex:1 1 auto;min-width:0;display:flex;flex-direction:column;
   justify-content:center;padding-left:14px;
@@ -324,6 +331,21 @@
 .stat-cell .v.crit{ color:var(--status-crit); }
 .stat-cell .v small{ color:var(--text-muted); font-size:10px; }
 
+/* APP-TREND-STATX (2026-08-15) — the secondary 2×4 stat block collapses behind a
+   blue-triangle toggle so the detail defaults to a compact 2×4. Shown on Trend and
+   Screener (shared render), so both stay in sync. */
+.stat-grid-extra{ display:none; margin-top:4px; }
+.stat-grid-extra.open{ display:grid; }
+.stat-expand{
+  display:inline-flex; align-items:center; gap:7px;
+  margin:0 0 9px; padding:3px 9px;
+  background:transparent; border:1px solid var(--border-soft); border-radius:var(--r-sm);
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1px; text-transform:uppercase;
+  color:var(--text-muted); cursor:pointer;
+}
+.stat-expand:hover{ border-color:var(--accent); color:var(--accent); }
+.stat-expand .tri{ color:var(--accent); font-size:11px; line-height:1; }
+
 /* HCE table */
 .hce-table{
   width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:11.5px;
@@ -558,6 +580,13 @@
 .mrp-compare-table th.analyst-head.clickable{ cursor:pointer; user-select:none; }
 .mrp-compare-table th.analyst-head.clickable:hover{ color:#ffe083; }
 
+/* APP-FIX-ACTHDR-STAR (2026-08-15) — the flagged state is shown by BOLD text, not
+   a ★ glyph appended to the header (the glyph was making the header row taller and
+   nudging the layout). Flagged = bold + full gold; unflagged = dimmed gold. Text
+   content is identical in both states, so the row height never changes. */
+.mrp-compare-table th.analyst-head.flagged{ font-weight:800; color:#F2C744; }
+.mrp-compare-table th.analyst-head.unflagged{ font-weight:500; color:rgba(242,199,68,0.52); }
+
 /* APP-FIX-TREND-ROWJUMP — reserve a consistent row height so flagging a material
    (locked "—" → live inputs) no longer changes the table height / shifts the screen. */
 .mrp-compare-table td{ height:40px; }
@@ -580,3 +609,10 @@
 .chart-toolbar .notes-btn:hover{ border-color:var(--accent); color:var(--accent); }
 .chart-toolbar .notes-btn.has-note{ border-color:var(--accent); color:var(--accent); }
 .chart-toolbar .notes-btn.open{ background:rgba(31,206,216,0.14); border-color:var(--accent); color:var(--accent); }
+/* APP-ACT-04 — "⤢ Pop out" toolbar button (matches the notes/where-used buttons) */
+.chart-toolbar .popout-btn{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.5px;
+  padding:5px 12px; border:1px solid var(--border); border-radius:6px;
+  background:transparent; color:var(--text-pri); cursor:pointer; transition:all .12s ease;
+}
+.chart-toolbar .popout-btn:hover{ border-color:var(--accent); color:var(--accent); background:rgba(31,206,216,.06); }

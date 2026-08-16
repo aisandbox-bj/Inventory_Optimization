@@ -162,6 +162,13 @@
 .tl-filter button[data-tl="GREY"].active  { color:var(--text-disabled);border-color:var(--text-disabled);background:rgba(155,171,168,.06); }
 .tl-filter button[data-tl="PURPLE"].active{ color:#B07CC6;border-color:#9B59B6;background:rgba(155,89,182,.10); }
 
+/* APP-TREND-ACTFILTER (2026-08-15) — the "★ Action" toggle sits after a spacer and
+   is styled in the For-Action gold/orange so it reads as a distinct filter dimension. */
+.tl-filter .tl-sep{ width:1px; align-self:stretch; margin:2px 4px; background:var(--border-soft); }
+.tl-filter button.act-filter{ color:#F2C744; border-color:rgba(242,199,68,.45); }
+.tl-filter button.act-filter:hover{ border-color:#F2C744; }
+.tl-filter button.act-filter.active{ color:#1a1205; border-color:#F2C744; background:#F2C744; font-weight:700; }
+
 .list-table-wrap{
   flex:1;overflow:auto;max-height:540px;
 }
@@ -221,7 +228,12 @@
 .list-table tr:hover td{ background:rgba(31,206,216,.04); }
 .list-table tr.selected td{ background:rgba(31,206,216,.10); }
 .list-table tr.selected td:first-child{ box-shadow:inset 3px 0 0 var(--accent); }
-.list-table td.num{ font-family:var(--font-mono);text-align:right;color:var(--accent); }
+/* APP-TREND-LISTCOLS (2026-08-15) — numeric/attribute columns (Total → Pattern)
+   are centre-aligned per operator request (was right-aligned). The matching th
+   carry a .center class so the header label + sort/filter controls centre too. */
+.list-table td.num{ font-family:var(--font-mono);text-align:center;color:var(--accent); }
+.list-table th.center{ text-align:center; }
+.list-table th.center .th-inner{ justify-content:center; }
 .list-table td.mat{ font-family:var(--font-mono);color:var(--text-pri);font-size:11.5px; }
 
 /* Filter popover */
@@ -1195,13 +1207,39 @@
 
 .export-grid{ display:flex; flex-direction:column; gap:8px; margin-top:14px; }
 .export-grid-row{
-  display:grid; grid-template-columns:210px 1fr 1fr;
+  display:grid; grid-template-columns:210px 1fr 1fr 1fr;   /* APP-ACT-02b — + Selected fleets */
   gap:10px; align-items:center;
 }
 .export-grid-head .export-scope-head{
   font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
   color:var(--text-muted); text-align:center;
 }
+/* APP-ACT-02b — the "Selected fleets ▾" scope header is a clickable toggle. */
+.export-grid-head .export-scope-head.scope-fleets-head{
+  font-family:inherit; cursor:pointer; background:transparent;
+  border:1px solid var(--border-soft); border-radius:6px; padding:3px 6px;
+}
+.export-grid-head .export-scope-head.scope-fleets-head:hover{ border-color:var(--accent); color:var(--accent); }
+.exp-btn.exp-fleets{ border-color:rgba(155,124,198,0.6); }
+.exp-btn.exp-fleets:hover:not(:disabled){ border-color:#B07CC6; background:rgba(155,89,182,.10); }
+
+/* APP-ACT-02b — fleet checkbox picker */
+.fleet-picker{ margin-top:10px; padding:10px 12px; border:1px solid var(--border-soft); border-radius:8px; background:rgba(255,255,255,.02); }
+.fleet-picker.hidden{ display:none; }
+.fleet-pick-head{ font-size:11px; color:var(--text-muted); margin-bottom:8px; letter-spacing:.3px; }
+.fleet-pick-list{ display:flex; flex-wrap:wrap; gap:6px 16px; }
+.fleet-pick-item{ display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--text-sec); cursor:pointer; }
+.fleet-pick-item .fp-name{ font-family:var(--font-mono); color:var(--text-pri); }
+.fleet-pick-item .fp-meta{ color:var(--text-muted); font-size:10.5px; }
+.fleet-pick-foot{ display:flex; align-items:center; gap:8px; margin-top:10px; }
+.fp-mini{ font-family:var(--font-mono); font-size:10.5px; padding:3px 9px; border:1px solid var(--border); background:transparent; color:var(--text-sec); border-radius:5px; cursor:pointer; }
+.fp-mini:hover{ border-color:var(--accent); color:var(--accent); }
+.fp-count{ font-size:10.5px; color:var(--text-muted); margin-left:auto; }
+.fp-empty{ color:var(--text-muted); font-size:12px; }
+
+/* APP-ACT-02b — LLM review panel sits above Exports with a gap. */
+.llm-panel-wrap{ margin-bottom:12px; }
+.export-aux-flush{ margin-top:0; padding-top:0; border-top:none; }
 .export-fmt{ font-family:var(--font-mono); font-size:12.5px; color:var(--text-pri); }
 .export-fmt small{ color:var(--text-muted); font-size:10.5px; }
 .export-action-note{ margin-top:10px; font-size:11px; color:var(--text-muted); font-style:italic; }
@@ -1224,6 +1262,9 @@
 .exp-btn.exp-pdf:hover:not(:disabled){ border-color:#E0554E; background:rgba(224,85,78,0.12); }
 .exp-btn.exp-xlsx{ border-color:rgba(33,163,102,0.70); }
 .exp-btn.exp-xlsx:hover:not(:disabled){ border-color:#21A366; background:rgba(33,163,102,0.12); }
+/* APP-MRP-REQ — the MRP Request Template button carries the For-Action gold. */
+.exp-btn.exp-mrpreq{ border-color:rgba(242,199,68,0.60); color:#F2C744; }
+.exp-btn.exp-mrpreq:hover:not(:disabled){ border-color:#F2C744; background:rgba(242,199,68,0.10); }
 .exp-btn.exp-json{ border-color:rgba(31,206,216,0.60); }
 .exp-btn.exp-json:hover:not(:disabled){ border-color:var(--accent); background:rgba(31,206,216,0.10); }
 .exp-btn.exp-dq{ border-color:rgba(245,166,35,0.60); }
@@ -1239,10 +1280,24 @@
   color:var(--accent);
   border:1px solid rgba(31,206,216,0.50);
 }
+/* APP-FIX-NOTES-DOCK (2026-08-15) — make the page shell a positioning context so the
+   notes drawer (position:absolute) anchors to it and scrolls with the content. This
+   does NOT affect the position:fixed modals/chips (fixed ignores non-transform
+   ancestors). */
+main.shell{ position:relative; }
+
+/* APP-FIX-NOTES-DOCK (2026-08-15) — the drawer was position:fixed at the viewport's
+   right edge, so on wide screens it floated far from the chart and stayed put when
+   the page scrolled. Now it is position:absolute inside main.shell (so it scrolls
+   WITH the page content) and its top is set in JS to line up with the detail/chart
+   panel — it pops up adjacent to the graph. The whole drawer is vertically resizable
+   from its bottom edge (resize:vertical). */
 .notes-drawer{
-  position:fixed; right:18px; top:118px; z-index:60;
-  width:330px; max-width:calc(100vw - 36px); max-height:72vh;
+  position:absolute; right:8px; top:118px; z-index:60;
+  width:330px; max-width:calc(100vw - 36px);
+  height:360px; min-height:190px; max-height:80vh;
   display:flex; flex-direction:column;
+  resize:vertical; overflow:hidden;
   background:var(--bg-panel, #0f2b3a);
   border:1px solid var(--accent); border-radius:10px;
   box-shadow:0 14px 44px rgba(0,0,0,.45);
@@ -1254,10 +1309,50 @@
 .notes-head .notes-close{ margin-left:auto; background:transparent; border:none; color:var(--text-muted); font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:5px; }
 .notes-head .notes-close:hover{ color:var(--text-pri); background:rgba(255,255,255,0.06); }
 .notes-area{
-  flex:1 1 auto; min-height:190px; resize:vertical; margin:0;
+  flex:1 1 auto; min-height:90px; resize:none; margin:0;
   padding:12px 13px; border:none; outline:none;
   background:transparent; color:var(--text-pri);
   font-family:var(--font-body); font-size:13px; line-height:1.5;
 }
 .notes-area::placeholder{ color:var(--text-muted); }
 .notes-foot{ padding:8px 13px; border-top:1px solid var(--border); font-size:10.5px; color:var(--text-muted); font-family:var(--font-mono); letter-spacing:.3px; }
+
+/* ═══ APP-ACT-04 · floating material-detail pop-out card (modal) ═══ */
+/* Darken + block the page behind the card; a click on it closes the card. The
+   list underneath is intentionally inert while the card is open — in-card
+   navigation is Prev/Next only. */
+.gp-backdrop{ position:fixed; inset:0; z-index:79; background:rgba(4,16,22,0.62); }
+.gp-backdrop.hidden{ display:none; }
+.graph-popout{
+  position:fixed; z-index:80; left:40px; top:80px;
+  width:1040px; height:700px; max-width:calc(100vw - 20px); max-height:calc(100vh - 20px);
+  display:flex; flex-direction:column;
+  background:var(--bg-panel, #0f2b3a);
+  border:1px solid var(--accent); border-radius:12px;
+  box-shadow:0 22px 70px rgba(0,0,0,.55);
+  overflow:hidden;
+}
+.graph-popout.hidden{ display:none; }
+.gp-head{
+  display:flex; align-items:center; gap:10px; padding:9px 12px;
+  border-bottom:1px solid var(--border); cursor:move; user-select:none;
+  background:rgba(255,255,255,0.02); flex:0 0 auto;
+}
+.gp-head .gp-grip{ color:var(--text-muted); font-size:13px; }
+.gp-head .gp-title{ font-family:var(--font-mono); font-size:12px; color:var(--text-pri); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gp-head .gp-spacer{ flex:1 1 auto; }
+.gp-btn{ background:transparent; border:1px solid var(--border); color:var(--text-sec); font-size:11px; font-family:var(--font-mono); cursor:pointer; padding:3px 9px; border-radius:6px; }
+.gp-btn:hover{ border-color:var(--accent); color:var(--accent); }
+.gp-btn.on{ border-color:var(--accent); color:var(--accent); background:rgba(31,206,216,.10); }
+.gp-btn.gp-close{ border:none; font-size:14px; padding:2px 7px; }
+.gp-body{ flex:1 1 auto; display:flex; min-height:0; }
+.gp-detail{ flex:1 1 auto; overflow:auto; padding:12px 14px; min-width:0; }
+.gp-notes{ flex:0 0 300px; display:flex; flex-direction:column; border-left:1px solid var(--border); background:rgba(255,255,255,0.015); }
+.gp-notes.hidden{ display:none; }
+.gp-notes-head{ padding:9px 12px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px; letter-spacing:.5px; color:var(--accent); }
+.gp-notes-area{ flex:1 1 auto; resize:none; border:none; outline:none; background:transparent; color:var(--text-pri); font-family:var(--font-body); font-size:13px; line-height:1.5; padding:11px 12px; }
+.gp-notes-area::placeholder{ color:var(--text-muted); }
+.gp-resize{
+  position:absolute; right:2px; bottom:2px; width:16px; height:16px; cursor:nwse-resize; opacity:.6;
+  background:linear-gradient(135deg, transparent 55%, var(--text-muted) 55%, var(--text-muted) 63%, transparent 63%, transparent 74%, var(--text-muted) 74%, var(--text-muted) 82%, transparent 82%);
+}

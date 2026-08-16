@@ -97,6 +97,26 @@
     <div class="notes-foot">Saved automatically · rides the JSON export</div>
   </aside>
 
+  <!-- ─── APP-ACT-04 · floating material-detail pop-out (modal, draggable + resizable) ─── -->
+  <div id="gpBackdrop" class="gp-backdrop hidden"></div>
+  <div id="graphPopout" class="graph-popout hidden" role="dialog" aria-modal="true" aria-label="Material detail pop-out">
+    <div class="gp-head" id="gpHead" title="Drag to move">
+      <span class="gp-grip" aria-hidden="true">⠿</span>
+      <span class="gp-title" id="gpTitle">—</span>
+      <span class="gp-spacer"></span>
+      <button type="button" class="gp-btn" id="gpNotesToggle" title="Show / hide the notes panel">✎ Notes</button>
+      <button type="button" class="gp-btn gp-close" id="gpClose" title="Close (or click outside the card)">✕</button>
+    </div>
+    <div class="gp-body">
+      <div class="gp-detail" id="gpDetail"></div>
+      <aside class="gp-notes hidden" id="gpNotes">
+        <div class="gp-notes-head">✎ Note · <span id="gpNotesMat">—</span></div>
+        <textarea id="gpNotesArea" class="gp-notes-area" placeholder="Notes for this material — saved with your analyst data and shown again when you reopen it."></textarea>
+      </aside>
+    </div>
+    <div class="gp-resize" id="gpResize" title="Drag to resize"></div>
+  </div>
+
   <!-- ─── Floating "mass review in progress" chip ─── -->
   <div id="massChip" class="mass-chip hidden">
     <span class="mass-chip-spinner"></span>
@@ -209,6 +229,7 @@
 <script src="../shared/excel.js"></script>
 <script src="../shared/trace-phase.js"></script>
 <script src="../shared/where-used.js"></script>
+<script src="../shared/mrp-request.js"></script>
 <script src="../shared/movement-detail.js"></script>
 <script src="../shared/analyst-marks.js"></script>
 <script src="../shared/material-detail.js"></script>
