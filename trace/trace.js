@@ -48,7 +48,7 @@
       groupSearch:    ''
     },
 
-    activeView:       'procurement-chain',
+    activeView:       'phase-distribution',   // APP-TRACE-VIEWORDER — Phase Distribution leads
     matSearch:        '',
     chains:           [],          // computed per selected single material (raw, unfiltered)
     chart:            null,
@@ -548,6 +548,9 @@
           <span class="banner-lab">Material</span>
           <div class="banner-id">${escapeHtml(mat.material)}</div>
           <div class="banner-desc">${escapeHtml(mat.description || '—')}</div>
+          <!-- APP-TRACE-BACK (2026-08-15) — one-click return to THIS material on Trend
+               (Trend reads #mat= on boot and re-selects it). -->
+          <a class="banner-back" href="../analysis/analysis.html#mat=${encodeURIComponent(mat.material)}" title="Return to this material on the Trend page">&larr; Back to Trend</a>
         </div>
         ${renderBannerDetails(mat.material)}
         <div class="banner-mid">
@@ -584,15 +587,23 @@
     const s = state.matStats && state.matStats.get(material);
     if (!s) return '<div class="banner-details"></div>';
     const show = v => (v == null || v === '') ? '—' : v;
-    const mrp  = `${s.mrpType || '—'} · ${show(s.cmin)}/${show(s.cmax)} · SS ${show(s.safetyStock)}`;
+    // APP-FIX-TRACE-BANNER — SS appears ONCE now (in the value); the label carries
+    // the field names, so the old doubled "· SS" prefix in the value is dropped.
+    const mrp  = `${s.mrpType || '—'} · ${show(s.cmin)}/${show(s.cmax)} · ${show(s.safetyStock)}`;
     const p2   = (s.p2Flag === 'OK' && typeof s.p2Rate === 'number') ? (s.p2Rate.toFixed(2) + ' /mo') : '—';
     const soh  = (s.stock == null) ? '—' : s.stock;
-    const cell = (lab, val) => `<div class="bd-cell"><span class="banner-lab">${lab}</span><div class="bd-v">${escapeHtml(String(val))}</div></div>`;
+    // APP-TRACE-DEMAND — open reservations (unsatisfied demand) from the Inventory
+    // Master (canonical totalReservation). '—' when the extract carries no
+    // reservation column — never a fabricated number (credibility).
+    const resv = (s.totalReservation == null) ? '—' : s.totalReservation;
+    // isNum → the value is centre-aligned (labels/text stay left) per APP-FIX-TRACE-BANNER.
+    const cell = (lab, val, isNum) => `<div class="bd-cell${isNum ? ' num' : ''}"><span class="banner-lab">${lab}</span><div class="bd-v">${escapeHtml(String(val))}</div></div>`;
     return `<div class="banner-details">
       ${cell('Manufacturer', s.manufacturer || '—')}
       ${cell('MRP · Min/Max · SS', mrp)}
-      ${cell('Stock on hand', soh)}
-      ${cell('P2 rate', p2)}
+      ${cell('SoH', soh, true)}
+      ${cell('Open reservations', resv, true)}
+      ${cell('P2 rate', p2, true)}
       ${cell('Last consumption', s.lastConsumptionDate || '—')}
     </div>`;
   }
@@ -708,6 +719,13 @@
       return;
     }
 
+    // APP-T-MRPFREQ — MRP-run cadence. Scope-independent (reads every PR in the
+    // run), so it renders the same in single or multi scope.
+    if (state.activeView === 'mrp-cadence') {
+      renderMrpCadence(host);
+      return;
+    }
+
     // Any other view is queued — render the not-built state (regardless of
     // scope mode). Queued multi-material views get a richer panel with the
     // candidate list; queued single-material views get a shorter one.
@@ -716,6 +734,102 @@
     } else {
       host.innerHTML = renderMultiNoView();
     }
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-T-MRPFREQ — MRP-run cadence. A stacked bar of MRP-created PRs per period
+     (day / week / month) split by outcome: Converted to PO · Cancelled · Open.
+     "MRP-created" = EBAN creation indicator 'B' (blank defaults to 'B', matching
+     TracePhase). Reads raw prHistory — independent of the material rail. Honest:
+     no PR History, or no MRP-created PRs, says so rather than drawing empty bars.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function isMrpCreated(r){ return (String(r.creationIndicator || '').trim() || 'B') === 'B'; }
+  function prCancelled(r){
+    const di = String(r.deletionIndicator || '').trim();
+    return di !== '' && di !== '0';
+  }
+  function mfPeriodKey(dateStr, period){
+    const s = String(dateStr || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    if (period === 'month') return s.slice(0, 7);
+    if (period === 'week'){
+      const d = new Date(s + 'T00:00:00Z');
+      if (isNaN(d.getTime())) return null;
+      const dow = (d.getUTCDay() + 6) % 7;          // Mon = 0
+      d.setUTCDate(d.getUTCDate() - dow);           // back to Monday
+      return d.toISOString().slice(0, 10);          // week labelled by its Monday
+    }
+    return s;                                       // day
+  }
+
+  function renderMrpCadence(host){
+    const prs = (state.json && state.json.data && state.json.data.prHistory) || [];
+    state.mrpFreqPeriod = state.mrpFreqPeriod || 'day';
+    if (state.chart) { state.chart.destroy(); state.chart = null; }
+    if (!prs.length){
+      host.innerHTML = `<div class="view-empty"><h3>No PR History loaded</h3><p>The MRP-run cadence reads the PR-to-PO history. Load PR History in Intake to see how many MRP-created PRs land each period and whether they convert to a PO or get cancelled.</p></div>`;
+      return;
+    }
+    const mrpPrs = prs.filter(isMrpCreated);
+    if (!mrpPrs.length){
+      host.innerHTML = `<div class="view-empty"><h3>No MRP-created PRs</h3><p>None of the ${prs.length.toLocaleString()} loaded PRs carry the MRP creation indicator (EBAN-ESTKZ = B). This view charts MRP-driven requisitions only.</p></div>`;
+      return;
+    }
+    const period = state.mrpFreqPeriod;
+    const map = new Map();
+    let undated = 0, conv = 0, canc = 0, opn = 0;
+    for (const r of mrpPrs){
+      const key = mfPeriodKey(r.prDate, period);
+      if (!key){ undated++; continue; }
+      let e = map.get(key); if (!e){ e = { conv:0, canc:0, open:0 }; map.set(key, e); }
+      if (prCancelled(r)){ e.canc++; canc++; }
+      else if (String(r.purchaseOrder || '').trim()){ e.conv++; conv++; }
+      else { e.open++; opn++; }
+    }
+    const keys = [...map.keys()].sort();
+    const convData = keys.map(k => map.get(k).conv);
+    const cancData = keys.map(k => map.get(k).canc);
+    const openData = keys.map(k => map.get(k).open);
+    const total = conv + canc + opn;
+    const cancRate = total ? (canc / total * 100) : 0;
+
+    const pBtn = (p, lab) => `<button type="button" class="mf-period ${period === p ? 'active' : ''}" data-mf="${p}">${lab}</button>`;
+    host.innerHTML = `
+      <div class="mf-toolbar">
+        <span class="mf-toolbar-lab">Bucket by</span>
+        ${pBtn('day','Day')}${pBtn('week','Week')}${pBtn('month','Month')}
+      </div>
+      <div class="vol-kpi-strip">
+        <div class="vk-cell"><span class="lab">MRP PRs</span><span class="v">${total.toLocaleString()}</span><span class="sub">creation ind. B</span></div>
+        <div class="vk-cell"><span class="lab">Converted to PO</span><span class="v">${conv.toLocaleString()}</span><span class="sub">has a PO</span></div>
+        <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${canc ? 'warn' : ''}">${canc.toLocaleString()}</span><span class="sub">deletion flag</span></div>
+        <div class="vk-cell"><span class="lab">Open</span><span class="v">${opn.toLocaleString()}</span><span class="sub">no PO yet</span></div>
+        <div class="vk-cell"><span class="lab">Cancellation rate</span><span class="v ${cancRate > 30 ? 'warn' : ''}">${cancRate.toFixed(1)}%</span><span class="sub">cancelled ÷ MRP PRs</span></div>
+      </div>
+      <div class="vol-chart-host"><canvas id="mfChart"></canvas></div>
+      <div class="chart-caveat">Each bar = MRP-created PRs (EBAN creation indicator <b>B</b>; blank treated as B) whose requisition date falls in that ${period}. Stacked by outcome: <b>Converted</b> (a PO number is present) · <b>Cancelled</b> (deletion indicator set) · <b>Open</b> (no PO, not cancelled). ${undated ? `<b>${undated}</b> PR${undated === 1 ? '' : 's'} had no valid requisition date and are omitted. ` : ''}Reads all PRs in the run, independent of the material rail.</div>
+    `;
+    host.querySelectorAll('.mf-period').forEach(b => b.addEventListener('click', () => { state.mrpFreqPeriod = b.dataset.mf; renderActiveView(); }));
+
+    state.chart = new Chart($('#mfChart'), {
+      type: 'bar',
+      data: {
+        labels: keys,
+        datasets: [
+          { label: 'Converted to PO', data: convData, backgroundColor: '#1FCED8' },
+          { label: 'Open',            data: openData, backgroundColor: '#FBBF24' },
+          { label: 'Cancelled',       data: cancData, backgroundColor: '#EF4444' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, ticks: { color:'#9BABA8', maxTicksLimit: 16, autoSkip: true, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } },
+          y: { stacked: true, beginAtZero: true, ticks: { color:'#9BABA8', precision:0, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
+        },
+        plugins: { legend: { labels: { color:'#DBE9F0', font:{ family:'JetBrains Mono', size:11 } } } }
+      }
+    });
   }
 
   function isSingleScopeView(_v){

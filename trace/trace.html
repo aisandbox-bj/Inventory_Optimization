@@ -109,7 +109,14 @@
            the "not built yet" panel rather than refusing the click. -->
       <div class="view-group">
         <div class="view-group-label">Single material</div>
-        <button class="view-btn active" data-view="procurement-chain">
+        <!-- APP-TRACE-VIEWORDER (2026-08-15) — operator-preferred order:
+             Phase Distribution · Procurement Chain · Raw Data · Volume · Year-on-Year.
+             Phase Distribution leads (and is the default active view). -->
+        <button class="view-btn active" data-view="phase-distribution" title="Box plots per phase A–E (mean line + whiskers to min/max, shared scale = average total lead time) + stats table">
+          <span class="view-btn-marker">▶</span>
+          <span class="view-btn-label">Phase Distribution</span>
+        </button>
+        <button class="view-btn" data-view="procurement-chain">
           <span class="view-btn-marker">▶</span>
           <span class="view-btn-label">Procurement Chain</span>
         </button>
@@ -119,10 +126,6 @@
           <span class="view-btn-marker">▶</span>
           <span class="view-btn-label">Raw Data</span>
         </button>
-        <button class="view-btn" data-view="phase-distribution" title="Box plots per phase A–E (mean line + whiskers to min/max, shared scale = average total lead time) + stats table">
-          <span class="view-btn-marker">▶</span>
-          <span class="view-btn-label">Phase Distribution</span>
-        </button>
         <button class="view-btn" data-view="volume" title="Cumulative volume — PR raised / PO raised / Site receipt / Consumed + cancelled-PR ticks">
           <span class="view-btn-marker">▶</span>
           <span class="view-btn-label">Volume cumulative</span>
@@ -130,6 +133,11 @@
         <button class="view-btn" data-view="year-on-year" title="Per-phase box plots compared year-on-year (e.g. 2025 vs 2026) with per-year change comments + shared-scale total-timeline chevrons">
           <span class="view-btn-marker">▶</span>
           <span class="view-btn-label">Year-on-Year</span>
+        </button>
+        <!-- APP-T-MRPFREQ — MRP-run cadence (reads all PRs in the run). -->
+        <button class="view-btn" data-view="mrp-cadence" title="MRP-created PRs per day / week / month, stacked by outcome (converted to PO · cancelled · open). Reads the whole PR History, independent of the selected material.">
+          <span class="view-btn-marker">▶</span>
+          <span class="view-btn-label">MRP-run cadence</span>
         </button>
       </div>
 

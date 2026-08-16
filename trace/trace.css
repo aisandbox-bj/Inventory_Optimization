@@ -355,6 +355,16 @@
   font-family:var(--font-mono); font-size:11px; color:var(--text-sec);
   letter-spacing:.3px;
 }
+/* APP-TRACE-BACK (2026-08-15) — "← Back to Trend" link under the material id. */
+.content-banner .banner-back{
+  display:inline-block; margin-top:6px;
+  font-family:var(--font-mono); font-size:10.5px; letter-spacing:.5px;
+  color:var(--accent); text-decoration:none;
+  border:1px solid rgba(31,206,216,.4); border-radius:var(--r-sm);
+  padding:2px 8px;
+}
+.content-banner .banner-back:hover{ border-color:var(--accent); background:rgba(31,206,216,.08); }
+
 /* APP-Y-01 — banner block layout: Material on the left, the material-details
    block fills the middle, Assessment + Source data pushed to the right. */
 .content-banner .banner-left{ flex:0 0 auto; min-width:0; }
@@ -363,10 +373,14 @@
   display:flex; flex-wrap:wrap; gap:4px 22px; align-items:center;
 }
 .content-banner .banner-details .bd-cell{ min-width:0; }
+/* APP-FIX-TRACE-BANNER — numeric cells centre their value (labels/text stay left). */
+.content-banner .banner-details .bd-cell.num{ min-width:74px; text-align:center; }
+.content-banner .banner-details .bd-cell.num .banner-lab{ text-align:left; }
 .content-banner .banner-details .bd-v{
   font-family:var(--font-mono); font-size:12px; color:var(--text-sec);
   letter-spacing:.3px; white-space:nowrap;
 }
+.content-banner .banner-details .bd-cell.num .bd-v{ text-align:center; }
 .content-banner .banner-mid{ flex:0 0 auto; margin-left:auto; }
 .content-banner .banner-right{ flex:0 0 auto; }
 @media (max-width:980px){
@@ -376,6 +390,13 @@
 
 /* View container */
 .content-view{ display:flex; flex-direction:column; gap:8px; }
+
+/* APP-T-MRPFREQ — period toggle for the MRP-run cadence view */
+.mf-toolbar{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.mf-toolbar-lab{ font-family:var(--font-mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted); }
+.mf-period{ font-family:var(--font-mono); font-size:11px; padding:4px 11px; border:1px solid var(--border); background:transparent; color:var(--text-sec); border-radius:var(--r-sm); cursor:pointer; }
+.mf-period:hover{ border-color:var(--accent); color:var(--accent); }
+.mf-period.active{ border-color:var(--accent); color:var(--accent); background:rgba(31,206,216,.10); }
 
 /* Procurement Chain summary (was the detail-head-summary in T-03) */
 .pchain-summary{
