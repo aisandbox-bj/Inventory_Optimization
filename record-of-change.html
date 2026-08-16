@@ -380,6 +380,77 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.1.5-dev - "No-test sprint": MRP Request Template + LLM-split/Selected-fleets + pop-out + See-jump + Trace tidy/demand/cadence + Lead-time suppression - BUILT, NOT PUSHED -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-15</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>"No-test sprint" — MRP Request Template export · LLM-review panel split + Selected-fleets scope · floating graph pop-out · See-&lt;7-digit&gt; jump · Trace banner tidy + open-demand + MRP-run cadence · Trend lead-time honours Trace suppression — <b>built, pending push + operator validation</b></h4>
+      <ul>
+        <li><b>APP-MRP-REQ (Part B).</b> A new <b>"⤓ MRP Request Template"</b> button on the Trend Exports panel (new module <code>shared/mrp-request.js</code>) builds an Excel for the <b>★ For-Action</b> SAP inventory materials — one row each with: SAP # · description · Stock on hand · Unit cost (moving-average price) · Open reservations · <b>current</b> MRP/Min/Max/Safety · <b>algorithmic recommended</b> MRP/Min/Max · <b>Analyst</b> MRP/Min/Max/Safety · where-used models · Observed units · <b>Estimated unit population</b> (Manufacturer + base-model match over the Fleet register — e.g. F350 XL → the F350 population) · Basis %. It <b>greys out with a plain reason</b> unless <b>Fleet Master + IW39</b> are loaded <b>AND</b> at least one material is flagged For Action. Deterministic (no web-research fields). The population is an <b>estimate</b> — the sheet carries a "verify against SAP" caveat, never presented as exact. Files: <code>shared/mrp-request.js</code>, <code>shared/pipeline.js</code> (adds <code>movingAvgPrice</code> + <code>totalReservation</code> onto each material), <code>analysis/analysis.{js,css,html}</code>.
+          <ul>
+            <li><b>Part A deferred (honest).</b> The intake-time opt-in that would flip Fleet Master + IW39 to ★-required for a template-intended run is <em>not</em> built. The export-time grey-out already prevents the dead-end (you can't download the template without the needed data), so Part A is queued, not shipped.</li>
+          </ul>
+        </li>
+        <li><b>APP-ACT-02b (partial).</b> Two of the three Phase-2b items: (1) the <b>LLM review</b> tools (Mass review + Reload saved review) are split out of the Exports panel into their <b>own collapsible "LLM review" panel</b>, positioned <b>above</b> the Exports panel; (2) a new <b>"Selected fleets ▾"</b> export scope — a fleet <b>checkbox picker</b> (each fleet shows its material count + unit count) whose ticked fleets drive new <b>"Fleets"</b> buttons on each format row (PDF / Excel Full / Excel Summary). <b>Not done (deliberate):</b> deleting the now-dead legacy export code — operator decision to leave that inert housekeeping in place to stay safe. Files: <code>analysis/analysis.{js,css}</code>.</li>
+        <li><b>APP-ACT-04 · floating graph pop-out.</b> A <b>modal card</b> (darkened backdrop blocks the page behind it) showing the <b>full material detail</b> — chart + stats/MRP, the same render as the inline panel — with the <b>Notes pad joined on the right</b> (the ✎ toggle shows/hides it). The card is <b>draggable by its header</b> and <b>resizable from the bottom-right corner</b>. It's live-linked to the selected material; in-card navigation is <b>Prev/Next</b>; close via the ✕, the backdrop, or Esc. Files: <code>analysis/analysis.{html,css,js}</code>, <code>shared/material-detail.js</code> (adds a "⤢ Pop out" toolbar button), <code>shared/material-detail.css</code>.</li>
+        <li><b>APP-ACT-03 · "See &lt;7-digit&gt;" jump.</b> Any 7-digit material number in an Inventory-Master description that is <b>actually in the loaded pack</b> becomes a <b>clickable link</b> that jumps straight to that material. If the referenced number isn't in the pack, it stays plain text (credibility — no dead links). Files: <code>shared/material-detail.{js,css}</code>, <code>analysis/analysis.js</code>.</li>
+        <li><b>APP-FIX-TRACE-BANNER.</b> Trace single-material banner tidy: <b>"Stock on hand" → "SoH"</b>; the doubled <b>"SS"</b> label removed (shown once, in the value); numeric cells <b>centre-aligned</b> (labels stay left). Files: <code>trace/trace.{js,css}</code>.</li>
+        <li><b>APP-TRACE-DEMAND.</b> <b>Open reservations</b> (unsatisfied demand) now show in the Trace banner, from the Inventory Master's <code>totalReservation</code> field. Shows <b>"—"</b> when the extract doesn't carry that field — never fabricated. Files: <code>shared/pipeline.js</code>, <code>trace/trace.{js,css}</code>.</li>
+        <li><b>APP-T-MRPFREQ · MRP-run cadence (Trace view).</b> A new Trace view: a <b>stacked bar of MRP-created PRs</b> (EBAN creation indicator <code>B</code>) per <b>Day / Week / Month</b> (toggle), split by outcome — <b>Converted-to-PO / Cancelled / Open</b>. It reads all PR History and is independent of the single-material rail, with honest empty states when there's no PR History or no MRP-created PRs. Files: <code>trace/trace.{html,js,css}</code>.</li>
+        <li><b>APP-FIX-TREND-LT-SUPPRESS.</b> The Trend <b>"Lead (mo)"</b> list column and the <b>"Lead time"</b> stat cell now <b>honour the operator's Trace outlier suppression</b> (manual PO excludes + sigma) — loaded from <code>trace.viewState</code> at boot and applied via <code>TracePhase.activeChains</code> (Screener parity). Because Trend re-boots when you navigate to it, suppressing a PO in Trace and returning to Trend re-reads the state and the figure moves. This <b>corrects the just-shipped APP-TREND-LT</b>, which showed an un-suppressed mean. Files: <code>analysis/analysis.js</code>.</li>
+        <li><b>Rollback / status.</b> All eight items are <b>built and verified on-machine but NOT pushed</b> — origin/main is still <code>57219eb</code>; this is the operator's off-repo validation pass. No SCHEMA_VERSION change. (Called the "no-test sprint" as a batch of features intended for the operator's own click-through test.)</li>
+      </ul>
+    </article>
+
+    <!-- v2.1.5-dev - Phase 3 follow-up: stat-grid unit cost + operator layout + Lead time - BUILT, NOT PUSHED -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-15</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>Phase 3 follow-up — stat grid: Unit cost replaces Stock value · operator-arranged layout · Lead time promoted into the always-shown block — <b>built, pending push + operator validation</b></h4>
+      <ul>
+        <li><b>APP-TREND-UNITCOST.</b> In the material-detail <b>stat grid</b>, the <b>"Stock value (CAD)"</b> cell is replaced by <b>"Unit cost (CAD)"</b> — sourced from the Inventory Master <b>moving average price</b> (per unit), not stock quantity × price. Shows <b>"—"</b> when the moving-average-price column isn't in the extract (never a fabricated 0). Because the detail panel is shared, this also appears on the Screener and Sandbox. Files: <code>shared/pipeline.js</code> (carries <code>movingAvgPrice</code> onto each material), <code>shared/material-detail.js</code>.</li>
+        <li><b>Stat grid — operator-arranged layout + Lead time added.</b> The expandable stat grid (from APP-TREND-STATX above) is re-laid-out to the operator's chosen order:
+          <ul>
+            <li><b>Always shown (primary):</b> Stock on hand · Unit cost (CAD) · Runway @ P2 · P2 rate · Total (window) · Per event cons · Last consumption* · <b>Lead time*</b>.</li>
+            <li><b>More stats</b> (behind the blue triangle): P1 → P2 change · Adj P2 (HCE excl) · Stockouts in window* · Drop cause* · Pattern · P1 rate.</li>
+          </ul>
+          <b>Lead time</b> is now also a stat cell (in addition to the "Lead (mo)" list column from APP-TREND-LT) — it needs PR History and is <b>Trend-only</b>; it and <b>Last consumption</b> show <b>"—"</b> when their data isn't available. <b>Honest note:</b> because two conditional cells (Lead time, Last consumption) sit in the always-shown block, that block renders <b>6–8 cells depending on data</b> — it reflows to fit, and never shows a blank or a fake value in place of missing data. Files: <code>shared/material-detail.js</code>.</li>
+      </ul>
+    </article>
+
+    <!-- v2.1.5-dev - Phase 3 (Everything on one screen) + review-screen tweaks - BUILT, NOT PUSHED -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-15</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>Phase 3 (Everything on one screen) + review-screen tweaks — ★ Action filter · Lead-time column · expandable stat block · Trace view re-order + Back-to-Trend · Notes-dock &amp; list-column fixes — <b>built, pending push + operator validation</b></h4>
+
+      <h4>Review-screen tweaks (Phase 1 follow-up feedback)</h4>
+      <ul>
+        <li><b>APP-FIX-ACTHDR-STAR.</b> The <b>"Analyst" header</b> on the MRP Settings table no longer adds a ★ glyph when a material is flagged For Action — the glyph made the header row taller and nudged the layout. Flagged now reads as <b>bold, full-gold header text</b>; unflagged is dimmed gold. The text is identical either way, so the row height never changes. Files: <code>shared/material-detail.{js,css}</code>.</li>
+        <li><b>APP-FIX-NOTES-DOCK.</b> The per-material <b>Notes drawer</b> used to pin to the viewport's right edge — on wide screens it floated far from the chart and didn't move when the page scrolled. It now <b>docks next to the graph</b> (its top lines up with the detail/chart panel), <b>scrolls with the page</b>, and is <b>vertically resizable from its bottom edge</b>. Files: <code>analysis/analysis.{css,js}</code>.</li>
+        <li><b>APP-TREND-LISTCOLS.</b> In the material <b>list table</b> (above the graph): the <b>MRP</b> column moved to sit right after <b>P2/mo</b>, and every column from <b>Total → Pattern</b> is now <b>centre-aligned</b>. Files: <code>analysis/analysis.{js,css}</code>.</li>
+      </ul>
+
+      <h4>Phase 3 — "Everything on one screen"</h4>
+      <ul>
+        <li><b>APP-TREND-ACTFILTER.</b> A <b>"★ Action" filter toggle</b> (gold/orange) in the traffic-light filter row shows only the materials flagged <b>For Action</b>. It ANDs with the traffic-light filter, so you can narrow to (say) flagged reds. Files: <code>analysis/analysis.{js,css}</code>.</li>
+        <li><b>APP-TREND-LT.</b> A new <b>"Lead (mo)"</b> column in the material list — the average <b>total-to-site procurement lead time in months</b> (mean of completed procurement chains, phases A–D, excluding shelf / time-to-first-use, via the Trace engine). Computed once when the pipeline runs, only for materials that appear in <b>PR History</b>; shows <b>"—"</b> when there's no PR History or no completed chain — never a fake 0 (credibility). It's an untrimmed mean, so a material's figure on the Trace page (which can sigma/manual-trim outliers per material) may differ slightly; the column tooltip says so. Files: <code>analysis/analysis.js</code>.</li>
+        <li><b>APP-TREND-STATX.</b> The material-detail <b>stat block</b> is now a compact <b>primary 2×4</b> — Stock on hand · Stock value · P1 rate · P2 rate · Runway @ P2 · P1→P2 change · Pattern · Total window — that's always shown, plus a <b>secondary 2×4</b> — Adj P2 · Per-event cons · Last consumption · Stockouts · Drop cause — collapsed behind a <b>blue-triangle "More stats / Fewer stats" toggle</b>. The expanded/collapsed choice is remembered as you step Prev/Next. Because the detail panel is shared, this also appears on the Screener and Sandbox. Files: <code>shared/material-detail.{js,css}</code>.</li>
+        <li><b>APP-TRACE-VIEWORDER.</b> The Calibre <b>Trace</b> single-material views are re-ordered to <b>Phase Distribution · Procurement Chain · Raw Data · Volume · Year-on-Year</b> — Phase Distribution now leads and is the default view. Files: <code>trace/trace.{html,js}</code>.</li>
+        <li><b>APP-TRACE-BACK.</b> A <b>"← Back to Trend"</b> link in the Trace single-material banner returns to that same material on the Trend page (Trend now reads a <code>#mat=&lt;material&gt;</code> deep link on load and re-selects it, scrolling it into view). Pairs with the existing "Trace it!" button for round-trip navigation. Files: <code>trace/trace.{js,css}</code>, <code>analysis/analysis.js</code>.</li>
+        <li><b>Rollback.</b> Pre-chunk clean baseline = origin/main <code>57219eb</code> (this work is unpushed). Local snapshot at <code>_rollback/PHASE3-pre/</code> (a clean copy of <code>57219eb</code>); at push time a <code>backup/pre-phase3</code> branch + <code>checkpoint/pre-phase3</code> tag are cut at <code>57219eb</code>. No SCHEMA_VERSION change.</li>
+      </ul>
+    </article>
+
     <!-- v2.1.5-dev - Phase 1 (Capture & keep) - BUILT + TESTED LOCALLY, NOT PUSHED -->
     <article class="roc-entry dev">
       <div class="head">
