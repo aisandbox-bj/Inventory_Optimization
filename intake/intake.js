@@ -2205,6 +2205,18 @@
       // APP-E3-TRIM — honour the same opt-in for the downloaded file.
       const trimChk = $('#chkTrimScope');
       if (trimChk && trimChk.checked) trimToScope(json);
+      // APP-FIX-ANALYST-DL (2026-08-16) — carry the analyst layer (For-Action
+      // flags, recs, notes) into the downloaded combined file, exactly as the Trend
+      // export does. Without this, a JSON combined here (e.g. + IW39) drops the
+      // operator's analyst work, so re-loading it shows nothing. Top-level
+      // `_analystData` block; the Upload handler strips it before it becomes the
+      // canonical, so the stored dataset stays pure.
+      try {
+        if (typeof AnalystMarks !== 'undefined' && AnalystMarks.load) {
+          const raw = AnalystMarks.load(json.metadata.assessmentName || '');
+          if (raw && Object.keys(raw).length) json._analystData = raw;
+        }
+      } catch (err) { console.warn('APP-FIX-ANALYST-DL embed (download):', err); }
       // APP-E3-MINIFY — compact (no pretty-print whitespace) — ~28% smaller file,
       // zero data loss. The localStorage save (storage.js) was already compact;
       // only this download was pretty-printed. Still valid JSON; the Upload .json

@@ -789,27 +789,33 @@
       host.innerHTML = `<div class="view-empty"><h3>No PR History loaded</h3><p>The MRP-run cadence reads the PR-to-PO history. Load PR History in Intake to see when MRP raised requisitions for this material and what became of them.</p></div>`;
       return;
     }
-    const chains    = (typeof TracePhase !== 'undefined' && TracePhase.computeChains) ? TracePhase.computeChains(state.json, mat) : [];
-    const mrpChains = chains.filter(isMrpChain);
-    const manualCt  = chains.length - mrpChains.length;
-    if (!mrpChains.length){
-      host.innerHTML = `<div class="view-empty"><h3>No MRP-created requisitions</h3><p>Material <b>${escapeHtml(String(mat || ''))}</b> has ${chains.length.toLocaleString()} requisition chain${chains.length === 1 ? '' : 's'} in the run, but none carry the MRP creation indicator (EBAN-ESTKZ = B). This view charts MRP-driven requisitions only.</p></div>`;
+    const chains = (typeof TracePhase !== 'undefined' && TracePhase.computeChains) ? TracePhase.computeChains(state.json, mat) : [];
+    if (!chains.length){
+      host.innerHTML = `<div class="view-empty"><h3>No requisition history</h3><p>Material <b>${escapeHtml(String(mat || ''))}</b> has no PR-to-PO requisition chains in this run, so there is nothing to place on the timeline.</p></div>`;
       return;
     }
     const period = state.mrpFreqPeriod;
-    const agg = new Map();
-    let undated = 0, complete = 0, inflight = 0, cancelled = 0;
-    for (const c of mrpChains){
+    // APP-FIX-MRPFREQ-ALLCHAINS (2026-08-16) — chart EVERY requisition chain, not
+    // just creation-indicator-B, so the view reconciles with Raw Data (the round-2
+    // build dropped non-B chains — incl. recent completes — and never tied to the
+    // 44 rows). Each chain is split two ways: by outcome (Complete / In-flight /
+    // Cancelled = its state) AND by source — MRP-generated (creation ind. B, solid
+    // fill) vs manually created or other (R / F, hatched fill). Nothing is dropped.
+    const agg = new Map();   // slotMs -> {cMrp,cMan, iMrp,iMan, xMrp,xMan}
+    let undated = 0, complete = 0, inflight = 0, cancelled = 0, manualCt = 0;
+    for (const c of chains){
+      const oc  = chainOutcome(c);                 // complete | inflight | cancelled
+      const mrp = isMrpChain(c);
+      if (!mrp) manualCt++;
       const start = mfSlotStart(c.prDate, period);
       if (start == null){ undated++; continue; }
-      const oc = chainOutcome(c);
-      let e = agg.get(start); if (!e){ e = { complete:0, inflight:0, cancelled:0 }; agg.set(start, e); }
-      e[oc]++;
+      let e = agg.get(start); if (!e){ e = { cMrp:0, cMan:0, iMrp:0, iMan:0, xMrp:0, xMan:0 }; agg.set(start, e); }
+      e[(oc === 'complete' ? 'c' : oc === 'inflight' ? 'i' : 'x') + (mrp ? 'Mrp' : 'Man')]++;
       if (oc === 'complete') complete++; else if (oc === 'inflight') inflight++; else cancelled++;
     }
-    const charted = complete + inflight + cancelled;
+    const charted = complete + inflight + cancelled;   // dated chains
     if (!charted){
-      host.innerHTML = `<div class="view-empty"><h3>No dated MRP requisitions</h3><p>All ${mrpChains.length.toLocaleString()} MRP-created chains for material <b>${escapeHtml(String(mat || ''))}</b> are missing a valid requisition date, so there is nothing to place on the timeline.</p></div>`;
+      host.innerHTML = `<div class="view-empty"><h3>No dated requisitions</h3><p>All ${chains.length.toLocaleString()} requisition chains for material <b>${escapeHtml(String(mat || ''))}</b> are missing a valid requisition date, so there is nothing to place on the timeline.</p></div>`;
       return;
     }
     // Continuous slots from the first to the last dated slot — empties kept as gaps.
@@ -817,16 +823,20 @@
     const slots = []; let cur = used[0]; const end = used[used.length - 1]; let guard = 0;
     while (cur <= end && guard++ < 6000){ slots.push(cur); cur = mfNextSlot(cur, period); }
     const emptySlots = slots.filter(ms => !agg.has(ms)).length;
-    const labels = slots.map((ms, i) => {
-      const dt = new Date(ms), ym = dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1);
-      if (period === 'month') return ym;
-      let prevYm = '';
-      if (i > 0){ const p = new Date(slots[i - 1]); prevYm = p.getUTCFullYear() + '-' + mfPad(p.getUTCMonth() + 1); }
-      return [mfPad(dt.getUTCDate()), ym !== prevYm ? ym : ''];   // [day-number, YYYY-MM at month turn]
+    // Month key per slot — drives the mid-month labels + boundary lines on day/week.
+    const slotMonthKey = slots.map(ms => { const dt = new Date(ms); return dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1); });
+    const labels = slots.map(ms => {
+      const dt = new Date(ms);
+      if (period === 'month') return dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1);
+      return mfPad(dt.getUTCDate());   // day-number; month is drawn mid-span by the monthBands plugin
     });
-    const dCom = slots.map(ms => (agg.get(ms) || {}).complete  || 0);
-    const dInf = slots.map(ms => (agg.get(ms) || {}).inflight  || 0);
-    const dCan = slots.map(ms => (agg.get(ms) || {}).cancelled || 0);
+    const gv = (ms, k) => (agg.get(ms) || {})[k] || 0;
+    const dCompMrp = slots.map(ms => gv(ms, 'cMrp'));
+    const dCompMan = slots.map(ms => gv(ms, 'cMan'));
+    const dInfMrp  = slots.map(ms => gv(ms, 'iMrp'));
+    const dInfMan  = slots.map(ms => gv(ms, 'iMan'));
+    const dCanMrp  = slots.map(ms => gv(ms, 'xMrp'));
+    const dCanMan  = slots.map(ms => gv(ms, 'xMan'));
 
     const pBtn = (p, lab) => `<button type="button" class="mf-period ${period === p ? 'active' : ''}" data-mf="${p}">${lab}</button>`;
     host.innerHTML = `
@@ -835,38 +845,115 @@
         ${pBtn('day','Day')}${pBtn('week','Week')}${pBtn('month','Month')}
       </div>
       <div class="vol-kpi-strip">
-        <div class="vk-cell"><span class="lab">MRP PRs</span><span class="v">${charted.toLocaleString()}</span><span class="sub">creation ind. B</span></div>
+        <div class="vk-cell"><span class="lab">Requisitions</span><span class="v">${chains.length.toLocaleString()}</span><span class="sub">all chains · ties to Raw Data</span></div>
         <div class="vk-cell"><span class="lab">Complete</span><span class="v" style="color:#2FBF88">${complete.toLocaleString()}</span><span class="sub">received at site</span></div>
         <div class="vk-cell"><span class="lab">In-flight</span><span class="v" style="color:#FBBF24">${inflight.toLocaleString()}</span><span class="sub">PO raised / PR pending</span></div>
         <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${cancelled ? 'warn' : ''}">${cancelled.toLocaleString()}</span><span class="sub">deleted, no PO</span></div>
-        <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no MRP run</span></div>
+        <div class="vk-cell"><span class="lab">Manual</span><span class="v ${manualCt ? 'warn' : ''}">${manualCt.toLocaleString()}</span><span class="sub">creation R / F</span></div>
+        <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no requisition</span></div>
       </div>
       <div class="vol-chart-host"><canvas id="mfChart"></canvas></div>
-      <div class="chart-caveat">Each bar = MRP-created requisition chains (EBAN creation indicator <b>B</b>) whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no MRP run). Stacked by outcome: <b style="color:#2FBF88">Complete</b> (received at site) · <b style="color:#FBBF24">In-flight</b> (PO raised or PR pending) · <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO) — the same states as Raw Data. This view <b>never excludes</b> a chain (Trace outlier suppression does not apply). ${undated ? `<b>${undated}</b> MRP chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}${manualCt ? `${manualCt.toLocaleString()} manual PR${manualCt === 1 ? '' : 's'} (creation R) are not MRP-driven and are not charted — Raw Data shows all ${chains.length.toLocaleString()} chains. ` : ''}For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
+      <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). Stacked by outcome: <b style="color:#2FBF88">Complete</b> (received at site) · <b style="color:#FBBF24">In-flight</b> (PO raised or PR pending) · <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO) — the same states as Raw Data. Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split by status. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
     `;
     host.querySelectorAll('.mf-period').forEach(b => b.addEventListener('click', () => { state.mrpFreqPeriod = b.dataset.mf; renderActiveView(); }));
 
+    const COMP = '#2FBF88', INF = '#FBBF24', CAN = '#EF4444';
+    // Simple 3-outcome stacks (MRP + manual combined per bar) — the MRP-vs-manual
+    // split lives in the hover table, not the bars, to keep the chart uncluttered.
+    const dComp = slots.map((_, i) => dCompMrp[i] + dCompMan[i]);
+    const dInf  = slots.map((_, i) => dInfMrp[i]  + dInfMan[i]);
+    const dCan  = slots.map((_, i) => dCanMrp[i]  + dCanMan[i]);
+    // APP-FIX-MRPFREQ-AXIS (2026-08-16) — keep the month visible on day/week: draw a
+    // faint boundary line at each month start and the YYYY-MM label centred mid-month.
+    // Category x-pixels are derived from the plot width (not the tick scale) so the
+    // day-number autoSkip can't take the month text with it. Month view is unchanged
+    // (it already labels every bar).
+    const monthBands = {
+      id: 'monthBands',
+      afterDatasetsDraw(chart){
+        if (period === 'month') return;
+        const { ctx, chartArea } = chart;
+        const n = slotMonthKey.length; if (!n) return;
+        const w = (chartArea.right - chartArea.left) / n;
+        const ctr = (idx) => chartArea.left + w * (idx + 0.5);
+        const top = chartArea.top, bot = chartArea.bottom;
+        ctx.save();
+        let spanStart = 0;
+        for (let i = 1; i <= n; i++){
+          if (i !== n && slotMonthKey[i] === slotMonthKey[i - 1]) continue;
+          if (spanStart > 0){
+            const bx = chartArea.left + w * spanStart;
+            ctx.strokeStyle = 'rgba(155,171,168,.22)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx, bot + 14); ctx.stroke();
+          }
+          const cx = (ctr(spanStart) + ctr(i - 1)) / 2;
+          ctx.fillStyle = '#C7D6D2'; ctx.font = '600 10px JetBrains Mono, monospace';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          ctx.fillText(slotMonthKey[spanStart], cx, bot + 20);
+          spanStart = i;
+        }
+        ctx.restore();
+      }
+    };
     state.chart = new Chart($('#mfChart'), {
       type: 'bar',
       data: {
         labels,
         datasets: [
-          { label: 'Complete',  data: dCom, backgroundColor: '#2FBF88', stack: 's' },
-          { label: 'In-flight', data: dInf, backgroundColor: '#FBBF24', stack: 's' },
-          { label: 'Cancelled', data: dCan, backgroundColor: '#EF4444', stack: 's' }
+          { label: 'Complete',  data: dComp, backgroundColor: COMP, stack: 's' },
+          { label: 'In-flight', data: dInf,  backgroundColor: INF,  stack: 's' },
+          { label: 'Cancelled', data: dCan,  backgroundColor: CAN,  stack: 's' }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { bottom: period === 'month' ? 0 : 34 } },
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { color:'#9BABA8', maxRotation: 0, autoSkip: true, maxTicksLimit: 26, font:{ family:'JetBrains Mono', size:9 } } },
           y: { stacked: true, beginAtZero: true, ticks: { color:'#9BABA8', precision:0, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
         },
         plugins: {
           legend: { labels: { color:'#DBE9F0', font:{ family:'JetBrains Mono', size:11 }, boxWidth:12 } },
-          tooltip: { callbacks: { title: (items) => { const l = items[0].label; return Array.isArray(l) ? l.filter(Boolean).join(' · ') : l; } } }
+          // APP-FIX-MRPFREQ-TIP (2026-08-16) — HTML data-table tooltip: date header,
+          // one row per outcome present, count split into MRP vs Manual columns.
+          tooltip: {
+            enabled: false,
+            external: (ctx) => {
+              const tt = ctx.tooltip;
+              let el = document.getElementById('mfTip');
+              if (!el){ el = document.createElement('div'); el.id = 'mfTip'; el.className = 'mf-tip'; document.body.appendChild(el); }
+              if (!tt || tt.opacity === 0 || !tt.dataPoints || !tt.dataPoints.length){ el.style.opacity = '0'; return; }
+              const idx = tt.dataPoints[0].dataIndex;
+              const ms = slots[idx]; if (ms == null){ el.style.opacity = '0'; return; }
+              const dt = new Date(ms);
+              const ymd = dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1) + '-' + mfPad(dt.getUTCDate());
+              const head = period === 'month' ? (dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1))
+                         : period === 'week'  ? ('Week of ' + ymd) : ymd;
+              const rows = [
+                ['Complete',  dCompMrp[idx], dCompMan[idx], COMP],
+                ['In-flight', dInfMrp[idx],  dInfMan[idx],  INF],
+                ['Cancelled', dCanMrp[idx],  dCanMan[idx],  CAN]
+              ].filter(r => (r[1] + r[2]) > 0);
+              let body, tMrp = 0, tMan = 0;
+              if (!rows.length){
+                body = `<tr><td colspan="3" class="mf-tip-empty">No requisitions this ${period}</td></tr>`;
+              } else {
+                rows.forEach(r => { tMrp += r[1]; tMan += r[2]; });
+                body = rows.map(r => `<tr><td><span class="mf-dot" style="background:${r[3]}"></span>${r[0]}</td><td>${r[1] || '—'}</td><td>${r[2] || '—'}</td></tr>`).join('')
+                     + `<tr class="mf-tip-tot"><td>Total</td><td>${tMrp}</td><td>${tMan}</td></tr>`;
+              }
+              el.innerHTML = `<div class="mf-tip-h">${head}</div>`
+                + `<table><thead><tr><th>Status</th><th>MRP</th><th>Manual</th></tr></thead><tbody>${body}</tbody></table>`;
+              const rect = ctx.chart.canvas.getBoundingClientRect();
+              el.style.opacity = '1';
+              el.style.left = (rect.left + window.scrollX + tt.caretX + 14) + 'px';
+              el.style.top  = (rect.top + window.scrollY + tt.caretY - 10) + 'px';
+            }
+          }
         }
-      }
+      },
+      plugins: [monthBands]
     });
   }
 

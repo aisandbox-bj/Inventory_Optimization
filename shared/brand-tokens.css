@@ -27,6 +27,12 @@
   --accent-light:   #ABEFEB;
   --accent-green:   #5AB69D;   /* secondary accent — birch / nature thread */
 
+  /* ─── Calibre suite marks (brand pack v1 · 2026-08-16) ──────────────────── */
+  --calibre-steel:  #8C97A8;   /* Calibre parent / neutral */
+  --calibre-trace:  #378ADD;   /* Trace — blue   */
+  --calibre-trend:  #9B97E8;   /* Trend — violet */
+  --calibre-forge:  #C88A34;   /* Forge — amber  */
+
   /* ─── Status colours (semantic only — never decorative) ─────────────────── */
   --status-ok:      #34D399;
   --status-warn:    #FBBF24;
@@ -227,6 +233,10 @@ a:hover{ color:var(--accent-glow); }
 .appnav .brand .dot{
   width:9px; height:9px; background:var(--accent); display:inline-block;
 }
+/* ─── Calibre brand lockup (icon + wordmark) — APP-BRAND-CALIBRE 2026-08-16 ─── */
+.appnav .brand .brand-mark{ display:inline-flex; align-items:center; color:var(--calibre-steel); }
+.appnav .brand .brand-mark svg{ width:24px; height:24px; display:block; }
+.appnav .brand .brand-wm{ line-height:1; }
 .appnav .brand .sub{
   font-family:var(--font-mono);
   font-size:9.5px;

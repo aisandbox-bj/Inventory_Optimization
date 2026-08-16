@@ -157,26 +157,47 @@
     return handle;
   }
 
-  /* ─── APP-ACT-PERSIST — bulk import: overwrite an assessment's map. Used by
-     the intake JSON-upload restore hook when a `_analystData` block is present.
-     Sanitises to the known shape so a hand-edited file can't inject junk. ─── */
+  /* ─── APP-ACT-PERSIST — bulk import from a file's `_analystData` block. Used by
+     the Intake + Dashboard JSON-upload hooks. Sanitises to the known shape so a
+     hand-edited file can't inject junk.
+
+     APP-FIX-ANALYST-MERGE (2026-08-16) — NON-DESTRUCTIVE. Previously this REPLACED
+     the whole sidecar, so uploading a file (e.g. combining a JSON + IW39 through
+     Intake) deleted any analyst work not represented in that file — the operator's
+     "it wipes my comments/tags" bug. It now MERGES: existing (live) work is never
+     dropped, the file fills gaps and adds materials, and on a per-field conflict
+     the LIVE value wins (it is the most-recent edit; the file may pre-date it).
+     forAction is a union (flagged on either side stays flagged). ─── */
+  function mergeEntry(cur, inc){
+    cur = cur || {}; inc = inc || {};
+    const out = {};
+    if (cur.forAction || inc.forAction) out.forAction = true;
+    const cr = cur.rec || {}, ir = (inc.rec && typeof inc.rec === 'object') ? inc.rec : {};
+    const pick = (a, b) => (a != null && String(a) !== '') ? String(a)
+                         : (b != null ? String(b) : '');
+    const rec = {
+      mrpType: pick(cr.mrpType, ir.mrpType),
+      min:     pick(cr.min,     ir.min),
+      max:     pick(cr.max,     ir.max),
+      safety:  pick(cr.safety,  ir.safety)
+    };
+    if (rec.mrpType || rec.min || rec.max || rec.safety) out.rec = rec;
+    const note = (cur.note && String(cur.note).trim()) ? String(cur.note)
+               : (inc.note && String(inc.note).trim()) ? String(inc.note) : '';
+    if (note) out.note = note;
+    return out;
+  }
   function restore(name, mapObj){
     if (!mapObj || typeof mapObj !== 'object') return;
-    const clean = {};
+    const merged = Object.assign({}, load(name));   // start from LIVE — never dropped
     Object.keys(mapObj).forEach(function(mat){
-      const o = mapObj[mat]; if (!o || typeof o !== 'object') return;
-      const entry = {};
-      if (o.forAction) entry.forAction = true;
-      if (o.rec && typeof o.rec === 'object') {
-        entry.rec = {
-          mrpType: o.rec.mrpType != null ? String(o.rec.mrpType) : '',
-          min:     o.rec.min     != null ? String(o.rec.min)     : '',
-          max:     o.rec.max     != null ? String(o.rec.max)     : '',
-          safety:  o.rec.safety  != null ? String(o.rec.safety)  : ''
-        };
-      }
-      if (o.note != null && String(o.note).trim()) entry.note = String(o.note);
-      if (entry.forAction || recHasContent(entry) || noteHasContent(entry)) clean[mat] = entry;
+      const inc = mapObj[mat]; if (!inc || typeof inc !== 'object') return;
+      merged[mat] = mergeEntry(merged[mat], inc);
+    });
+    const clean = {};
+    Object.keys(merged).forEach(function(mat){
+      const e = merged[mat];
+      if (e && (e.forAction || recHasContent(e) || noteHasContent(e))) clean[mat] = e;
     });
     persist(name, clean);
   }

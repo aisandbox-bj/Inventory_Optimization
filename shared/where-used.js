@@ -152,10 +152,10 @@
       }
     }
     if (data.unmappedWO.total){
-      body += `<tr class="wu-unmapped"><td title="Work orders with no match in IW39 — can't resolve a Sort Field">Unmapped WO</td>${yearCellsSel(data.unmappedWO.byYear, years, { bucket: 'unmapped' })}<td class="num">${fmt(data.unmappedWO.total)}</td></tr>`;
+      body += `<tr class="wu-unmapped"><td>Unmapped WO</td>${yearCellsSel(data.unmappedWO.byYear, years, { bucket: 'unmapped' })}<td class="num">${fmt(data.unmappedWO.total)}</td></tr>`;
     }
     if (data.cc.total){
-      body += `<tr class="wu-cc"><td title="Goods issued to a cost centre (mvt 201, net of 202). Per-cost-centre breakdown not yet available.">Cost centre (CC)</td>${yearCellsSel(data.cc.byYear, years, { bucket: 'cc' })}<td class="num">${fmt(data.cc.total)}</td></tr>`;
+      body += `<tr class="wu-cc"><td>Cost centre (CC)</td>${yearCellsSel(data.cc.byYear, years, { bucket: 'cc' })}<td class="num">${fmt(data.cc.total)}</td></tr>`;
     }
     if (!body){
       return `<div class="wu-empty">No work-order (261) or cost-centre (201) consumption recorded for ${esc(material)}.</div>`;

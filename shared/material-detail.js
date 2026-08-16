@@ -52,7 +52,7 @@
     if (mj && typeof mj.has === 'function') {
       d = d.replace(/\b(\d{7})\b/g, (full, num) =>
         (num !== String(mat.material) && mj.has(num))
-          ? `<button type="button" class="see-jump" data-see="${num}" title="Jump to material ${num} (referenced in this description)">${num}</button>`
+          ? `<button type="button" class="see-jump" data-see="${num}">${num}</button>`
           : full);
     }
     const mfr = mat.manufacturer ? ' <span class="desc-mfr">(' + escapeHtml(mat.manufacturer) + ')</span>' : '';
@@ -201,7 +201,7 @@
     const anCell = (field) => {
       if (!anOn) return '';
       if (!analyst.flagged) {
-        return `<td class="analyst locked"><span class="an-locked" title="Flag ★ for Action to edit">—</span></td>`;
+        return `<td class="analyst locked"><span class="an-locked">—</span></td>`;
       }
       const v = (analyst.values && analyst.values[field] != null) ? analyst.values[field] : '';
       if (field === 'mrpType') {
@@ -214,7 +214,7 @@
       // three stay open for V1. The live lock (wireDetail) mirrors this on change.
       const anMrpVal = (analyst.values && analyst.values.mrpType) || '';
       const pdLock = (field === 'min' || field === 'max') && anMrpVal === 'PD';
-      return `<td class="analyst"><input type="text" inputmode="numeric" class="an-input${pdLock ? ' pd-locked' : ''}" id="${ids[field]}" data-an="${field}" value="${pdLock ? '' : escapeAttr(String(v))}" placeholder="${pdLock ? 'n/a · PD' : '—'}"${pdLock ? ' disabled title="Min/Max do not apply under PD (planned/deterministic) — switch the analyst MRP type to V1 to enter them"' : ''} /></td>`;
+      return `<td class="analyst"><input type="text" inputmode="numeric" class="an-input${pdLock ? ' pd-locked' : ''}" id="${ids[field]}" data-an="${field}" value="${pdLock ? '' : escapeAttr(String(v))}" placeholder="${pdLock ? 'n/a · PD' : '—'}"${pdLock ? ' disabled' : ''} /></td>`;
     };
 
     const trs = rows.map(r => {
@@ -241,7 +241,7 @@
               <th></th>
               <th class="current-head">Current</th>
               <th class="rec-head">Recommended</th>
-              ${anOn ? `<th class="analyst-head clickable ${analyst.flagged ? 'flagged' : 'unflagged'}" id="anActionHdr" title="Click to ${analyst.flagged ? 'clear the' : 'set the'} For Action flag">Analyst</th>` : ''}
+              ${anOn ? `<th class="analyst-head clickable ${analyst.flagged ? 'flagged' : 'unflagged'}" id="anActionHdr">Analyst</th>` : ''}
             </tr>
           </thead>
           <tbody>${trs}</tbody>
@@ -437,9 +437,9 @@
         <div class="detail-head-id">
           <div class="mat-row">
             <span class="mat">${escapeHtml(mat.material)}</span>
-            <button class="mat-copy" id="btnCopyMat" title="Copy material number to clipboard" aria-label="Copy material number">⧉</button>
-            ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt" title="Open this material in Calibre Trace">Trace it! &rarr;</button>` : ''}
-            ${(opts.analyst && opts.analyst.enabled) ? `<button class="action-star ${opts.analyst.flagged ? 'on' : ''}" id="btnActionStar" aria-pressed="${opts.analyst.flagged ? 'true' : 'false'}" title="${opts.analyst.flagged ? 'Flagged For Action — click to clear' : 'Flag For Action (analyst follow-up)'}">${opts.analyst.flagged ? '★' : '☆'}</button>` : ''}
+            <button class="mat-copy" id="btnCopyMat" aria-label="Copy material number">⧉</button>
+            ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt">Trace it! &rarr;</button>` : ''}
+            ${(opts.analyst && opts.analyst.enabled) ? `<button class="action-star ${opts.analyst.flagged ? 'on' : ''}" id="btnActionStar" aria-pressed="${opts.analyst.flagged ? 'true' : 'false'}" aria-label="${opts.analyst.flagged ? 'Flagged For Action — click to clear' : 'Flag For Action (analyst follow-up)'}">${opts.analyst.flagged ? '★' : '☆'}</button>` : ''}
           </div>
           <div class="desc">${descHtml(mat, opts)}</div>
         </div>
@@ -455,7 +455,7 @@
         <span class="chart-toolbar-lab">Show:</span>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleConsumption" checked> Consumption</label>
         <label class="chart-toggle"><input type="checkbox" id="chartToggleSoh" checked> Stock on Hand</label>
-        ${(opts.nav || opts.notes || opts.whereUsedFn || opts.enablePopout) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''} title="Previous material in the list (current filter &amp; sort)">‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''} title="Next material in the list (current filter &amp; sort)">Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn" title="${opts.notes.hasNote ? 'Notes for this material — has a note (click to view/edit)' : 'Add a note for this material'}">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn">⊞ Where used</button>` : ''}${opts.enablePopout ? `<button type="button" class="popout-btn" id="popoutBtn" title="Pop this material out into a floating, draggable, resizable card — the full detail (chart + stats/MRP) with notes joined on the right.">⤢ Pop out</button>` : ''}</div>` : ''}
+        ${(opts.nav || opts.notes || opts.whereUsedFn || opts.enablePopout) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''}>‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''}>Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn">⊞ Where used</button>` : ''}${opts.enablePopout ? `<button type="button" class="popout-btn" id="popoutBtn">⤢ Pop out</button>` : ''}</div>` : ''}
       </div>
       <div class="chart-host" id="chartHost"></div>
       <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
@@ -474,7 +474,7 @@
         ${lastConsCell}
         <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History; Trend only. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div></div>
       </div>
-      <button type="button" class="stat-expand" id="statExpandBtn" aria-expanded="${_statsExpanded ? 'true' : 'false'}" title="Show / hide the adjusted-rate &amp; stockout diagnostics">
+      <button type="button" class="stat-expand" id="statExpandBtn" aria-expanded="${_statsExpanded ? 'true' : 'false'}">
         <span class="tri">${_statsExpanded ? '▾' : '▸'}</span><span class="lbl">${_statsExpanded ? 'Fewer stats' : 'More stats'}</span>
       </button>
       <div class="stat-grid stat-grid-extra${_statsExpanded ? ' open' : ''}" id="statGridExtra">
@@ -715,7 +715,7 @@
             <span class="lab">Where used</span>
             <h3>${escapeHtml(mat.material)}${mat.description ? ' <span class="wu-h-desc">' + escapeHtml(mat.description) + '</span>' : ''}</h3>
           </div>
-          <button type="button" class="wu-close" id="wuClose" title="Close (Esc)" aria-label="Close">✕</button>
+          <button type="button" class="wu-close" id="wuClose" aria-label="Close">✕</button>
         </div>
         <div class="wu-modal-body" id="wuBody"></div>
       </div>`;

@@ -400,6 +400,20 @@
 .mf-period:hover{ border-color:var(--accent); color:var(--accent); }
 .mf-period.active{ border-color:var(--accent); color:var(--accent); background:rgba(31,206,216,.10); }
 
+/* APP-FIX-MRPFREQ-TIP — HTML data-table tooltip for the MRP-run cadence bars. */
+.mf-tip{ position:absolute; z-index:60; pointer-events:none; opacity:0; transition:opacity .08s;
+  background:var(--bg-panel,#111a1a); border:1px solid var(--accent,#1FCED8); border-radius:var(--r-sm,4px);
+  padding:7px 9px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-family:var(--font-mono,monospace); }
+.mf-tip .mf-tip-h{ font-size:11px; font-weight:600; color:var(--text-pri,#DBE9F0); margin-bottom:5px; letter-spacing:.3px; }
+.mf-tip table{ border-collapse:collapse; font-size:11px; color:var(--text-sec,#9BABA8); }
+.mf-tip th{ font-weight:600; text-align:right; padding:1px 6px; color:var(--text-muted,#7A8C89); border-bottom:1px solid var(--border-soft,rgba(255,255,255,.08)); }
+.mf-tip th:first-child{ text-align:left; }
+.mf-tip td{ text-align:right; padding:2px 6px; white-space:nowrap; }
+.mf-tip td:first-child{ text-align:left; color:var(--text-pri,#DBE9F0); }
+.mf-tip .mf-dot{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+.mf-tip .mf-tip-tot td{ border-top:1px solid var(--border-soft,rgba(255,255,255,.08)); font-weight:600; color:var(--text-pri,#DBE9F0); }
+.mf-tip .mf-tip-empty{ text-align:center; color:var(--text-muted,#7A8C89); padding:3px 6px; }
+
 /* Procurement Chain summary (was the detail-head-summary in T-03) */
 .pchain-summary{
   display:grid; grid-template-columns:repeat(6, 1fr); gap:6px;
