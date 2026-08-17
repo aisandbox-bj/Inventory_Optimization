@@ -167,6 +167,24 @@
 }
 .scr-trace-missing b{ color:var(--status-warn); }
 
+/* APP-SCR-ALIGN — read-only notes viewer card (view-only; edit on Trend). */
+.scr-note-card{
+  position:fixed; z-index:600; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:min(420px, 92vw); max-height:70vh; overflow:auto;
+  background:var(--bg-panel,#0C2D3B); border:1px solid var(--accent,#1FCED8);
+  border-radius:var(--r-md,4px); box-shadow:0 14px 44px rgba(0,0,0,.55);
+}
+.scr-note-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:10px 14px; border-bottom:1px solid var(--border-soft);
+  font-family:var(--font-mono); font-size:12px; letter-spacing:.4px; color:var(--text-pri);
+}
+.scr-note-close{ background:transparent; border:none; color:var(--text-muted); font-size:15px; cursor:pointer; padding:0 4px; }
+.scr-note-close:hover{ color:var(--text-pri); }
+.scr-note-body{ padding:14px; color:var(--text-sec); font-family:var(--font-body); font-size:13px; line-height:1.6; white-space:pre-wrap; }
+.scr-note-empty{ color:var(--text-muted); font-style:italic; }
+.scr-note-foot{ padding:8px 14px 12px; color:var(--text-muted); font-family:var(--font-mono); font-size:10.5px; letter-spacing:.4px; }
+
 /* The phase-distribution numeric stats table is shown on the Trace page only.
    On the Screener we keep the chevron + box plots but hide the table (operator
    request 2026-06-26). This is a display-only hide scoped to the Screener trace

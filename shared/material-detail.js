@@ -171,6 +171,9 @@
     // caller passes an analyst config; the inputs are live only when the material
     // is flagged For Action, otherwise the column shows a muted lock hint.
     const anOn = !!(analyst && analyst.enabled);
+    // APP-SCR-ALIGN (2026-08-17) — read-only mode: the Screener shows the same
+    // Analyst column as Trend but as a VIEW (flag + rec visible, not editable).
+    const anRO = anOn && !!analyst.readOnly;
 
     const eq = (a, b) => {
       if (a == null || b == null) return false;
@@ -204,16 +207,21 @@
         return `<td class="analyst locked"><span class="an-locked">—</span></td>`;
       }
       const v = (analyst.values && analyst.values[field] != null) ? analyst.values[field] : '';
-      if (field === 'mrpType') {
-        const opt = (val, lab) => `<option value="${val}"${String(v) === val ? ' selected' : ''}>${lab}</option>`;
-        return `<td class="analyst"><select class="an-input an-select" id="anMrpType" data-an="mrpType">${opt('', '—')}${opt('V1', 'V1')}${opt('PD', 'PD')}</select></td>`;
-      }
-      const ids = { min:'anMin', max:'anMax', safety:'anSafety' };
       // G1 (2026-08-16) — Min/Max don't apply under PD (planned/deterministic).
       // When the analyst MRP type is PD, render Min & Max blanked + disabled; all
       // three stay open for V1. The live lock (wireDetail) mirrors this on change.
       const anMrpVal = (analyst.values && analyst.values.mrpType) || '';
       const pdLock = (field === 'min' || field === 'max') && anMrpVal === 'PD';
+      // APP-SCR-ALIGN — read-only (Screener): show the analyst value as static text.
+      if (anRO) {
+        const disp = (field === 'mrpType') ? (v || '—') : (pdLock ? 'n/a · PD' : (String(v) !== '' ? v : '—'));
+        return `<td class="analyst"><span class="an-static${pdLock ? ' pd-locked' : ''}">${escapeHtml(String(disp))}</span></td>`;
+      }
+      if (field === 'mrpType') {
+        const opt = (val, lab) => `<option value="${val}"${String(v) === val ? ' selected' : ''}>${lab}</option>`;
+        return `<td class="analyst"><select class="an-input an-select" id="anMrpType" data-an="mrpType">${opt('', '—')}${opt('V1', 'V1')}${opt('PD', 'PD')}</select></td>`;
+      }
+      const ids = { min:'anMin', max:'anMax', safety:'anSafety' };
       return `<td class="analyst"><input type="text" inputmode="numeric" class="an-input${pdLock ? ' pd-locked' : ''}" id="${ids[field]}" data-an="${field}" value="${pdLock ? '' : escapeAttr(String(v))}" placeholder="${pdLock ? 'n/a · PD' : '—'}"${pdLock ? ' disabled' : ''} /></td>`;
     };
 
@@ -232,7 +240,7 @@
       <div class="mrp-compare">
         <div class="mrp-compare-head">
           <h4>MRP Settings · Current vs Recommended</h4>
-          <span class="hint">Yellow rows = recommendation differs from current. The <b>Min</b> shows the governing figure with its two inputs beneath — <b>calc</b> (P2 rate × months) and <b>batch</b> (a typical WO batch × factor). Which one governs is a setting (<i>Batched Min governs</i>). Safety Stock is informational.${anOn ? ' The <b>Analyst</b> column is your override — flag a material <b>For Action</b> (★) to enter it.' : ''}</span>
+          <span class="hint">Yellow rows = recommendation differs from current. The <b>Min</b> shows the governing figure with its two inputs beneath — <b>calc</b> (P2 rate × months) and <b>batch</b> (a typical WO batch × factor). Which one governs is a setting (<i>Batched Min governs</i>). Safety Stock is informational.${anOn ? (anRO ? ' The <b>Analyst</b> column shows the analyst override (view-only on this page).' : ' The <b>Analyst</b> column is your override — flag a material <b>For Action</b> (★) to enter it.') : ''}</span>
         </div>
         ${mat.mrpReclassRecommended ? `<div class="mrp-reclass-note">⚑ ${escapeHtml(mat.mrpReclassNote || '')}</div>` : ''}
         <table class="mrp-compare-table${anOn ? ' has-analyst' : ''}">
@@ -241,7 +249,7 @@
               <th></th>
               <th class="current-head">Current</th>
               <th class="rec-head">Recommended</th>
-              ${anOn ? `<th class="analyst-head clickable ${analyst.flagged ? 'flagged' : 'unflagged'}" id="anActionHdr">Analyst</th>` : ''}
+              ${anOn ? `<th class="analyst-head ${anRO ? '' : 'clickable '}${analyst.flagged ? 'flagged' : 'unflagged'}"${anRO ? '' : ' id="anActionHdr"'}>Analyst</th>` : ''}
             </tr>
           </thead>
           <tbody>${trs}</tbody>
@@ -439,7 +447,7 @@
             <span class="mat">${escapeHtml(mat.material)}</span>
             <button class="mat-copy" id="btnCopyMat" aria-label="Copy material number">⧉</button>
             ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt">Trace it! &rarr;</button>` : ''}
-            ${(opts.analyst && opts.analyst.enabled) ? `<button class="action-star ${opts.analyst.flagged ? 'on' : ''}" id="btnActionStar" aria-pressed="${opts.analyst.flagged ? 'true' : 'false'}" aria-label="${opts.analyst.flagged ? 'Flagged For Action — click to clear' : 'Flag For Action (analyst follow-up)'}">${opts.analyst.flagged ? '★' : '☆'}</button>` : ''}
+            ${(opts.analyst && opts.analyst.enabled) ? `<button class="action-star ${opts.analyst.flagged ? 'on' : ''}${opts.analyst.readOnly ? ' ro' : ''}"${opts.analyst.readOnly ? '' : ' id="btnActionStar"'} aria-pressed="${opts.analyst.flagged ? 'true' : 'false'}" aria-label="${opts.analyst.readOnly ? (opts.analyst.flagged ? 'Flagged For Action (view only)' : 'Not flagged for action') : (opts.analyst.flagged ? 'Flagged For Action — click to clear' : 'Flag For Action (analyst follow-up)')}">${opts.analyst.flagged ? '★' : '☆'}</button>` : ''}
           </div>
           <div class="desc">${descHtml(mat, opts)}</div>
         </div>

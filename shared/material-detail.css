@@ -580,6 +580,13 @@
   font-family:var(--font-mono);
   cursor:help;
 }
+/* APP-SCR-ALIGN — read-only analyst value (Screener view) shown as static text. */
+.mrp-compare-table td.analyst .an-static{
+  display:inline-block; padding:4px 7px;
+  font-family:var(--font-mono); font-size:12.5px; color:var(--text-pri);
+}
+.mrp-compare-table td.analyst .an-static.pd-locked{ color:var(--text-muted); font-style:italic; }
+.detail-head .action-star.ro{ pointer-events:none; cursor:default; }
 .mrp-compare-table .an-input{
   width:100%;
   max-width:120px;

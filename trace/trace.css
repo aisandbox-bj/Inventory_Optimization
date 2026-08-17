@@ -400,6 +400,14 @@
 .mf-period:hover{ border-color:var(--accent); color:var(--accent); }
 .mf-period.active{ border-color:var(--accent); color:var(--accent); background:rgba(31,206,216,.10); }
 
+/* APP-MRPFREQ-TILE — resizable chart tile with a right-edge drag grip. */
+.mf-tile{ position:relative; width:100%; min-width:520px; max-width:100%; box-sizing:border-box; }
+.mf-tile .vol-chart-host{ width:100%; }
+.mf-tile-grip{ position:absolute; top:0; right:0; width:11px; height:100%; cursor:ew-resize; z-index:5;
+  display:flex; align-items:center; justify-content:center; }
+.mf-tile-grip::before{ content:""; width:3px; height:46px; border-radius:3px; background:var(--border-soft); transition:background .12s; }
+.mf-tile-grip:hover::before{ background:var(--accent); }
+
 /* APP-FIX-MRPFREQ-TIP — HTML data-table tooltip for the MRP-run cadence bars. */
 .mf-tip{ position:absolute; z-index:60; pointer-events:none; opacity:0; transition:opacity .08s;
   background:var(--bg-panel,#111a1a); border:1px solid var(--accent,#1FCED8); border-radius:var(--r-sm,4px);

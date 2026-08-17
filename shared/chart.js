@@ -280,8 +280,15 @@
 
       // Build SOH y-scale independent of cumulative scale
       const sohVals = sohSeries.map(p => p.soh);
+      // APP-TREND-MINLINE (2026-08-17) — current-SAP threshold to track SOH against:
+      // V1 → Min; PD (or other) with a Safety Stock → SS; PD with 0 SS → no line.
+      // Folded into the scale max so the line is always in view.
+      const _mrp = String(material.mrpType || '').toUpperCase();
+      let threshY = null, threshLabel = '';
+      if (_mrp === 'V1') { if (material.cmin != null && material.cmin > 0) { threshY = material.cmin; threshLabel = 'MIN'; } }
+      else if (material.safetyStock != null && material.safetyStock > 0) { threshY = material.safetyStock; threshLabel = 'SS'; }
       const sohMin = Math.min(0, ...sohVals);
-      const sohMax = Math.max(...sohVals, 1) * 1.08;
+      const sohMax = Math.max(...sohVals, threshY != null ? threshY : 1, 1) * 1.08;
       yScaleSOH = (v) => MARGIN.top + (1 - (v - sohMin) / (sohMax - sohMin)) * innerH;
 
       // (a) Stockout bands — render FIRST so they sit behind the SOH line
@@ -315,6 +322,15 @@
         });
       if (sohPts.length >= 2) {
         gSoh.appendChild(polyline(sohPts.join(' '), { stroke: PAL.sohLine, width: 1.8, opacity: 0.95, cap: 'round', join: 'round' }));
+      }
+
+      // APP-TREND-MINLINE — dotted red Min/SS threshold line (on the SOH axis) with
+      // the label just above it at the left, so a dip of the SOH line below it reads
+      // as "actual below Min/SS" at a glance.
+      if (threshY != null) {
+        const yT = yScaleSOH(threshY);
+        gSoh.appendChild(line(MARGIN.left, yT, MARGIN.left + innerW, yT, { stroke: PAL.crit, width: 1.3, dash: '2 3', opacity: 0.95 }));
+        gSoh.appendChild(text(MARGIN.left + 4, yT - 4, `${threshLabel} ${fmtNum(threshY)}`, { anchor: 'start', fill: PAL.crit, size: 8.5, weight: 700, tracking: 0.8 }));
       }
 
       // (c) Right Y-axis for SOH — ticks + label

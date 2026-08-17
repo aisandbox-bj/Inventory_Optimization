@@ -462,6 +462,26 @@
       enableLlm:   false,
       chartWidth:  936,
       chartHeight: 320,
+      // APP-SCR-ALIGN (2026-08-17) — align the Screener detail with Trend (the
+      // standard): show the same Analyst column + Notes, but the Screener is a
+      // VIEW — the analyst layer is read-only and notes open in a read-only card.
+      // Prev/Next step through the current band-filtered list.
+      analyst: state.analyst ? {
+        enabled:  true,
+        readOnly: true,
+        flagged:  state.analyst.isAction(entry.m.material),
+        values:   state.analyst.getRec(entry.m.material)
+      } : null,
+      notes: state.analyst ? {
+        enabled:  true,
+        hasNote:  state.analyst.hasNote(entry.m.material),
+        onToggle: () => showRoNoteCard(entry.m.material)
+      } : null,
+      nav: (() => {
+        const list = filteredMaterials();
+        const i = list.findIndex(e => e.m.material === entry.m.material);
+        return { hasPrev: i > 0, hasNext: i > -1 && i < list.length - 1, onPrev: () => scrStep(-1), onNext: () => scrStep(1) };
+      })(),
       // APP-OPI-01 — open-procurement lamps (PR/PO/In-Transit) from the chains.
       openProc: (typeof TracePhase !== 'undefined') ? TracePhase.openProcurement(state.json, entry.m.material) : null,
       // APP-WU-01 — "Where used" button (lazy compute on click). Only when IW39 is loaded.
@@ -486,6 +506,45 @@
           assessment in Intake, add the PR History export, save, and return here.
         </div>`;
     }
+  }
+
+  /* APP-SCR-ALIGN — Prev/Next through the current band-filtered list. */
+  function scrStep(dir){
+    const list = filteredMaterials();
+    const i = list.findIndex(e => e.m.material === state.selectedMaterial);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    state.selectedMaterial = list[j].m.material;
+    persistView();
+    renderList();
+    renderDetail();
+  }
+
+  /* APP-SCR-ALIGN — read-only notes viewer (Screener is a view; edit on Trend). */
+  function showRoNoteCard(material){
+    const existing = document.getElementById('scrNoteCard');
+    if (existing) existing.remove();
+    const note = state.analyst ? state.analyst.getNote(material) : '';
+    const el = document.createElement('div');
+    el.id = 'scrNoteCard';
+    el.className = 'scr-note-card';
+    el.innerHTML =
+      `<div class="scr-note-head"><span>Note · ${escapeHtml(String(material))}</span>` +
+      `<button type="button" class="scr-note-close" aria-label="Close">✕</button></div>` +
+      `<div class="scr-note-body">${(note && note.trim())
+        ? escapeHtml(note)
+        : '<span class="scr-note-empty">No note for this material.</span>'}</div>` +
+      `<div class="scr-note-foot">View only — add or edit notes on the Trend page.</div>`;
+    document.body.appendChild(el);
+    const close = () => { el.remove(); document.removeEventListener('keydown', onEsc); };
+    function onEsc(ev){ if (ev.key === 'Escape') close(); }
+    el.querySelector('.scr-note-close').addEventListener('click', close);
+    document.addEventListener('keydown', onEsc);
+    setTimeout(() => {
+      document.addEventListener('click', function off(ev){
+        if (!el.contains(ev.target)){ close(); document.removeEventListener('click', off); }
+      });
+    }, 0);
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

@@ -278,6 +278,7 @@
       if (saved.sigmaLimit === null || saved.sigmaLimit === 3 || saved.sigmaLimit === 2 || saved.sigmaLimit === 1.5) {
         state.sigmaLimit = saved.sigmaLimit;
       }
+      if (typeof saved.mrpFreqWidth === 'number' && saved.mrpFreqWidth > 0) state.mrpFreqWidth = saved.mrpFreqWidth;   // APP-MRPFREQ-TILE
       if (saved.manualExclByMat && typeof saved.manualExclByMat === 'object') {
         state.manualExclByMat = new Map();
         for (const [mat, prs] of Object.entries(saved.manualExclByMat)) {
@@ -320,7 +321,8 @@
         yearFilter:       state.yearFilter,
         sigmaLimit:       state.sigmaLimit,
         manualExclByMat:  manualExclSerial,
-        packSizeByMat:    packSizeSerial
+        packSizeByMat:    packSizeSerial,
+        mrpFreqWidth:     state.mrpFreqWidth || null   // APP-MRPFREQ-TILE — remembered tile width
       });
     } catch (e) { /* swallow */ }
   }
@@ -852,7 +854,7 @@
         <div class="vk-cell"><span class="lab">Manual</span><span class="v ${manualCt ? 'warn' : ''}">${manualCt.toLocaleString()}</span><span class="sub">creation R / F</span></div>
         <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no requisition</span></div>
       </div>
-      <div class="vol-chart-host"><canvas id="mfChart"></canvas></div>
+      <div class="mf-tile" id="mfTile"><div class="vol-chart-host"><canvas id="mfChart"></canvas></div><span class="mf-tile-grip" aria-hidden="true"></span></div>
       <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). Stacked by outcome: <b style="color:#2FBF88">Complete</b> (received at site) · <b style="color:#FBBF24">In-flight</b> (PO raised or PR pending) · <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO) — the same states as Raw Data. Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split by status. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
     `;
     host.querySelectorAll('.mf-period').forEach(b => b.addEventListener('click', () => { state.mrpFreqPeriod = b.dataset.mf; renderActiveView(); }));
@@ -955,6 +957,40 @@
       },
       plugins: [monthBands]
     });
+
+    // APP-MRPFREQ-TILE (2026-08-17) — the chart lives in a tile the operator resizes
+    // from a RIGHT-EDGE grip. The width is remembered and carries to the next
+    // material, and it's capped to the content area so the hover data-table can no
+    // longer run off the right of the screen.
+    const tile = $('#mfTile');
+    if (tile) {
+      if (state.mrpFreqWidth) tile.style.width = state.mrpFreqWidth + 'px';
+      const grip = tile.querySelector('.mf-tile-grip');
+      if (grip) {
+        grip.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          const startX = e.clientX;
+          const startW = tile.getBoundingClientRect().width;
+          const minW = 520;
+          const maxW = tile.parentElement ? tile.parentElement.getBoundingClientRect().width : 2400;
+          const onMove = (ev) => {
+            const w = Math.max(minW, Math.min(Math.round(startW + (ev.clientX - startX)), maxW));
+            tile.style.width = w + 'px';
+            state.mrpFreqWidth = w;
+            if (state.chart) state.chart.resize();
+          };
+          const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.userSelect = '';
+            persistState();
+          };
+          document.body.style.userSelect = 'none';
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+      }
+    }
   }
 
   function isSingleScopeView(_v){
