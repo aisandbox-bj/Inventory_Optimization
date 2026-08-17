@@ -499,6 +499,10 @@
 }
 .chain-table td.num{ text-align:right; }
 .chain-table td.mono{ font-family:var(--font-mono); }
+/* APP-TRACE-TRIGGER (2026-08-17) — PR origin: MRP (creation ind. B) vs Manual (R/F). */
+.chain-table td.trig{ font-family:var(--font-mono); font-size:11px; letter-spacing:.4px; }
+.chain-table td.trig-mrp{ color:var(--text-muted); }
+.chain-table td.trig-manual{ color:var(--status-warn); font-weight:600; }
 .chain-table tbody tr:last-child td{ border-bottom:none; }
 .chain-table tbody tr.cancelled td{
   color:var(--text-muted);

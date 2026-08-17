@@ -1035,6 +1035,7 @@
             <tr>
               <th></th>
               <th>PR</th>
+              <th>Trigger</th>
               <th>PR date</th>
               <th>PO</th>
               <th>PO date</th>
@@ -1114,9 +1115,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',          title: 'No sigma trim' },
-      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
-      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
-      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than median + 3·MAD (robust) of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than median + 2·MAD (robust) of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than median + 1.5·MAD (robust) of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -1252,9 +1253,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',          title: 'No sigma trim' },
-      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
-      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
-      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than median + 3·MAD (robust) of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than median + 2·MAD (robust) of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than median + 1.5·MAD (robust) of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -1453,9 +1454,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',         title: 'No sigma trim' },
-      { v: '3',    lab: 'Loose 3σ',    title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
-      { v: '2',    lab: 'Standard 2σ', title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
-      { v: '1.5',  lab: 'Tight 1.5σ',  title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
+      { v: '3',    lab: 'Loose 3σ',    title: 'Drop chains slower than median + 3·MAD (robust) of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ', title: 'Drop chains slower than median + 2·MAD (robust) of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',  title: 'Drop chains slower than median + 1.5·MAD (robust) of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -1917,9 +1918,9 @@
     ).join('');
     const sigmaBtns = [
       { v: 'null', lab: 'Off',          title: 'No sigma trim — show every chain' },
-      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than mean + 3·sd of processing time to site (A–D)' },
-      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than mean + 2·sd of processing time to site (A–D)' },
-      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than mean + 1.5·sd of processing time to site (A–D)' }
+      { v: '3',    lab: 'Loose 3σ',     title: 'Drop chains slower than median + 3·MAD (robust) of processing time to site (A–D)' },
+      { v: '2',    lab: 'Standard 2σ',  title: 'Drop chains slower than median + 2·MAD (robust) of processing time to site (A–D)' },
+      { v: '1.5',  lab: 'Tight 1.5σ',   title: 'Drop chains slower than median + 1.5·MAD (robust) of processing time to site (A–D)' }
     ].map(s => {
       const isActive = (s.v === 'null' && state.sigmaLimit === null) || (state.sigmaLimit !== null && Number(s.v) === state.sigmaLimit);
       return `<button class="tr-fbtn ${isActive ? 'active' : ''}" data-filter="sigma" data-val="${s.v}" title="${s.title}">${s.lab}</button>`;
@@ -2044,25 +2045,20 @@
     return state.manualExclByMat.get(material);
   }
 
+  // APP-FIX-SIGMA-ROBUST (2026-08-17) — delegate to the single shared implementation
+  // (TracePhase.sigmaExcl: robust median + k·1.4826·MAD on the post-manual, site-
+  // received set, trimming upper outliers on `totalToSite` A–D only) so the Trace
+  // views and the Screener/Sandbox/Trend lead-time use the SAME trim and can't drift.
+  // Threads the current material's manual excludes so the spread is computed on
+  // what's left after manual removals.
   function sigmaExcl(chains){
-    // Returns Set<pr> of chains classified as statistical outliers on
-    // `chain.totalToSite` (processing time to site, phases A–D). APP-FIX-SIGMA-PROC
-    // (2026-06-27): trims on the procurement timeline only — phase E (Time to
-    // First Use / shelf time) is deliberately excluded. Pre-restricts to
-    // year-filtered chains AND chains with a non-null total (siteWH-gated) so the
-    // threshold reflects what the operator can see on the swimlane.
-    if (!state.sigmaLimit) return new Set();
-    const inYear = chains.filter(c => state.yearFilter === 'All' || getChainYear(c) === state.yearFilter);
-    const drawn  = inYear.filter(c => !!c.siteWH);
-    if (drawn.length < 2) return new Set();
-    const totals = drawn.map(c => c.totalToSite);
-    const n      = totals.length;
-    const mean   = totals.reduce((s, v) => s + v, 0) / n;
-    const sd     = Math.sqrt(totals.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(n - 1, 1));
-    const threshold = mean + state.sigmaLimit * sd;
-    const excl = new Set();
-    drawn.forEach(c => { if (c.totalToSite > threshold) excl.add(c.pr); });
-    return excl;
+    if (typeof TracePhase === 'undefined' || !TracePhase.sigmaExcl) return new Set();
+    const mat = state._rawDataMaterial || state.scopeSingle;
+    return TracePhase.sigmaExcl(chains, {
+      yearFilter: state.yearFilter,
+      sigmaLimit: state.sigmaLimit,
+      manualExcl: getManualExcl(mat)
+    });
   }
 
   function allExcl(chains, material){
@@ -2391,7 +2387,7 @@
         excluded ? 'excluded' : ''
       ].filter(Boolean).join(' ');
       const togBtn = isSigma
-        ? `<span class="tr-excl-tog sigma" title="Sigma-trimmed (mean + ${state.sigmaLimit}σ on total LT). Adjust via toolbar.">σ</span>`
+        ? `<span class="tr-excl-tog sigma" title="Sigma-trimmed (robust: median + ${state.sigmaLimit}·MAD on processing time to site, A–D). Adjust via toolbar.">σ</span>`
         : `<button class="tr-excl-tog ${isManual ? 'on' : ''}" data-toggle-excl="${escapeAttr(c.pr)}" data-sigma="0" title="${isManual ? 'Click to include this chain in stats / chart' : 'Click to exclude this chain from stats / chart'}">${isManual ? '✕' : '·'}</button>`;
       const stateLabel = excluded
         ? `<span class="state-excluded" title="Excluded: ${isSigma ? 'sigma-trim' : 'manual'}">EXCL · ${c.state.replace(/_/g, ' ')}</span>`
@@ -2400,6 +2396,7 @@
         <tr class="${trCls}">
           <td class="tog-cell">${togBtn}</td>
           <td class="mono">${escapeHtml(c.pr)}</td>
+          <td class="trig ${isMrpChain(c) ? 'trig-mrp' : 'trig-manual'}">${isMrpChain(c) ? 'MRP' : 'Manual'}</td>
           <td class="mono">${escapeHtml(c.prDate || '—')}</td>
           <td class="mono">${escapeHtml(c.po || '—')}</td>
           <td class="mono">${escapeHtml(c.poDate || '—')}</td>
@@ -2417,7 +2414,7 @@
         </tr>
       `;
     }).join('');
-    $('#chainTableBody').innerHTML = rows || `<tr><td colspan="16" class="empty">no chains for this material</td></tr>`;
+    $('#chainTableBody').innerHTML = rows || `<tr><td colspan="17" class="empty">no chains for this material</td></tr>`;
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

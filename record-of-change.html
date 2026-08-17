@@ -14,6 +14,7 @@
 <meta name="app-version" content="2.1.5-dev" />
 <meta name="app-released" content="2026-08-15" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
+<script src="shared/no-hovers.js"></script><!-- APP-HOVER-KILL (temp) — strips all native title tooltips; remove this line to restore -->
 <style>
 /* ════════════════════════════════════════════════════════════════════════
    Record of Change · brand-pack-aligned restyle (v2.1.3-dev)
@@ -379,6 +380,23 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- v2.1.5-dev - post-round-3 enhancements: Trace Raw Data MRP/Manual Trigger column + robust (median+MAD) sigma trim + global native-tooltip suppression - PUSHED 2026-08-17 on top of ccfd895 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-17</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>Post-round-3 enhancements — Trace Raw Data <b>MRP/Manual "Trigger" column</b> (APP-TRACE-TRIGGER) · <b>robust sigma trim</b> that actually removes outliers (APP-FIX-SIGMA-ROBUST) · <b>global native-tooltip suppression</b> (APP-HOVER-KILL, temporary/reversible) — <b>built + browser-verified clean, pushed 2026-08-17 on top of <code>ccfd895</code>; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Trace Raw Data — MRP/Manual Trigger column (APP-TRACE-TRIGGER).</b> New <b>Trigger</b> column between <b>PR</b> and <b>PR date</b> showing each chain's origin: <b>MRP</b> (creation indicator B/blank, muted) vs <b>Manual</b> (R/F, amber). Reads the same <code>creationIndicator</code> the MRP-run cadence view uses, so the two agree by construction. Verified live: material 1003497 → <b>25 MRP / 2 Manual</b>, matching the cadence view's Manual KPI. Files: <code>trace/trace.{js,css}</code>.</li>
+        <li><b>Robust sigma trim (APP-FIX-SIGMA-ROBUST).</b> The Trace outlier trim "removed nothing, even way-out outliers." <b>Root cause (proven on data):</b> it computed <code>mean + k·SD</code> over a set that <em>included</em> the outlier, so one extreme chain inflated the SD until the threshold sat above everything moderate — only the single most-extreme chain was ever caught and tightening σ moved nothing. <b>Fix:</b> one shared <code>TracePhase.sigmaExcl</code> now uses a <b>robust median + k·1.4826·MAD</b> estimator (IQR/1.349 fallback if MAD collapses), one-sided (slow chains only), computed on the <b>post-manual set</b> (recomputes after manual removes — it never did); <code>trace.js</code> now <b>delegates</b> to it (the two duplicate copies are unified, so the Trace views and the Screener/Sandbox/Trend lead-time can't drift, and the trim now agrees with the box-plot's own Tukey outliers). The 3σ/2σ/1.5σ buttons keep their meaning (looser → tighter). Verified live on material 1000408: 3σ→1 excluded, 2σ→1, <b>1.5σ→3</b> (the 128 + the 46 + the 43), and manually removing the top then recatches the next tier. Button + row-glyph tooltips corrected from "mean + N·sd" to the robust wording. Files: <code>shared/trace-phase.js</code>, <code>trace/trace.js</code>. <b>Effect to know:</b> because the lead-time now trims moderate outliers it didn't before, the average lead time drops slightly on affected materials → flows into a marginally less-conservative Min/Max recommendation. Intended correction, flagged because it moves numbers.</li>
+        <li><b>Global native-tooltip suppression (APP-HOVER-KILL) — TEMPORARY, reversible.</b> The operator asked to suppress <em>all</em> native hover tooltips for the time being (moving the cursor fired a <code>title</code> bubble on nearly every description/cell/button). New shared module <code>shared/no-hovers.js</code> strips <code>title</code> attributes at <b>runtime</b> — an initial DOM sweep plus a MutationObserver so dynamically-rendered content is stripped too — loaded on all <b>9 pages</b>. Deliberate <b>graph</b> hovers are untouched (Chart.js tooltips, the cadence MRP/Manual hover table, the consumption-chart hover are NOT <code>title</code>-based); verified live: 0 native tooltips remain after rendering, while the MRP-chart hover table still works. <b>Reversible</b> — remove the one <code>&lt;script&gt;</code> line per page (or delete the file); no source <code>title=</code> text was deleted. Supersedes the round-3 targeted hover sweep. Files: <code>shared/no-hovers.js</code> (new) + the 9 page HTMLs.</li>
+        <li><b>Verification.</b> No Node → <code>node --check</code> skipped; instead all touched pages boot with <b>zero console errors</b>, delimiter balance is unchanged, no corruption artefacts. Each feature verified live in-browser against a loaded assessment (cadence-vs-Trigger reconciliation, sigma exclusions + post-manual recompute, tooltip strip + chart-hover preserved).</li>
+        <li><b>Rollback.</b> Clean baseline = origin/main <code>ccfd895</code>. At push: remote <code>backup/pre-post-round3</code> branch + <code>checkpoint/pre-post-round3</code> tag (both <code>ccfd895</code>); local snapshot <code>_rollback/APP-TRACE-TRIGGER-pre/</code> (pre-edit <code>trace.js</code> + <code>trace.css</code>). <b>No SCHEMA_VERSION change.</b></li>
+      </ul>
+    </article>
 
     <!-- v2.1.5-dev - 16-Aug round-3 feedback: MRP-cadence allocation reconcile + month axis + MRP/Manual hover table + analyst-data-loss fix (download embed + non-destructive merge) + Calibre nav rebrand + hover-helper sweep - PUSHED 2026-08-16 on top of b911ed1 -->
     <article class="roc-entry dev">

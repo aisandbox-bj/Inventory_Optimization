@@ -173,20 +173,37 @@
     return [...yrs].sort();
   }
 
+  // APP-FIX-SIGMA-ROBUST (2026-08-17) — the single source of truth for the Trace
+  // outlier trim. It flags chains whose processing time to site (A–D `totalToSite`;
+  // phase E / shelf time is deliberately excluded, per APP-FIX-SIGMA-PROC) is an
+  // upper outlier. It uses a ROBUST estimator — median + k·1.4826·MAD (Median
+  // Absolute Deviation) — instead of mean + k·SD, because the old mean+SD folded
+  // the outlier into its own threshold: one extreme chain inflated the SD so much
+  // that the threshold sat above everything moderate, so only the single most-
+  // extreme chain was ever caught and tightening σ barely moved it. Median + MAD
+  // is computed from the middle of the data, so an outlier can't hide itself.
+  //   • ONE-SIDED (upper): only anomalously SLOW procurement is trimmed, never fast.
+  //   • POST-manual: manual excludes are removed BEFORE the spread is computed, so
+  //     the threshold reflects what's left (the old code never recomputed).
+  //   • 1.4826 scales MAD to a σ-equivalent for ~normal data, so the 3/2/1.5σ
+  //     buttons keep their meaning (looser → tighter). Fallbacks: if MAD collapses
+  //     (>50% of values identical) use IQR/1.349; if that's also 0, exclude nothing.
+  //   • Needs ≥4 completed chains — too few to judge an outlier robustly.
   function sigmaExcl(chains, filters){
     const sigmaLimit = filters && filters.sigmaLimit;
     const yearFilter = (filters && filters.yearFilter) || 'All';
+    const manualExcl = (filters && filters.manualExcl) || new Set();
     if (!sigmaLimit) return new Set();
     const inYear = chains.filter(c => yearFilter === 'All' || getChainYear(c) === yearFilter);
-    const drawn  = inYear.filter(c => !!c.siteWH);
-    if (drawn.length < 2) return new Set();
-    // APP-FIX-SIGMA-PROC — outlier trim on processing time to site (A–D),
-    // not the full A–E total (E = Time to First Use / shelf time is excluded).
-    const totals = drawn.map(c => c.totalToSite);
-    const n      = totals.length;
-    const mean   = totals.reduce((s, v) => s + v, 0) / n;
-    const sd     = Math.sqrt(totals.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(n - 1, 1));
-    const threshold = mean + sigmaLimit * sd;
+    const drawn  = inYear.filter(c => !!c.siteWH && !manualExcl.has(c.pr));
+    if (drawn.length < 4) return new Set();
+    const totals = drawn.map(c => c.totalToSite).sort((a, b) => a - b);
+    const med    = quantile(totals, 0.5);
+    const absDev = totals.map(v => Math.abs(v - med)).sort((a, b) => a - b);
+    let spread   = quantile(absDev, 0.5) * 1.4826;          // MAD → σ-equivalent
+    if (spread <= 0) spread = (quantile(totals, 0.75) - quantile(totals, 0.25)) / 1.349;  // IQR fallback
+    if (spread <= 0) return new Set();                       // fully degenerate — don't trim
+    const threshold = med + sigmaLimit * spread;
     const excl = new Set();
     drawn.forEach(c => { if (c.totalToSite > threshold) excl.add(c.pr); });
     return excl;
