@@ -774,6 +774,55 @@
     if (period === 'week')  return ms + 7 * 864e5;
     return ms + 864e5;
   }
+  function mfIso(ms){ const d = new Date(ms); return d.getUTCFullYear() + '-' + mfPad(d.getUTCMonth() + 1) + '-' + mfPad(d.getUTCDate()); }
+  // ISO date n calendar months before the given ISO date (Date normalises month underflow).
+  function isoMonthsAgo(iso, n){
+    const s = String(iso || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10);
+    const dt = new Date(Date.UTC(y, m - 1 - n, d));
+    return dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1) + '-' + mfPad(dt.getUTCDate());
+  }
+
+  // APP-MRPFREQ-DOTS (2026-08-17) — build the per-day stock-status inputs for the
+  // cadence chart's dot strip AND the replenishment (stock+PO) chart below it.
+  // Full-span back-calc (windowStart = first cadence slot → today) so the strip
+  // covers the whole axis, not just the pipeline's default 6-month window. Reuses
+  // the SAME deterministic InventoryBackCalc the Trend SOH line uses. Min/Max/SS
+  // are the CURRENT SAP values off the Inventory Master (operator decision).
+  function buildStockDotMap(mat, mRec, firstSlotMs){
+    const out = { sohByDay: new Map(), ok: false, isPD: false, ss: null, min: null, max: null,
+                  thr: null, thrLabel: '', currentSOH: null };
+    const soh0 = (typeof mRec.soh === 'number' && Number.isFinite(mRec.soh)) ? mRec.soh : null;
+    out.currentSOH = soh0;
+    out.isPD = String(mRec.mrpInd || '').toUpperCase() === 'PD';
+    out.ss   = (typeof mRec.safetyStock === 'number') ? mRec.safetyStock : null;
+    out.min  = (typeof mRec.mrpMin === 'number') ? mRec.mrpMin : null;
+    out.max  = (typeof mRec.mrpMax === 'number') ? mRec.mrpMax : null;
+    // Colour threshold: V1 → Min · PD-with-SS → SS · PD-0-SS → none (positive = green).
+    if (out.isPD){ if (out.ss && out.ss > 0){ out.thr = out.ss; out.thrLabel = 'SS'; } }
+    else        { if (out.min && out.min > 0){ out.thr = out.min; out.thrLabel = 'Min'; } }
+    if (soh0 == null || firstSlotMs == null || typeof InventoryBackCalc === 'undefined') return out;
+    const endIso   = (typeof AppLocale !== 'undefined' && AppLocale.localDateISO) ? AppLocale.localDateISO() : mfIso(Date.now());
+    const startIso = mfIso(firstSlotMs);
+    const mb51Rows = ((state.json && state.json.data && state.json.data.mb51) || [])
+                       .filter(r => String(r.material || '').trim() === String(mat));
+    let res;
+    try { res = InventoryBackCalc.backCalcSOH({ material: mat, currentSOH: soh0, mb51Rows, windowStart: startIso, windowEnd: endIso }); }
+    catch (e){ return out; }
+    if (!res || res.error || !res.series || !res.series.length) return out;
+    for (const p of res.series) out.sohByDay.set(p.date, p.soh);
+    out.ok = true;
+    return out;
+  }
+  // Dot colour from a day's SOH against the material's Current-SAP thresholds.
+  function stockDotColor(soh, info){
+    if (soh == null) return null;                                  // no data → no dot (honest gap)
+    if (soh <= 0.0001) return '#EF4444';                           // stockout → red
+    if (info.isPD && !(info.ss > 0)) return '#2FBF88';             // PD + 0 SS: any positive stock = green
+    if (info.thr == null || !(info.thr > 0)) return '#2FBF88';     // no threshold → positive = green
+    return soh >= info.thr ? '#2FBF88' : '#FBBF24';                // green ≥ thr · orange below (>0)
+  }
 
   function renderMrpCadence(host){
     // APP-FIX-MRPFREQ-REBUILD (2026-08-16) — rebuilt on the SAME chains as Raw Data
@@ -786,7 +835,8 @@
     const mat = state.scopeSingle;
     const allPrs = (state.json && state.json.data && state.json.data.prHistory) || [];
     state.mrpFreqPeriod = state.mrpFreqPeriod || 'week';
-    if (state.chart) { state.chart.destroy(); state.chart = null; }
+    if (state.chart)  { state.chart.destroy();  state.chart = null; }
+    if (state.chart2) { state.chart2.destroy(); state.chart2 = null; }
     if (!allPrs.length){
       host.innerHTML = `<div class="view-empty"><h3>No PR History loaded</h3><p>The MRP-run cadence reads the PR-to-PO history. Load PR History in Intake to see when MRP raised requisitions for this material and what became of them.</p></div>`;
       return;
@@ -820,11 +870,54 @@
       host.innerHTML = `<div class="view-empty"><h3>No dated requisitions</h3><p>All ${chains.length.toLocaleString()} requisition chains for material <b>${escapeHtml(String(mat || ''))}</b> are missing a valid requisition date, so there is nothing to place on the timeline.</p></div>`;
       return;
     }
-    // Continuous slots from the first to the last dated slot — empties kept as gaps.
+    // Continuous slots. APP-FIX-MRPFREQ-SPAN (2026-08-17) — the axis ALWAYS ends on
+    // today and spans at least 3 months, so a material with a single (or old) PR draws
+    // its real timeline through to today instead of one bar filling the screen. Start =
+    // the earlier of the first PR and (today − 3 months); end = the later of the last
+    // PR and today. Empty periods in between stay as gaps (honest "no requisition").
     const used = [...agg.keys()].sort((a, b) => a - b);
-    const slots = []; let cur = used[0]; const end = used[used.length - 1]; let guard = 0;
-    while (cur <= end && guard++ < 6000){ slots.push(cur); cur = mfNextSlot(cur, period); }
+    const todayIso  = (typeof AppLocale !== 'undefined' && AppLocale.localDateISO) ? AppLocale.localDateISO() : mfIso(Date.now());
+    const todaySlot = mfSlotStart(todayIso, period);
+    const minStart  = mfSlotStart(isoMonthsAgo(todayIso, 3), period);
+    const spanStart = Math.min(used[0], minStart != null ? minStart : used[0]);
+    const spanEnd   = Math.max(used[used.length - 1], todaySlot != null ? todaySlot : used[used.length - 1]);
+    const slots = []; let cur = spanStart; let guard = 0;
+    while (cur <= spanEnd && guard++ < 8000){ slots.push(cur); cur = mfNextSlot(cur, period); }
     const emptySlots = slots.filter(ms => !agg.has(ms)).length;
+
+    // ── APP-MRPFREQ-DOTS + APP-MRPFREQ-REPLEN ─────────────────────────────────
+    // Per-day stock series (back-calc) for the dot strip on the cadence chart AND
+    // the replenishment chart below it. Both are Current-SAP Min/Max/SS based.
+    const mRec    = state.matIndex.get(mat) || {};
+    const dotInfo = buildStockDotMap(mat, mRec, slots[0]);
+    // Replenishment chart: for each slot that carried a PR which was flipped to a
+    // PO, stack that day's stock-on-hand (green) under the ordered PO qty (yellow),
+    // so the operator can see whether SOH + incoming qty lands below Min, between
+    // Min and Max, or above Max. Bars appear ONLY on PO-event slots (dates align
+    // vertically with the cadence bars above). Stock at the LATEST PO event in the
+    // slot; PO qty summed across events in the slot.
+    const repStock = new Array(slots.length).fill(null);
+    const repPo    = new Array(slots.length).fill(0);
+    const slotIdx  = new Map(); slots.forEach((ms, i) => slotIdx.set(ms, i));
+    let repAny = false, repLatestDay = new Array(slots.length).fill(null);
+    for (const c of chains){
+      if (!c.po) continue;                                  // only PRs flipped to a PO
+      if (c.state === 'CANCELLED' || c.state === 'PR_ONLY') continue;
+      const sm = mfSlotStart(c.prDate, period);
+      if (sm == null || !slotIdx.has(sm)) continue;
+      const i = slotIdx.get(sm);
+      const q = (typeof c.qty === 'number' && c.qty > 0) ? c.qty : 0;
+      repPo[i] += q; repAny = true;
+      const day = String(c.prDate || '').slice(0, 10);
+      if (!repLatestDay[i] || day > repLatestDay[i]) repLatestDay[i] = day;
+    }
+    if (dotInfo.ok){
+      for (let i = 0; i < slots.length; i++){
+        if (repPo[i] > 0 && repLatestDay[i] && dotInfo.sohByDay.has(repLatestDay[i])){
+          repStock[i] = Math.max(0, dotInfo.sohByDay.get(repLatestDay[i]));
+        }
+      }
+    }
     // Month key per slot — drives the mid-month labels + boundary lines on day/week.
     const slotMonthKey = slots.map(ms => { const dt = new Date(ms); return dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1); });
     const labels = slots.map(ms => {
@@ -841,37 +934,60 @@
     const dCanMan  = slots.map(ms => gv(ms, 'xMan'));
 
     const pBtn = (p, lab) => `<button type="button" class="mf-period ${period === p ? 'active' : ''}" data-mf="${p}">${lab}</button>`;
+    // Dot-strip legend — only meaningful when the back-calc produced a series.
+    const dotLegend = dotInfo.ok
+      ? `<span class="mf-dot-legend"><b>Stock status</b> (dots, Current SAP): <span class="ds ds-g"></span> ${dotInfo.thrLabel ? '≥ ' + dotInfo.thrLabel : 'in stock'} · ${dotInfo.thr != null ? '<span class="ds ds-o"></span> below ' + dotInfo.thrLabel + ' · ' : ''}<span class="ds ds-r"></span> stockout</span>`
+      : `<span class="mf-dot-legend mf-dot-legend-off">Stock-status dots unavailable — ${dotInfo.currentSOH == null ? 'no current stock-on-hand on the Inventory Master' : 'no back-calc series for this material'}.</span>`;
+    // Replenishment caption / empty note.
+    const repNote = !repAny
+      ? `No PR was flipped to a PO in this window, so there is nothing to place on the replenishment chart.`
+      : !dotInfo.ok
+        ? `PO quantities are shown, but stock-on-hand could not be back-calculated (${dotInfo.currentSOH == null ? 'no current SOH' : 'no series'}), so the stock portion is omitted.`
+        : `On each date a PR was flipped to a PO, the bar stacks that day's <b style="color:#2FBF88">stock-on-hand</b> under the <b style="color:#FBBF24">ordered PO qty</b> — the top of the bar is the projected stock once the order lands. Compare it to <b style="color:#EF4444">Min</b> (red dotted) and <b style="color:#2FBF88">Max</b> (green dotted): below Min = still short after receipt · between = replenished into band · above Max = over-ordered.${(dotInfo.min == null && dotInfo.max == null) ? ' <em>No Min/Max on the Inventory Master for this material.</em>' : ''}`;
     host.innerHTML = `
-      <div class="mf-toolbar">
-        <span class="mf-toolbar-lab">Bucket by</span>
-        ${pBtn('day','Day')}${pBtn('week','Week')}${pBtn('month','Month')}
+      <div class="mf-tile" id="mfTile">
+        <div class="mf-toolbar">
+          <span class="mf-toolbar-lab">Bucket by</span>
+          ${pBtn('day','Day')}${pBtn('week','Week')}${pBtn('month','Month')}
+        </div>
+        <div class="vol-kpi-strip">
+          <div class="vk-cell"><span class="lab">Requisitions</span><span class="v">${chains.length.toLocaleString()}</span><span class="sub">all chains · ties to Raw Data</span></div>
+          <div class="vk-cell"><span class="lab">Complete</span><span class="v" style="color:#2FBF88">${complete.toLocaleString()}</span><span class="sub">received at site</span></div>
+          <div class="vk-cell"><span class="lab">In-flight</span><span class="v" style="color:#FBBF24">${inflight.toLocaleString()}</span><span class="sub">PO raised / PR pending</span></div>
+          <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${cancelled ? 'warn' : ''}">${cancelled.toLocaleString()}</span><span class="sub">deleted, no PO</span></div>
+          <div class="vk-cell"><span class="lab">Manual</span><span class="v ${manualCt ? 'warn' : ''}">${manualCt.toLocaleString()}</span><span class="sub">creation R / F</span></div>
+          <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no requisition</span></div>
+        </div>
+        <div class="mf-chart-title">MRP-run cadence — requisitions raised per ${period}</div>
+        <div class="vol-chart-host mf-host-top"><canvas id="mfChart"></canvas></div>
+        <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). Stacked by outcome: <b style="color:#2FBF88">Complete</b> (received at site) · <b style="color:#FBBF24">In-flight</b> (PO raised or PR pending) · <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO) — the same states as Raw Data. Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split by status. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}${dotLegend} For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
+        <div class="mf-chart-title">Replenishment — stock + incoming PO qty vs Min/Max</div>
+        <div class="vol-chart-host mf-host-bot"><canvas id="mfChart2"></canvas></div>
+        <div class="chart-caveat">${repNote}</div>
+        <span class="mf-tile-grip" aria-hidden="true"></span>
       </div>
-      <div class="vol-kpi-strip">
-        <div class="vk-cell"><span class="lab">Requisitions</span><span class="v">${chains.length.toLocaleString()}</span><span class="sub">all chains · ties to Raw Data</span></div>
-        <div class="vk-cell"><span class="lab">Complete</span><span class="v" style="color:#2FBF88">${complete.toLocaleString()}</span><span class="sub">received at site</span></div>
-        <div class="vk-cell"><span class="lab">In-flight</span><span class="v" style="color:#FBBF24">${inflight.toLocaleString()}</span><span class="sub">PO raised / PR pending</span></div>
-        <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${cancelled ? 'warn' : ''}">${cancelled.toLocaleString()}</span><span class="sub">deleted, no PO</span></div>
-        <div class="vk-cell"><span class="lab">Manual</span><span class="v ${manualCt ? 'warn' : ''}">${manualCt.toLocaleString()}</span><span class="sub">creation R / F</span></div>
-        <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no requisition</span></div>
-      </div>
-      <div class="mf-tile" id="mfTile"><div class="vol-chart-host"><canvas id="mfChart"></canvas></div><span class="mf-tile-grip" aria-hidden="true"></span></div>
-      <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). Stacked by outcome: <b style="color:#2FBF88">Complete</b> (received at site) · <b style="color:#FBBF24">In-flight</b> (PO raised or PR pending) · <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO) — the same states as Raw Data. Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split by status. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
     `;
     host.querySelectorAll('.mf-period').forEach(b => b.addEventListener('click', () => { state.mrpFreqPeriod = b.dataset.mf; renderActiveView(); }));
 
     const COMP = '#2FBF88', INF = '#FBBF24', CAN = '#EF4444';
+    // Shared geometry so the cadence chart and the replenishment chart below it line
+    // up: a FIXED y-axis width means both plot areas start at the same x, so the
+    // dates align vertically even though each chart has its own y-scale.
+    const Y_AX_W = 58;         // fixed y-axis width (px) — locks x-alignment of both charts
+    const DAY_PAD_TOP = 18;    // day-number tick offset on the cadence chart (room for the dot strip above)
     // Simple 3-outcome stacks (MRP + manual combined per bar) — the MRP-vs-manual
     // split lives in the hover table, not the bars, to keep the chart uncluttered.
     const dComp = slots.map((_, i) => dCompMrp[i] + dCompMan[i]);
     const dInf  = slots.map((_, i) => dInfMrp[i]  + dInfMan[i]);
     const dCan  = slots.map((_, i) => dCanMrp[i]  + dCanMan[i]);
-    // APP-FIX-MRPFREQ-AXIS (2026-08-16) — keep the month visible on day/week: draw a
-    // faint boundary line at each month start and the YYYY-MM label centred mid-month.
-    // Category x-pixels are derived from the plot width (not the tick scale) so the
-    // day-number autoSkip can't take the month text with it. Month view is unchanged
-    // (it already labels every bar).
-    const monthBands = {
-      id: 'monthBands',
+    // APP-FIX-MRPFREQ-AXIS (2026-08-16, reworked 2026-08-17) — keep the month visible
+    // on day/week WITHOUT crowding the day-number ticks: the YYYY-MM label sits on its
+    // OWN row below the day numbers (dayTickPad + drop), with a boundary line at each
+    // month start and horizontal de-overlap (skip a label that would touch the last
+    // one drawn) so a long span of months stays legible. Factory → each chart passes
+    // its own day-number tick offset.
+    const makeMonthBands = (dayTickPad) => ({
+      id: 'monthBands' + dayTickPad,
       afterDatasetsDraw(chart){
         if (period === 'month') return;
         const { ctx, chartArea } = chart;
@@ -879,22 +995,85 @@
         const w = (chartArea.right - chartArea.left) / n;
         const ctr = (idx) => chartArea.left + w * (idx + 0.5);
         const top = chartArea.top, bot = chartArea.bottom;
-        ctx.save();
-        let spanStart = 0;
+        const lineY = bot + dayTickPad + 18;   // month boundary line foot
+        const labelY = bot + dayTickPad + 26;  // month label row — kept well clear of the day-number row above
+        // Collect month spans [firstSlot, lastSlot].
+        const spans = []; let spanStart = 0;
         for (let i = 1; i <= n; i++){
           if (i !== n && slotMonthKey[i] === slotMonthKey[i - 1]) continue;
-          if (spanStart > 0){
-            const bx = chartArea.left + w * spanStart;
-            ctx.strokeStyle = 'rgba(155,171,168,.22)'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx, bot + 14); ctx.stroke();
-          }
-          const cx = (ctr(spanStart) + ctr(i - 1)) / 2;
-          ctx.fillStyle = '#C7D6D2'; ctx.font = '600 10px JetBrains Mono, monospace';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-          ctx.fillText(slotMonthKey[spanStart], cx, bot + 20);
-          spanStart = i;
+          spans.push([spanStart, i - 1]); spanStart = i;
+        }
+        ctx.save();
+        // Boundary lines at each month start (skip the very first).
+        ctx.strokeStyle = 'rgba(155,171,168,.22)'; ctx.lineWidth = 1;
+        for (let s = 1; s < spans.length; s++){
+          const bx = chartArea.left + w * spans[s][0];
+          ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx, lineY); ctx.stroke();
+        }
+        // Month labels on their own row, de-overlapped.
+        ctx.fillStyle = '#C7D6D2'; ctx.font = '600 10px JetBrains Mono, monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        let lastRight = -1e9;
+        for (const [a, b] of spans){
+          const cx = (ctr(a) + ctr(b)) / 2;
+          const label = slotMonthKey[a];
+          const halfW = ctx.measureText(label).width / 2;
+          if (cx - halfW < lastRight + 4) continue;   // would collide with the previous label → skip
+          ctx.fillText(label, cx, labelY);
+          lastRight = cx + halfW;
         }
         ctx.restore();
+      }
+    });
+    // APP-MRPFREQ-DOTS — per-day stock-status dot strip, just below the bars and
+    // above the date text. Continuous even on week/month (per-day, back-calc SOH).
+    const stockDots = {
+      id: 'stockDots',
+      afterDatasetsDraw(chart){
+        if (!dotInfo.ok) return;
+        const { ctx, chartArea } = chart;
+        const n = slots.length; if (!n) return;
+        const w = (chartArea.right - chartArea.left) / n;
+        const yDot = chartArea.bottom + 9;
+        const endMs = mfNextSlot(slots[n - 1], period);
+        ctx.save();
+        let si = 0, guard = 0;
+        for (let t = slots[0]; t <= endMs && guard < 20000; t += 864e5, guard++){
+          while (si + 1 < n && slots[si + 1] <= t) si++;
+          const s0 = slots[si], s1 = (si + 1 < n) ? slots[si + 1] : mfNextSlot(slots[si], period);
+          const f = s1 > s0 ? Math.max(0, Math.min(1, (t - s0) / (s1 - s0))) : 0;
+          const x = chartArea.left + w * (si + f);
+          const iso = mfIso(t);
+          const soh = dotInfo.sohByDay.has(iso) ? dotInfo.sohByDay.get(iso) : null;
+          const col = stockDotColor(soh, dotInfo);
+          if (!col) continue;
+          ctx.beginPath(); ctx.fillStyle = col; ctx.arc(x, yDot, 1.7, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+    };
+    // APP-MRPFREQ-REPLEN — Min (red) + Max (green) dotted reference lines for the
+    // replenishment chart.
+    const minmaxLines = {
+      id: 'minmaxLines',
+      afterDatasetsDraw(chart){
+        const { ctx, chartArea, scales } = chart;
+        const y = scales.y; if (!y) return;
+        const drawLine = (val, color, label) => {
+          if (val == null || !Number.isFinite(val)) return;
+          const yp = y.getPixelForValue(val);
+          if (yp < chartArea.top - 1 || yp > chartArea.bottom + 1) return;
+          ctx.save();
+          ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+          ctx.beginPath(); ctx.moveTo(chartArea.left, yp); ctx.lineTo(chartArea.right, yp); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = color; ctx.font = '600 10px JetBrains Mono, monospace';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+          ctx.fillText(label + ' ' + Math.round(val).toLocaleString(), chartArea.left + 4, yp - 2);
+          ctx.restore();
+        };
+        drawLine(dotInfo.max, '#2FBF88', 'Max');
+        drawLine(dotInfo.min, '#EF4444', 'Min');
       }
     };
     state.chart = new Chart($('#mfChart'), {
@@ -910,10 +1089,12 @@
       options: {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
-        layout: { padding: { bottom: period === 'month' ? 0 : 34 } },
+        // right:26 dominates the x-axis last-label overflow on both charts so their
+        // plot areas share identical left/right → the dates line up vertically.
+        layout: { padding: { right: 26, bottom: period === 'month' ? 10 : 56 } },
         scales: {
-          x: { stacked: true, grid: { display: false }, ticks: { color:'#9BABA8', maxRotation: 0, autoSkip: true, maxTicksLimit: 26, font:{ family:'JetBrains Mono', size:9 } } },
-          y: { stacked: true, beginAtZero: true, ticks: { color:'#9BABA8', precision:0, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
+          x: { stacked: true, grid: { display: false }, ticks: { color:'#9BABA8', maxRotation: 0, autoSkip: true, maxTicksLimit: 20, padding: DAY_PAD_TOP, font:{ family:'JetBrains Mono', size:9 } } },
+          y: { stacked: true, beginAtZero: true, afterFit: (s) => { s.width = Y_AX_W; }, ticks: { color:'#9BABA8', precision:0, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
         },
         plugins: {
           legend: { labels: { color:'#DBE9F0', font:{ family:'JetBrains Mono', size:11 }, boxWidth:12 } },
@@ -955,8 +1136,65 @@
           }
         }
       },
-      plugins: [monthBands]
+      plugins: [makeMonthBands(DAY_PAD_TOP), stockDots]
     });
+
+    // APP-MRPFREQ-REPLEN (2026-08-17) — the replenishment chart directly below the
+    // cadence chart, on the SAME slots/x so the dates align vertically. For each slot
+    // that carried a PR flipped to a PO: that day's stock-on-hand (green) stacked
+    // under the ordered PO qty (yellow); Min (red dotted) + Max (green dotted) lines
+    // let the operator read whether the incoming order lands below Min, in-band, or
+    // over Max. Only rendered where there is something to show.
+    const repStockD = repStock.slice();               // stock at the PO event day (null where none)
+    const repPoD    = repPo.map(v => (v > 0 ? v : null));
+    let repMaxVal = 0;
+    for (let i = 0; i < slots.length; i++){ const s = repStock[i] || 0, p = repPo[i] || 0; if (s + p > repMaxVal) repMaxVal = s + p; }
+    if (dotInfo.max != null && dotInfo.max > repMaxVal) repMaxVal = dotInfo.max;
+    const repSuggMax = repMaxVal > 0 ? repMaxVal * 1.1 : 10;
+    const c2 = $('#mfChart2');
+    if (c2){
+      state.chart2 = new Chart(c2, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Stock on hand',   data: repStockD, backgroundColor: COMP, stack: 'r' },
+            { label: 'Incoming PO qty', data: repPoD,    backgroundColor: INF,  stack: 'r' }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          layout: { padding: { right: 26, bottom: period === 'month' ? 10 : 44 } },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { color:'#9BABA8', maxRotation: 0, autoSkip: true, maxTicksLimit: 20, padding: 8, font:{ family:'JetBrains Mono', size:9 } } },
+            y: { stacked: true, beginAtZero: true, suggestedMax: repSuggMax, afterFit: (s) => { s.width = Y_AX_W; }, ticks: { color:'#9BABA8', font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
+          },
+          plugins: {
+            legend: { labels: { color:'#DBE9F0', font:{ family:'JetBrains Mono', size:11 }, boxWidth:12 } },
+            tooltip: {
+              callbacks: {
+                title: (items) => items.length ? mfIso(slots[items[0].dataIndex]) : '',
+                afterBody: (items) => {
+                  if (!items.length) return [];
+                  const idx = items[0].dataIndex;
+                  const s = repStock[idx] || 0, p = repPo[idx] || 0, tot = s + p;
+                  if (p <= 0) return [];
+                  const L = ['Projected after receipt: ' + Math.round(tot).toLocaleString()];
+                  if (dotInfo.min != null) L.push('Min: ' + Math.round(dotInfo.min).toLocaleString());
+                  if (dotInfo.max != null) L.push('Max: ' + Math.round(dotInfo.max).toLocaleString());
+                  if (dotInfo.min != null && tot < dotInfo.min)      L.push('↓ still below Min after receipt');
+                  else if (dotInfo.max != null && tot > dotInfo.max) L.push('↑ above Max (over-ordered)');
+                  else if (dotInfo.min != null || dotInfo.max != null) L.push('● replenished into band');
+                  return L;
+                }
+              }
+            }
+          }
+        },
+        plugins: [makeMonthBands(8), minmaxLines]
+      });
+    }
 
     // APP-MRPFREQ-TILE (2026-08-17) — the chart lives in a tile the operator resizes
     // from a RIGHT-EDGE grip. The width is remembered and carries to the next
@@ -977,7 +1215,8 @@
             const w = Math.max(minW, Math.min(Math.round(startW + (ev.clientX - startX)), maxW));
             tile.style.width = w + 'px';
             state.mrpFreqWidth = w;
-            if (state.chart) state.chart.resize();
+            if (state.chart)  state.chart.resize();
+            if (state.chart2) state.chart2.resize();
           };
           const onUp = () => {
             document.removeEventListener('mousemove', onMove);

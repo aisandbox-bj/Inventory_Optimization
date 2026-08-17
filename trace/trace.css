@@ -400,13 +400,36 @@
 .mf-period:hover{ border-color:var(--accent); color:var(--accent); }
 .mf-period.active{ border-color:var(--accent); color:var(--accent); background:rgba(31,206,216,.10); }
 
-/* APP-MRPFREQ-TILE — resizable chart tile with a right-edge drag grip. */
-.mf-tile{ position:relative; width:100%; min-width:520px; max-width:100%; box-sizing:border-box; }
+/* APP-MRPFREQ-TILE — resizable tile holding the WHOLE cadence block (toolbar,
+   KPIs, both charts, captions) so it all resizes together from the right edge.
+   Understated teal border so the resize edge is findable. */
+.mf-tile{ position:relative; width:100%; min-width:520px; max-width:100%; box-sizing:border-box;
+  border:1px solid rgba(31,206,216,.28); border-radius:7px; padding:12px 18px 10px 14px;
+  background:rgba(31,206,216,.025); }
 .mf-tile .vol-chart-host{ width:100%; }
-.mf-tile-grip{ position:absolute; top:0; right:0; width:11px; height:100%; cursor:ew-resize; z-index:5;
-  display:flex; align-items:center; justify-content:center; }
-.mf-tile-grip::before{ content:""; width:3px; height:46px; border-radius:3px; background:var(--border-soft); transition:background .12s; }
+/* Let the KPI cells compress toward their text before wrapping to a second row
+   (they were far wider than their content). Scoped to the tile + uniform track
+   (drops the trailing fixed 180px column) so the Volume view's strip is unaffected. */
+.mf-tile .vol-kpi-strip{ grid-template-columns: repeat(auto-fit, minmax(116px, 1fr)); }
+.mf-tile .mf-host-top{ height:300px; }
+.mf-tile .mf-host-bot{ height:230px; }
+.mf-chart-title{ font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--text-sec,#9BABA8); margin:10px 0 2px; }
+.mf-chart-title:first-child{ margin-top:0; }
+/* right-edge resize affordance: a teal seam + a centred grip pill */
+.mf-tile-grip{ position:absolute; top:0; right:0; width:14px; height:100%; cursor:ew-resize; z-index:5;
+  display:flex; align-items:center; justify-content:center; border-radius:0 7px 7px 0;
+  border-right:2px solid rgba(31,206,216,.40); transition:background .12s, border-color .12s; }
+.mf-tile-grip:hover{ background:rgba(31,206,216,.09); border-right-color:var(--accent); }
+.mf-tile-grip::before{ content:""; width:3px; height:52px; border-radius:3px; background:rgba(31,206,216,.55); transition:background .12s; }
 .mf-tile-grip:hover::before{ background:var(--accent); }
+/* dot-strip legend on the cadence caption */
+.mf-dot-legend{ display:inline; }
+.mf-dot-legend .ds{ display:inline-block; width:8px; height:8px; border-radius:50%; margin:0 2px 0 1px; vertical-align:middle; }
+.mf-dot-legend .ds-g{ background:#2FBF88; }
+.mf-dot-legend .ds-o{ background:#FBBF24; }
+.mf-dot-legend .ds-r{ background:#EF4444; }
+.mf-dot-legend-off{ color:var(--text-muted,#7A8C89); font-style:italic; }
 
 /* APP-FIX-MRPFREQ-TIP — HTML data-table tooltip for the MRP-run cadence bars. */
 .mf-tip{ position:absolute; z-index:60; pointer-events:none; opacity:0; transition:opacity .08s;
