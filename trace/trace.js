@@ -119,7 +119,7 @@
     state.matStats = new Map();
     try {
       if (typeof AppPipeline !== 'undefined') {
-        const res = AppPipeline.runPipeline(json, { runDate: AppLocale.localDateISO() });
+        const res = AppPipeline.runPipelineCached(json, { runDate: AppLocale.localDateISO() });
         for (const b of res.buckets) {
           for (const m of b.materials) {
             if (!state.matStats.has(m.material)) state.matStats.set(m.material, m);

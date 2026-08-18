@@ -412,7 +412,7 @@
    (drops the trailing fixed 180px column) so the Volume view's strip is unaffected. */
 .mf-tile .vol-kpi-strip{ grid-template-columns: repeat(auto-fit, minmax(116px, 1fr)); }
 .mf-tile .mf-host-top{ height:330px; }
-.mf-tile .mf-host-bot{ height:262px; }
+.mf-tile .mf-host-bot{ height:330px; }   /* same height as the top graph (operator) */
 .mf-chart-title{ font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase;
   color:var(--text-sec,#9BABA8); margin:10px 0 2px; }
 .mf-chart-title:first-child{ margin-top:0; }

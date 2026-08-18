@@ -381,6 +381,25 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.1.5-dev - Template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks - 2026-08-18 on top of 54cdee1 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-18</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>MRP template fleet columns + Part A intake gate · Phase-0 pipeline-result cache (Trend↔Trace stops rebuilding) · two graph tweaks — <b>built + browser-verified, on top of <code>54cdee1</code>; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>MRP Request Template — fleet Make / Model / Site # columns (operator).</b> The template now carries, per material, <b>three separate where-used columns</b> — <b>Make</b> (Manufacturer), <b>Model</b>, and <b>Site # (Sort Field)</b> — sourced from the Fleet Master via the observed units (IW39 work-order Sort Field → Fleet register → make/model/site). They sit <b>to the left of the MRP parameters</b> (right after Unit cost), each a distinct column. Equipment <b>Type</b> is intentionally left for the operator to add manually (no clean Type column in the fleet exports; it's buried in the location description). Files: <code>shared/mrp-request.js</code>.</li>
+        <li><b>APP-MRP-REQ Part A — intake opt-in that makes Fleet + IW39 required.</b> A new Step-0 checkbox — <i>"This run will produce the MRP Request Template"</i> — flips <b>Fleet Master + IW39</b> from ☆ Optional to ★ <b>Required</b> in the upload zones AND adds them to the DQ gate's required set, so a template-intended run can't finish without them (you find out at intake, not at a greyed export button). Verified: ticking it flips both from Optional→Required. Non-schema (a runtime intake flag, `state.mrpTemplate`). Files: <code>intake/intake.{js,html,css}</code>.</li>
+        <li><b>Phase-0 pipeline-result cache (APP-PIPE-CACHE) — the "Back to Trend rebuilds every time" fix.</b> The first step of the parked "Calibre Canvas" idea: a shared <code>AppPipeline.runPipelineCached</code> memoises the last pipeline result in <b>sessionStorage</b> (survives same-tab navigation — the Trace-it ↔ Back-to-Trend flow), keyed by a fingerprint of the assessment identity + row counts + <code>json.parameters</code> + runDate. All four pages (Trend / Trace / Screener / Sandbox) use it. <b>Verified:</b> hit is <b>~24× faster</b> (262 ms recompute → 11 ms read) and the cached result is <b>byte-identical</b> to a fresh <code>runPipeline</code> (full JSON compare); any input change flips the fingerprint → recompute → fresh result (proven — no stale); oversized results (>4.5 MB) or a quota error skip the cache (recompute, no regression). Over-invalidates rather than under — the safe direction. <em>Scope:</em> skips the heavy recompute (the big cost); the page still re-renders its DOM, so navigation is snappier, not literally instant. Files: <code>shared/pipeline.js</code> + <code>analysis/analysis.js</code> · <code>trace/trace.js</code> · <code>screener/screener.js</code> · <code>sandbox/sandbox.js</code>.</li>
+        <li><b>Two graph tweaks (operator test feedback).</b> (1) <b>Trace replenishment graph height</b> now matches the cadence graph above it (both 330px; was 262px). (2) <b>Trend Min/SS threshold label moved to the right</b>, against the purple stock-on-hand axis it belongs to (was on the left accumulative-usage axis) — verified 2004641 "MIN 1,000" now right-anchored at the SOH axis. Files: <code>trace/trace.css</code>, <code>shared/chart.js</code>.</li>
+        <li><b>Calibre Canvas idea parked.</b> The operator's Questrade-Pro-style linked multi-tile workspace (Trend + Trace side by side, linked so a material picked in one drives the others) is logged in the Roadmap as <code>future</code> with the feasibility write-up + Phase 0/1/2 phasing (Phase 0 = this cache, shipped). Local doc only.</li>
+        <li><b>Verification.</b> No Node → in-browser: no console errors on Intake / Trace / Trend; intake opt-in flip proven; Phase-0 hit/miss timing + byte-identical + invalidation proven via the Pipeline API + sessionStorage inspection; graph heights + Min-label position measured. <b>Caveat:</b> the full MRP-template Excel with the new fleet columns needs an operator run with Fleet Master + IW39 loaded to eyeball end-to-end (data path + column order verified).</li>
+        <li><b>Rollback.</b> Pre-push tip = origin/main <code>54cdee1</code> (code <code>cf5f31f</code>). At push: <code>backup/pre-template-fleet-phase0</code> branch + <code>checkpoint/pre-template-fleet-phase0</code> tag; local snapshot <code>_rollback/TEMPLATE-FLEET-PHASE0-pre/</code>. <b>No SCHEMA_VERSION change.</b></li>
+      </ul>
+    </article>
+
     <!-- v2.1.5-dev - MRP-run cadence graph pass 3: 2-state bars + stacked date axis + replenishment colours/hatch/dots + click-triggered native helpers - PUSHED 2026-08-17 (code cf5f31f) on top of 275a54d -->
     <article class="roc-entry dev">
       <div class="head">

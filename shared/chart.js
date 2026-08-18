@@ -330,7 +330,8 @@
       if (threshY != null) {
         const yT = yScaleSOH(threshY);
         gSoh.appendChild(line(MARGIN.left, yT, MARGIN.left + innerW, yT, { stroke: PAL.crit, width: 1.3, dash: '2 3', opacity: 0.95 }));
-        gSoh.appendChild(text(MARGIN.left + 4, yT - 4, `${threshLabel} ${fmtNum(threshY)}`, { anchor: 'start', fill: PAL.crit, size: 8.5, weight: 700, tracking: 0.8 }));
+        // Label sits at the RIGHT, against the purple SOH (inventory-on-hand) axis it belongs to — not the left usage axis.
+        gSoh.appendChild(text(MARGIN.left + innerW - 4, yT - 4, `${threshLabel} ${fmtNum(threshY)}`, { anchor: 'end', fill: PAL.crit, size: 8.5, weight: 700, tracking: 0.8 }));
       }
 
       // (c) Right Y-axis for SOH — ticks + label

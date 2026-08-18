@@ -75,13 +75,16 @@
     if (wu && wu.woEntries) wu.woEntries.forEach(e => { if (e.sortField) sfs.add(String(e.sortField).trim()); });
     const famKeys = new Set();
     const models  = new Set();
+    const makes   = new Set();   // Equipment Make (Manufacturer) of the observed units
+    const sites   = new Set();   // Equipment Site Number (Sort Field) of the observed units
     let matchedUnits = 0, unresolvedSf = 0;
     sfs.forEach(sf => {
       const u = reg.bySf.get(sf);
-      if (u){ famKeys.add(u.key); if (u.model) models.add(u.model); matchedUnits++; }
+      if (u){ famKeys.add(u.key); if (u.model) models.add(u.model); if (u.manufacturer) makes.add(u.manufacturer); sites.add(u.sortField || sf); matchedUnits++; }
       else unresolvedSf++;
     });
-    return { famKeys, models: [...models].sort(), observedUnits: matchedUnits, unresolvedSf, hasWu: !!(wu && wu.available) };
+    return { famKeys, models: [...models].sort(), makes: [...makes].sort(), sites: [...sites].sort(),
+             observedUnits: matchedUnits, unresolvedSf, hasWu: !!(wu && wu.available) };
   }
 
   /* One template row per flagged material. `materials` = the deduped flagged
@@ -109,7 +112,9 @@
         curMrp: m.mrpType || '', curMin: n(m.cmin), curMax: n(m.cmax), curSS: n(m.safetyStock),
         recMrp: m.recMrpType || '', recMin: n(m.recMin), recMax: n(m.recMax),
         anMrp: rec.mrpType || '', anMin: rec.min || '', anMax: rec.max || '', anSS: rec.safety || '',
+        whereUsedMakes:  obs.makes.join(', '),
         whereUsedModels: obs.models.join(', '),
+        whereUsedSites:  obs.sites.join(', '),
         observedUnits: obs.observedUnits,
         estPopulation: estPop,
         basisPct: estPop > 0 ? Math.round((obs.observedUnits / estPop) * 100) : null,
@@ -141,6 +146,9 @@
     { h:'Description',        k:'description',      w:38, t:'text' },
     { h:'Stock on hand',      k:'stock',            w:13, t:'num'  },
     { h:'Unit cost (CAD)',    k:'unitCost',         w:14, t:'money'},
+    { h:'Where used (makes)', k:'whereUsedMakes',   w:20, t:'text' },
+    { h:'Where used (models)',k:'whereUsedModels',  w:28, t:'text' },
+    { h:'Where used (site #s)',k:'whereUsedSites',  w:26, t:'text' },
     { h:'Current MRP',        k:'curMrp',           w:11, t:'text', g:'cur' },
     { h:'Current Min',        k:'curMin',           w:11, t:'num',  g:'cur' },
     { h:'Current Max',        k:'curMax',           w:11, t:'num',  g:'cur' },
@@ -152,7 +160,6 @@
     { h:'Analyst Min',        k:'anMin',            w:12, t:'text', g:'an'  },
     { h:'Analyst Max',        k:'anMax',            w:12, t:'text', g:'an'  },
     { h:'Analyst SS',         k:'anSS',             w:12, t:'text', g:'an'  },
-    { h:'Where used (models)',k:'whereUsedModels',  w:28, t:'text' },
     { h:'Observed units',     k:'observedUnits',    w:13, t:'num'  },
     { h:'Est. unit population',k:'estPopulation',   w:17, t:'num'  },
     { h:'Basis %',            k:'basisPct',         w:9,  t:'pct'  },
@@ -216,7 +223,7 @@
         if (c.t === 'money' && v != null) cell.numFmt = '$#,##0.00';
         else if (c.t === 'num' && v != null) cell.numFmt = '#,##0';
         else if (c.t === 'pct' && v != null){ cell.value = v / 100; cell.numFmt = '0%'; }
-        cell.alignment = { horizontal:(c.t === 'text' ? 'left' : 'center'), vertical:'top', wrapText:(c.k === 'description' || c.k === 'whereUsedModels') };
+        cell.alignment = { horizontal:(c.t === 'text' ? 'left' : 'center'), vertical:'top', wrapText:(c.k === 'description' || c.k === 'whereUsedMakes' || c.k === 'whereUsedModels' || c.k === 'whereUsedSites') };
         cell.font = { size:10 };
         if (ri % 2 === 1) cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFF2F6F8' } };
       });

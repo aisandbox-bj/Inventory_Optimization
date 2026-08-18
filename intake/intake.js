@@ -128,6 +128,7 @@
     runDate:  (typeof AppLocale !== 'undefined' ? AppLocale.localDateISO() : new Date().toISOString().slice(0, 10)),
     name:     '',
     assessmentType: null,                            // 'unitFloc' | 'userList' | 'paramSearch'
+    mrpTemplate: false,                              // APP-MRP-REQ Part A — opt-in: this run will produce the MRP Request Template, so Fleet Master + IW39 become required (they resolve each part to fleet make/model/site)
     psFilters: [],                                   // Parameter-Search filter cards
     alignmentAck: null,                              // APP-E6 · { acknowledgedAt, dimensions } once operator confirms scope alignment
     inventoryMasterDate: null                        // APP-FIX-SNAPSHOT-ALIGN · SAP extract date of the Inventory Master (yyyy-mm-dd)
@@ -171,6 +172,16 @@
       });
       const radio = card.querySelector('input[type=radio]');
       radio.addEventListener('change', () => applyAssessmentType(card.dataset.atype));
+    });
+    // APP-MRP-REQ Part A — the MRP Request Template opt-in: makes Fleet Master + IW39
+    // required (both the ★ upload flags and the DQ gate), then re-evaluates the gate.
+    const optin = $('#mrpReqOptinChk');
+    if (optin) optin.addEventListener('change', () => {
+      state.mrpTemplate = optin.checked;
+      const card = $('#mrpReqOptin'); if (card) card.classList.toggle('on', optin.checked);
+      refreshUploadFlags();
+      if (state.dq) runDqGate();        // re-run the gate with the new required set (only if data already loaded)
+      renderJsonPreview();
     });
   }
 
@@ -235,10 +246,12 @@
     if (source === 'mb51' || source === 'inventoryMaster') return { level:'req' };
     switch (source){
       case 'iw39':
+        if (state.mrpTemplate) return { level:'req', reason:'required for the MRP Request Template' };
         return type === 'unitFloc'
           ? { level:'req' }
           : { level:'opt', reason:'enables "Where used"' };
       case 'fleetMaster':
+        if (state.mrpTemplate) return { level:'req', reason:'required for the MRP Request Template' };
         return type === 'unitFloc'
           ? { level:'req' }
           : { level:'opt', reason:'adds the model rollup to "Where used"' };
@@ -641,7 +654,11 @@
 
   function currentRequiredSources(){
     if (!state.assessmentType) return [];
-    return CanonicalSchema.ASSESSMENT_TYPE_REQUIRES[state.assessmentType] || [];
+    const base = (CanonicalSchema.ASSESSMENT_TYPE_REQUIRES[state.assessmentType] || []).slice();
+    // APP-MRP-REQ Part A — the MRP Request Template can't resolve parts to fleet
+    // make/model/site without Fleet Master + IW39, so the opt-in makes them required.
+    if (state.mrpTemplate) for (const s of ['iw39', 'fleetMaster']) if (!base.includes(s)) base.push(s);
+    return base;
   }
 
   /* ═════════════════════════════════════════════════════════════════════════

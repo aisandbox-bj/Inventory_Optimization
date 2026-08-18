@@ -1,6 +1,16 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-17 (the "MRP-run cadence — graph pass 3" — see the SHIPPED section directly below; code pushed as `cf5f31f` on top of `275a54d`, docs follow, pending operator off-repo validation). Prior same-day: "dual-chart overhaul" (`275a54d`).
+**Updated:** 2026-08-18 (the "template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks" pass — see the SHIPPED section directly below; on top of `54cdee1`, pending operator off-repo validation). Prior: "MRP-run cadence graph pass 3" (`cf5f31f`), "dual-chart overhaul" (`275a54d`).
+
+## ✅ SHIPPED — template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks (2026-08-18) — on top of `54cdee1`, pending operator off-repo validation
+Pre-push baseline = origin/main `54cdee1` (code `cf5f31f`); refs `backup/pre-template-fleet-phase0` + `checkpoint/pre-template-fleet-phase0`; local snapshot `_rollback/TEMPLATE-FLEET-PHASE0-pre/`. No SCHEMA_VERSION change.
+- **MRP template — fleet Make / Model / Site # columns** (`shared/mrp-request.js`): three separate where-used columns per material — Make (Manufacturer) · Model · Site # (Sort Field) — from the Fleet Master via observed units; placed **left of the MRP parameters** (after Unit cost). Equipment **Type** left for the operator to add manually (no clean Type column in the fleet exports).
+- **APP-MRP-REQ Part A** (`intake/intake.{js,html,css}`): Step-0 opt-in "This run will produce the MRP Request Template" → flips Fleet Master + IW39 to ★ Required (upload flags + DQ gate). Verified Optional→Required. Runtime flag `state.mrpTemplate`, no schema change. *(This was the deferred Part A — now shipped.)*
+- **APP-PIPE-CACHE (Phase 0 of Calibre Canvas)** (`shared/pipeline.js` + the 4 pages): `runPipelineCached` memoises the last result in sessionStorage, fingerprinted on assessment identity + row counts + `json.parameters` + runDate. ~24× faster on a hit, byte-identical to a fresh run, correct invalidation, oversized runs skip the cache. Kills the Trend↔Trace recompute-on-every-hop. *(Skips the recompute; DOM still re-renders — snappier, not instant.)*
+- **2 graph tweaks:** Trace replenishment graph height = cadence graph (both 330px); Trend Min/SS label moved to the **right** SOH (purple) axis.
+- **Calibre Canvas** parked in the Roadmap (`future`) with feasibility + Phase 0/1/2 phasing (Phase 1 = linked pop-out windows via BroadcastChannel; Phase 2 = full in-app canvas of movable/linked iframe tiles).
+
+## ✅ SHIPPED — MRP-run cadence graph pass 3 (2026-08-17) — code pushed as `cf5f31f` on top of `275a54d`, docs as a follow-up commit; pending operator off-repo validation
 
 ## ✅ SHIPPED — MRP-run cadence graph pass 3 (2026-08-17) — code pushed as `cf5f31f` on top of `275a54d`, docs as a follow-up commit; pending operator off-repo validation
 Pre-push baseline = origin/main `275a54d`; refs `backup/pre-mrpfreq-graph3` + `checkpoint/pre-mrpfreq-graph3`; local snapshot `_rollback/MRPFREQ-GRAPH3-pre/`. No SCHEMA_VERSION change. All in `trace/trace.{js,css}`.

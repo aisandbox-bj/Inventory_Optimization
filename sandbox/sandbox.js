@@ -96,7 +96,7 @@
       : null;
 
     try {
-      state.result = AppPipeline.runPipeline(json, { runDate: AppLocale.localDateISO() });
+      state.result = AppPipeline.runPipelineCached(json, { runDate: AppLocale.localDateISO() });
     } catch (e) {
       console.error(e);
       renderError(e);

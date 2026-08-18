@@ -190,7 +190,7 @@
     await new Promise(r => setTimeout(r, 30));
     try {
       const t0 = performance.now();
-      state.result = AppPipeline.runPipeline(state.json, { runDate: AppLocale.localDateISO() });
+      state.result = AppPipeline.runPipelineCached(state.json, { runDate: AppLocale.localDateISO() });
       enrichLeadTimes();   // APP-TREND-LT — attach m.leadMonths for the list column
       // APP-ACT-03 — set of every material in the pack, for the "See <7-digit>"
       // description jump (only linkify references that are actually navigable).

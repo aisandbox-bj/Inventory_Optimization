@@ -1196,6 +1196,61 @@
     };
   }
 
+  /* ─── Phase-0 result cache (APP-PIPE-CACHE, 2026-08-18) ───────────────────────
+     Trend/Trace/Screener/Sandbox each re-run the WHOLE pipeline on every page load,
+     so hopping "Trace it!" ↔ "Back to Trend" rebuilds needlessly. runPipelineCached
+     memoises the LAST result in sessionStorage (survives same-tab navigation, cleared
+     on tab close) keyed by a fingerprint of everything the result depends on: the
+     assessment identity/stamps, the row counts of each source, json.parameters, and
+     the runDate. Any real change (new/edited data, changed params, new day, different
+     assessment) changes the fingerprint → miss → recompute. The result is plain
+     JSON-serialisable data (ISO-string dates), so the cached copy is faithful; on a
+     miss the FRESH result is always returned. Safety: cache read is shape-checked;
+     oversized results (> cap) or a quota error simply skip caching (recompute, exactly
+     today's behaviour) — no stale, no regression. */
+  function pipelineFingerprint(json, options){
+    const m = (json && json.metadata) || {};
+    const d = (json && json.data) || {};
+    const c = k => (Array.isArray(d[k]) ? d[k].length : 0);
+    return [
+      'pc1',
+      m.assessmentName || m.name || '', m.uploadedAt || '', m.savedAt || '', m.createdAt || '',
+      m.inventoryMasterDate || '',
+      (json && json.SCHEMA_VERSION) || m.schemaVersion || '',
+      c('mb51'), c('inventoryMaster'), c('iw39'), c('prHistory'), c('fleetMaster'), c('materialVendor'), c('userList'),
+      JSON.stringify((json && json.parameters) || {}),
+      (options && options.runDate) || ''
+    ].join('|');
+  }
+  const PIPE_CACHE_KEY = 'invOpt.pipelineResultCache';
+  const PIPE_CACHE_MAX = 4500000;   // ~4.5 MB serialised cap — larger runs just recompute (no cache)
+
+  function runPipelineCached(json, options){
+    let fp = null, ss = null;
+    try { ss = (typeof sessionStorage !== 'undefined') ? sessionStorage : null; } catch (e) { ss = null; }
+    try { fp = pipelineFingerprint(json, options); } catch (e) { fp = null; }
+    if (fp && ss){
+      try {
+        const raw = ss.getItem(PIPE_CACHE_KEY);
+        if (raw){
+          const cached = JSON.parse(raw);
+          if (cached && cached.fp === fp && cached.result && Array.isArray(cached.result.buckets)){
+            return cached.result;   // HIT — skip the whole pipeline
+          }
+        }
+      } catch (e) { /* corrupt/unreadable cache → fall through to recompute */ }
+    }
+    const result = runPipeline(json, options);   // MISS — always the fresh result
+    if (fp && ss && result && Array.isArray(result.buckets)){
+      try {
+        const payload = JSON.stringify({ fp, result });
+        if (payload.length <= PIPE_CACHE_MAX) ss.setItem(PIPE_CACHE_KEY, payload);
+        else ss.removeItem(PIPE_CACHE_KEY);   // too big to cache → clear any prior entry so nothing stale lingers
+      } catch (e) { /* quota / serialise error → skip caching, no regression */ }
+    }
+    return result;
+  }
+
   /* ─── Public API ────────────────────────────────────────────────────────── */
   global.AppPipeline = Object.freeze({
     ISSUE_TYPES, RETURN_TYPES, VALID_TYPES,
@@ -1210,6 +1265,7 @@
     assess,
     buildBuckets,
     runPipeline,
+    runPipelineCached,           // APP-PIPE-CACHE — sessionStorage-memoised result (skips rebuild on Trend↔Trace hops)
     addMonths, monthsBetween
   });
 
