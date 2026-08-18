@@ -1,6 +1,18 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-17 (the "MRP-run cadence — dual-chart overhaul" pass — see the SHIPPED section directly below; pushed on top of `838a93f`, pending operator off-repo validation). Prior: "Screener alignment + first graph enhancements" (`838a93f`), "post-round-3" (`2f5e981`), "16-Aug round-3" (`ccfd895`), "rev02 round-2" (`b911ed1`), "16-Aug feedback pass" (`76b521f`). Prior: 2026-08-15 sprint + Phase 3 + Phase 1, all pushed through `1d83614`.
+**Updated:** 2026-08-17 (the "MRP-run cadence — graph pass 3" — see the SHIPPED section directly below; code pushed as `cf5f31f` on top of `275a54d`, docs follow, pending operator off-repo validation). Prior same-day: "dual-chart overhaul" (`275a54d`).
+
+## ✅ SHIPPED — MRP-run cadence graph pass 3 (2026-08-17) — code pushed as `cf5f31f` on top of `275a54d`, docs as a follow-up commit; pending operator off-repo validation
+Pre-push baseline = origin/main `275a54d`; refs `backup/pre-mrpfreq-graph3` + `checkpoint/pre-mrpfreq-graph3`; local snapshot `_rollback/MRPFREQ-GRAPH3-pre/`. No SCHEMA_VERSION change. All in `trace/trace.{js,css}`.
+- **APP-FIX-MRPFREQ-2STATE** — cadence bars consolidated to **PR → PO (green)** vs **Cancelled (red)** (Complete + In-flight merged — inbound-vs-received is noise for "was a PO raised?"). KPI cells (→ one "PR → PO" cell), hover, and caption all match; MRP-vs-manual split still in the hover.
+- **APP-FIX-MRPFREQ-AXIS3** — stacked date axis, **every month shown, no skipping**: day (row 1) / short month name Jan–Dec (row 2) / year (row 3, centred + boundary line). Month bucket = month-name ticks + year row.
+- **Replenishment colours/textures** — **blue = stock, green = PO qty**, dark separator between stacked segments; **manual-PR PO = hatched green** (CanvasPattern texture, same colour — no new colour/"Christmas tree"); **red dot** at stock level on each cancelled PR date. (Yellow then grey outlines rejected as too heavy.)
+- **PD zero-line fix** — Min/Max dotted reference lines skip 0/blank values.
+- **APP-MRPFREQ-CLICK** — all chart helpers are **click-triggered** (`events:['click']`), not hover; the cadence tooltip converted to **native** (matches the replenishment chart's style, operator preference); the dot-strip stock-status legend is now a **click-to-toggle** fixed 196px native-style card.
+- **Empty-slot "Stock: 0" fix** — the replenishment tooltip filters null/zero rows, so a slot with no PO no longer shows a misleading "Stock: 0" (which contradicted the top dot strip's real per-day stock). The two agree at real PO dates (same `sohByDay`).
+- **Caveat:** live tile-drag resize + click-to-open tooltips need operator click-through (hidden pane no-ops Chart.js resize/redraw + event plumbing during headless verify).
+
+## ✅ SHIPPED — MRP-run cadence dual-chart overhaul (2026-08-17) — pushed on top of `838a93f`, pending operator off-repo validation Prior: "Screener alignment + first graph enhancements" (`838a93f`), "post-round-3" (`2f5e981`), "16-Aug round-3" (`ccfd895`), "rev02 round-2" (`b911ed1`), "16-Aug feedback pass" (`76b521f`). Prior: 2026-08-15 sprint + Phase 3 + Phase 1, all pushed through `1d83614`.
 
 ## ✅ SHIPPED — MRP-run cadence dual-chart overhaul (2026-08-17) — pushed on top of `838a93f`, pending operator off-repo validation
 Pre-push baseline = origin/main `838a93f` (content; HEAD `f09b6ec` was a doc-only follow-up); refs at push `backup/pre-mrpfreq-graph2` + `checkpoint/pre-mrpfreq-graph2`; local snapshot `_rollback/MRPFREQ-GRAPH2-pre/` (pre-edit `trace.js` + `trace.css`). No SCHEMA_VERSION change. All in `trace/trace.{js,css}`.
