@@ -775,6 +775,7 @@
     return ms + 864e5;
   }
   function mfIso(ms){ const d = new Date(ms); return d.getUTCFullYear() + '-' + mfPad(d.getUTCMonth() + 1) + '-' + mfPad(d.getUTCDate()); }
+  const MF_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   // ISO date n calendar months before the given ISO date (Date normalises month underflow).
   function isoMonthsAgo(iso, n){
     const s = String(iso || '').slice(0, 10);
@@ -897,18 +898,29 @@
     // vertically with the cadence bars above). Stock at the LATEST PO event in the
     // slot; PO qty summed across events in the slot.
     const repStock = new Array(slots.length).fill(null);
-    const repPo    = new Array(slots.length).fill(0);
+    const repPoMrp = new Array(slots.length).fill(0);   // PO qty from MRP-generated PRs (creation B)
+    const repPoMan = new Array(slots.length).fill(0);   // PO qty from manually-created PRs (creation R / F)
+    const repPo    = new Array(slots.length).fill(0);   // total (MRP + manual), for stock lookup + tooltip
+    const repCancelStock = new Array(slots.length).fill(null);   // stock level on a cancelled PR's date (red dot)
     const slotIdx  = new Map(); slots.forEach((ms, i) => slotIdx.set(ms, i));
-    let repAny = false, repLatestDay = new Array(slots.length).fill(null);
+    let repAny = false, repCancelAny = false, repManAny = false;
+    const repLatestDay = new Array(slots.length).fill(null);
+    const repCancelDay = new Array(slots.length).fill(null);
     for (const c of chains){
-      if (!c.po) continue;                                  // only PRs flipped to a PO
-      if (c.state === 'CANCELLED' || c.state === 'PR_ONLY') continue;
       const sm = mfSlotStart(c.prDate, period);
       if (sm == null || !slotIdx.has(sm)) continue;
       const i = slotIdx.get(sm);
-      const q = (typeof c.qty === 'number' && c.qty > 0) ? c.qty : 0;
-      repPo[i] += q; repAny = true;
       const day = String(c.prDate || '').slice(0, 10);
+      if (c.state === 'CANCELLED'){
+        // Cancelled requisition (red bar in the cadence chart) → red stock dot below.
+        if (!repCancelDay[i] || day > repCancelDay[i]) repCancelDay[i] = day;
+        repCancelAny = true;
+        continue;
+      }
+      if (!c.po) continue;                                  // otherwise only PRs flipped to a PO
+      const q = (typeof c.qty === 'number' && c.qty > 0) ? c.qty : 0;
+      if (isMrpChain(c)) repPoMrp[i] += q; else { repPoMan[i] += q; if (q > 0) repManAny = true; }
+      repPo[i] += q; repAny = true;
       if (!repLatestDay[i] || day > repLatestDay[i]) repLatestDay[i] = day;
     }
     if (dotInfo.ok){
@@ -916,14 +928,17 @@
         if (repPo[i] > 0 && repLatestDay[i] && dotInfo.sohByDay.has(repLatestDay[i])){
           repStock[i] = Math.max(0, dotInfo.sohByDay.get(repLatestDay[i]));
         }
+        if (repCancelDay[i] && dotInfo.sohByDay.has(repCancelDay[i])){
+          repCancelStock[i] = Math.max(0, dotInfo.sohByDay.get(repCancelDay[i]));
+        }
       }
     }
-    // Month key per slot — drives the mid-month labels + boundary lines on day/week.
+    // Month/year keys per slot — drive the stacked date axis (day · month · year rows).
     const slotMonthKey = slots.map(ms => { const dt = new Date(ms); return dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1); });
     const labels = slots.map(ms => {
       const dt = new Date(ms);
-      if (period === 'month') return dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1);
-      return mfPad(dt.getUTCDate());   // day-number; month is drawn mid-span by the monthBands plugin
+      if (period === 'month') return MF_MONTHS[dt.getUTCMonth()];   // month bucket: short month name is the tick; year drawn on its own row
+      return mfPad(dt.getUTCDate());                                // day/week: day-number tick; month + year drawn on their own rows
     });
     const gv = (ms, k) => (agg.get(ms) || {})[k] || 0;
     const dCompMrp = slots.map(ms => gv(ms, 'cMrp'));
@@ -939,11 +954,11 @@
       ? `<span class="mf-dot-legend"><b>Stock status</b> (dots, Current SAP): <span class="ds ds-g"></span> ${dotInfo.thrLabel ? '≥ ' + dotInfo.thrLabel : 'in stock'} · ${dotInfo.thr != null ? '<span class="ds ds-o"></span> below ' + dotInfo.thrLabel + ' · ' : ''}<span class="ds ds-r"></span> stockout</span>`
       : `<span class="mf-dot-legend mf-dot-legend-off">Stock-status dots unavailable — ${dotInfo.currentSOH == null ? 'no current stock-on-hand on the Inventory Master' : 'no back-calc series for this material'}.</span>`;
     // Replenishment caption / empty note.
-    const repNote = !repAny
-      ? `No PR was flipped to a PO in this window, so there is nothing to place on the replenishment chart.`
+    const repNote = (!repAny && !repCancelAny)
+      ? `No PR was flipped to a PO — and none were cancelled — in this window, so there is nothing to place on the replenishment chart.`
       : !dotInfo.ok
-        ? `PO quantities are shown, but stock-on-hand could not be back-calculated (${dotInfo.currentSOH == null ? 'no current SOH' : 'no series'}), so the stock portion is omitted.`
-        : `On each date a PR was flipped to a PO, the bar stacks that day's <b style="color:#2FBF88">stock-on-hand</b> under the <b style="color:#FBBF24">ordered PO qty</b> — the top of the bar is the projected stock once the order lands. Compare it to <b style="color:#EF4444">Min</b> (red dotted) and <b style="color:#2FBF88">Max</b> (green dotted): below Min = still short after receipt · between = replenished into band · above Max = over-ordered.${(dotInfo.min == null && dotInfo.max == null) ? ' <em>No Min/Max on the Inventory Master for this material.</em>' : ''}`;
+        ? `PO quantities are shown, but stock-on-hand could not be back-calculated (${dotInfo.currentSOH == null ? 'no current SOH' : 'no series'}), so the stock portion and cancelled-PR dots are omitted.`
+        : `On each date a PR was flipped to a PO, the bar stacks that day's <b style="color:#2E6BE6">stock-on-hand</b> under the <b style="color:#37D399">ordered PO qty</b> — the top of the bar is the projected stock once the order lands. A PO from a <b>manually-created</b> PR (system override) is drawn as a <b>hatched</b> green box; a plain solid green box is an MRP-generated PO. A <b style="color:#EF4444">red dot</b> marks the stock level on any date a PR was <b>cancelled</b>. Compare against <b style="color:#EF4444">Min</b> (red dotted) and <b style="color:#37D399">Max</b> (green dotted): below Min = still short after receipt · between = replenished into band · above Max = over-ordered.${(dotInfo.min == null && dotInfo.max == null) ? ' <em>No Min/Max on the Inventory Master for this material.</em>' : ''}`;
     host.innerHTML = `
       <div class="mf-tile" id="mfTile">
         <div class="mf-toolbar">
@@ -952,15 +967,14 @@
         </div>
         <div class="vol-kpi-strip">
           <div class="vk-cell"><span class="lab">Requisitions</span><span class="v">${chains.length.toLocaleString()}</span><span class="sub">all chains · ties to Raw Data</span></div>
-          <div class="vk-cell"><span class="lab">Complete</span><span class="v" style="color:#2FBF88">${complete.toLocaleString()}</span><span class="sub">received at site</span></div>
-          <div class="vk-cell"><span class="lab">In-flight</span><span class="v" style="color:#FBBF24">${inflight.toLocaleString()}</span><span class="sub">PO raised / PR pending</span></div>
+          <div class="vk-cell"><span class="lab">PR → PO</span><span class="v" style="color:#2FBF88">${(complete + inflight).toLocaleString()}</span><span class="sub">PO placed (any state)</span></div>
           <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${cancelled ? 'warn' : ''}">${cancelled.toLocaleString()}</span><span class="sub">deleted, no PO</span></div>
           <div class="vk-cell"><span class="lab">Manual</span><span class="v ${manualCt ? 'warn' : ''}">${manualCt.toLocaleString()}</span><span class="sub">creation R / F</span></div>
           <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no requisition</span></div>
         </div>
         <div class="mf-chart-title">MRP-run cadence — requisitions raised per ${period}</div>
         <div class="vol-chart-host mf-host-top"><canvas id="mfChart"></canvas></div>
-        <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). Stacked by outcome: <b style="color:#2FBF88">Complete</b> (received at site) · <b style="color:#FBBF24">In-flight</b> (PO raised or PR pending) · <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO) — the same states as Raw Data. Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split by status. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}${dotLegend} For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
+        <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). The question here is simply <em>did a PO get raised when it was needed</em>, so bars are just <b style="color:#2FBF88">PR → PO</b> (a PO was placed — received or still inbound, doesn't matter) vs <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO). Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}${dotLegend} For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
         <div class="mf-chart-title">Replenishment — stock + incoming PO qty vs Min/Max</div>
         <div class="vol-chart-host mf-host-bot"><canvas id="mfChart2"></canvas></div>
         <div class="chart-caveat">${repNote}</div>
@@ -974,54 +988,58 @@
     // up: a FIXED y-axis width means both plot areas start at the same x, so the
     // dates align vertically even though each chart has its own y-scale.
     const Y_AX_W = 58;         // fixed y-axis width (px) — locks x-alignment of both charts
-    const DAY_PAD_TOP = 18;    // day-number tick offset on the cadence chart (room for the dot strip above)
-    // Simple 3-outcome stacks (MRP + manual combined per bar) — the MRP-vs-manual
-    // split lives in the hover table, not the bars, to keep the chart uncluttered.
-    const dComp = slots.map((_, i) => dCompMrp[i] + dCompMan[i]);
-    const dInf  = slots.map((_, i) => dInfMrp[i]  + dInfMan[i]);
-    const dCan  = slots.map((_, i) => dCanMrp[i]  + dCanMan[i]);
-    // APP-FIX-MRPFREQ-AXIS (2026-08-16, reworked 2026-08-17) — keep the month visible
-    // on day/week WITHOUT crowding the day-number ticks: the YYYY-MM label sits on its
-    // OWN row below the day numbers (dayTickPad + drop), with a boundary line at each
-    // month start and horizontal de-overlap (skip a label that would touch the last
-    // one drawn) so a long span of months stays legible. Factory → each chart passes
-    // its own day-number tick offset.
-    const makeMonthBands = (dayTickPad) => ({
-      id: 'monthBands' + dayTickPad,
+    const DAY_PAD_TOP = 14;    // day-number tick offset on the cadence chart (room for the dot strip above)
+    // APP-FIX-MRPFREQ-2STATE (2026-08-17) — the cadence question is only "did a PO get
+    // raised when needed?", so Complete + In-flight collapse into one green PR→PO stack;
+    // Cancelled stays red. The MRP-vs-manual split still lives in the hover table.
+    const dPoMrp = slots.map((_, i) => dCompMrp[i] + dInfMrp[i]);
+    const dPoMan = slots.map((_, i) => dCompMan[i] + dInfMan[i]);
+    const dPo    = slots.map((_, i) => dPoMrp[i] + dPoMan[i]);
+    const dCan   = slots.map((_, i) => dCanMrp[i] + dCanMan[i]);
+    // APP-FIX-MRPFREQ-AXIS3 (2026-08-17) — stacked date axis so EVERY month shows (no
+    // skipping): row 1 = day-number (Chart tick, day/week only); row 2 = short month
+    // name (Jan…Dec), centred under each month span; row 3 = year, centred under each
+    // year span with a slightly stronger boundary line. Month names are narrow enough
+    // that a long multi-year span stays legible without dropping any label. On the
+    // month bucket the short month name IS the tick (row 1), so only the year row is
+    // drawn. Factory → each chart passes its own tick offset.
+    const makeDateAxis = (tickPad) => ({
+      id: 'dateAxis' + tickPad,
       afterDatasetsDraw(chart){
-        if (period === 'month') return;
         const { ctx, chartArea } = chart;
-        const n = slotMonthKey.length; if (!n) return;
+        const n = slots.length; if (!n) return;
         const w = (chartArea.right - chartArea.left) / n;
         const ctr = (idx) => chartArea.left + w * (idx + 0.5);
         const top = chartArea.top, bot = chartArea.bottom;
-        const lineY = bot + dayTickPad + 18;   // month boundary line foot
-        const labelY = bot + dayTickPad + 26;  // month label row — kept well clear of the day-number row above
-        // Collect month spans [firstSlot, lastSlot].
-        const spans = []; let spanStart = 0;
-        for (let i = 1; i <= n; i++){
-          if (i !== n && slotMonthKey[i] === slotMonthKey[i - 1]) continue;
-          spans.push([spanStart, i - 1]); spanStart = i;
-        }
+        const isMonth = period === 'month';
+        const spansBy = (key) => { const out = []; let s = 0; for (let i = 1; i <= n; i++){ if (i !== n && key(i) === key(i - 1)) continue; out.push([s, i - 1]); s = i; } return out; };
+        const yearOf  = (i) => slotMonthKey[i].slice(0, 4);
+        const monthRowY = bot + tickPad + 24;                 // day/week only
+        const yearRowY  = bot + tickPad + (isMonth ? 22 : 40);
         ctx.save();
-        // Boundary lines at each month start (skip the very first).
-        ctx.strokeStyle = 'rgba(155,171,168,.22)'; ctx.lineWidth = 1;
-        for (let s = 1; s < spans.length; s++){
-          const bx = chartArea.left + w * spans[s][0];
-          ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx, lineY); ctx.stroke();
+        // Month row + faint month-boundary lines (day/week only — month bucket already
+        // labels every bar with its month name).
+        if (!isMonth){
+          const mspans = spansBy((i) => slotMonthKey[i]);
+          ctx.strokeStyle = 'rgba(155,171,168,.20)'; ctx.lineWidth = 1;
+          for (let s = 1; s < mspans.length; s++){
+            const bx = chartArea.left + w * mspans[s][0];
+            ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx, monthRowY + 11); ctx.stroke();
+          }
+          ctx.fillStyle = '#C7D6D2'; ctx.font = '600 9px JetBrains Mono, monospace';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          for (const [a, b] of mspans){ ctx.fillText(MF_MONTHS[new Date(slots[a]).getUTCMonth()], (ctr(a) + ctr(b)) / 2, monthRowY); }
         }
-        // Month labels on their own row, de-overlapped.
-        ctx.fillStyle = '#C7D6D2'; ctx.font = '600 10px JetBrains Mono, monospace';
+        // Year row + stronger year-boundary lines (all periods).
+        const yspans = spansBy(yearOf);
+        ctx.strokeStyle = 'rgba(155,171,168,.40)'; ctx.lineWidth = 1;
+        for (let s = 1; s < yspans.length; s++){
+          const bx = chartArea.left + w * yspans[s][0];
+          ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx, yearRowY + 11); ctx.stroke();
+        }
+        ctx.fillStyle = '#9BABA8'; ctx.font = '700 10px JetBrains Mono, monospace';
         ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        let lastRight = -1e9;
-        for (const [a, b] of spans){
-          const cx = (ctr(a) + ctr(b)) / 2;
-          const label = slotMonthKey[a];
-          const halfW = ctx.measureText(label).width / 2;
-          if (cx - halfW < lastRight + 4) continue;   // would collide with the previous label → skip
-          ctx.fillText(label, cx, labelY);
-          lastRight = cx + halfW;
-        }
+        for (const [a, b] of yspans){ ctx.fillText(yearOf(a), (ctr(a) + ctr(b)) / 2, yearRowY); }
         ctx.restore();
       }
     });
@@ -1060,7 +1078,7 @@
         const { ctx, chartArea, scales } = chart;
         const y = scales.y; if (!y) return;
         const drawLine = (val, color, label) => {
-          if (val == null || !Number.isFinite(val)) return;
+          if (val == null || !Number.isFinite(val) || val <= 0) return;   // don't plot a 0/blank threshold (e.g. PD with SS/Min = 0)
           const yp = y.getPixelForValue(val);
           if (yp < chartArea.top - 1 || yp > chartArea.bottom + 1) return;
           ctx.save();
@@ -1081,62 +1099,47 @@
       data: {
         labels,
         datasets: [
-          { label: 'Complete',  data: dComp, backgroundColor: COMP, stack: 's' },
-          { label: 'In-flight', data: dInf,  backgroundColor: INF,  stack: 's' },
-          { label: 'Cancelled', data: dCan,  backgroundColor: CAN,  stack: 's' }
+          { label: 'PR → PO',   data: dPo,  backgroundColor: COMP, stack: 's' },
+          { label: 'Cancelled', data: dCan, backgroundColor: CAN,  stack: 's' }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
+        events: ['click'],   // helpers are click-triggered, not hover (less distracting)
         // right:26 dominates the x-axis last-label overflow on both charts so their
         // plot areas share identical left/right → the dates line up vertically.
-        layout: { padding: { right: 26, bottom: period === 'month' ? 10 : 56 } },
+        layout: { padding: { right: 26, bottom: period === 'month' ? 48 : 70 } },
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { color:'#9BABA8', maxRotation: 0, autoSkip: true, maxTicksLimit: 20, padding: DAY_PAD_TOP, font:{ family:'JetBrains Mono', size:9 } } },
           y: { stacked: true, beginAtZero: true, afterFit: (s) => { s.width = Y_AX_W; }, ticks: { color:'#9BABA8', precision:0, font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
         },
         plugins: {
           legend: { labels: { color:'#DBE9F0', font:{ family:'JetBrains Mono', size:11 }, boxWidth:12 } },
-          // APP-FIX-MRPFREQ-TIP (2026-08-16) — HTML data-table tooltip: date header,
-          // one row per outcome present, count split into MRP vs Manual columns.
+          // APP-FIX-MRPFREQ-TIP2 (2026-08-17) — NATIVE tooltip (same style as the
+          // replenishment chart below), click-triggered via events:['click']. Zero
+          // rows are filtered out so an empty slot shows nothing.
           tooltip: {
-            enabled: false,
-            external: (ctx) => {
-              const tt = ctx.tooltip;
-              let el = document.getElementById('mfTip');
-              if (!el){ el = document.createElement('div'); el.id = 'mfTip'; el.className = 'mf-tip'; document.body.appendChild(el); }
-              if (!tt || tt.opacity === 0 || !tt.dataPoints || !tt.dataPoints.length){ el.style.opacity = '0'; return; }
-              const idx = tt.dataPoints[0].dataIndex;
-              const ms = slots[idx]; if (ms == null){ el.style.opacity = '0'; return; }
-              const dt = new Date(ms);
-              const ymd = dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1) + '-' + mfPad(dt.getUTCDate());
-              const head = period === 'month' ? (dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1))
-                         : period === 'week'  ? ('Week of ' + ymd) : ymd;
-              const rows = [
-                ['Complete',  dCompMrp[idx], dCompMan[idx], COMP],
-                ['In-flight', dInfMrp[idx],  dInfMan[idx],  INF],
-                ['Cancelled', dCanMrp[idx],  dCanMan[idx],  CAN]
-              ].filter(r => (r[1] + r[2]) > 0);
-              let body, tMrp = 0, tMan = 0;
-              if (!rows.length){
-                body = `<tr><td colspan="3" class="mf-tip-empty">No requisitions this ${period}</td></tr>`;
-              } else {
-                rows.forEach(r => { tMrp += r[1]; tMan += r[2]; });
-                body = rows.map(r => `<tr><td><span class="mf-dot" style="background:${r[3]}"></span>${r[0]}</td><td>${r[1] || '—'}</td><td>${r[2] || '—'}</td></tr>`).join('')
-                     + `<tr class="mf-tip-tot"><td>Total</td><td>${tMrp}</td><td>${tMan}</td></tr>`;
+            callbacks: {
+              title: (items) => {
+                if (!items.length) return '';
+                const dt = new Date(slots[items[0].dataIndex]);
+                const ymd = dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1) + '-' + mfPad(dt.getUTCDate());
+                return period === 'month' ? (dt.getUTCFullYear() + '-' + mfPad(dt.getUTCMonth() + 1))
+                     : period === 'week'  ? ('Week of ' + ymd) : ymd;
+              },
+              label: (item) => {
+                const idx = item.dataIndex, v = item.parsed.y || 0;
+                return item.dataset.label === 'PR → PO'
+                  ? `PR → PO: ${v}  (MRP ${dPoMrp[idx]} · man ${dPoMan[idx]})`
+                  : `Cancelled: ${v}  (MRP ${dCanMrp[idx]} · man ${dCanMan[idx]})`;
               }
-              el.innerHTML = `<div class="mf-tip-h">${head}</div>`
-                + `<table><thead><tr><th>Status</th><th>MRP</th><th>Manual</th></tr></thead><tbody>${body}</tbody></table>`;
-              const rect = ctx.chart.canvas.getBoundingClientRect();
-              el.style.opacity = '1';
-              el.style.left = (rect.left + window.scrollX + tt.caretX + 14) + 'px';
-              el.style.top  = (rect.top + window.scrollY + tt.caretY - 10) + 'px';
-            }
+            },
+            filter: (item) => (item.parsed.y || 0) > 0
           }
         }
       },
-      plugins: [makeMonthBands(DAY_PAD_TOP), stockDots]
+      plugins: [makeDateAxis(DAY_PAD_TOP), stockDots]
     });
 
     // APP-MRPFREQ-REPLEN (2026-08-17) — the replenishment chart directly below the
@@ -1145,12 +1148,53 @@
     // under the ordered PO qty (yellow); Min (red dotted) + Max (green dotted) lines
     // let the operator read whether the incoming order lands below Min, in-band, or
     // over Max. Only rendered where there is something to show.
-    const repStockD = repStock.slice();               // stock at the PO event day (null where none)
-    const repPoD    = repPo.map(v => (v > 0 ? v : null));
+    const STK_BLUE = '#2E6BE6', PO_GREEN = '#37D399';   // operator colours: blue = stock, green = PO qty (luminance-separated)
+    const REP_SEP  = '#0d1414';                          // dark separator outline between the stacked segments
+    // Manual-PR PO: SAME green, but a diagonal hatch so a system override reads as a
+    // different texture (not another colour → no "Christmas tree").
+    const makeHatch = (base) => {
+      const p = document.createElement('canvas'); p.width = 7; p.height = 7;
+      const pc = p.getContext('2d');
+      pc.fillStyle = base; pc.fillRect(0, 0, 7, 7);
+      pc.strokeStyle = 'rgba(11,18,18,.55)'; pc.lineWidth = 1.6;
+      pc.beginPath(); pc.moveTo(0, 7); pc.lineTo(7, 0); pc.stroke();      // main diagonal
+      pc.beginPath(); pc.moveTo(-2, 2); pc.lineTo(2, -2); pc.stroke();    // wrap top-left
+      pc.beginPath(); pc.moveTo(5, 9); pc.lineTo(9, 5); pc.stroke();      // wrap bottom-right
+      return pc.createPattern(p, 'repeat');
+    };
+    const PO_HATCH = makeHatch(PO_GREEN);
+    const repStockD  = repStock.slice();                // stock at the PO event day (null where none)
+    const repPoMrpD  = repPoMrp.map(v => (v > 0 ? v : null));
+    const repPoManD  = repPoMan.map(v => (v > 0 ? v : null));
     let repMaxVal = 0;
-    for (let i = 0; i < slots.length; i++){ const s = repStock[i] || 0, p = repPo[i] || 0; if (s + p > repMaxVal) repMaxVal = s + p; }
+    for (let i = 0; i < slots.length; i++){
+      const s = repStock[i] || 0, p = repPo[i] || 0; if (s + p > repMaxVal) repMaxVal = s + p;
+      if (repCancelStock[i] != null && repCancelStock[i] > repMaxVal) repMaxVal = repCancelStock[i];
+    }
     if (dotInfo.max != null && dotInfo.max > repMaxVal) repMaxVal = dotInfo.max;
     const repSuggMax = repMaxVal > 0 ? repMaxVal * 1.1 : 10;
+    // APP-MRPFREQ-CANCELDOT — a red dot at the stock level on each CANCELLED PR's date
+    // (every red bar in the cadence chart above), sitting just to the right of the bars.
+    const cancelDots = {
+      id: 'cancelDots',
+      afterDatasetsDraw(chart){
+        if (!dotInfo.ok) return;
+        const { ctx, chartArea, scales } = chart;
+        const y = scales.y; if (!y) return;
+        const n = slots.length; const w = (chartArea.right - chartArea.left) / n;
+        const off = Math.min(6, w * 0.30);
+        ctx.save();
+        for (let i = 0; i < n; i++){
+          const sv = repCancelStock[i]; if (sv == null) continue;
+          const x = chartArea.left + w * (i + 0.5) + off;
+          const yp = y.getPixelForValue(sv);
+          if (yp < chartArea.top - 2 || yp > chartArea.bottom + 2) continue;
+          ctx.beginPath(); ctx.fillStyle = '#EF4444'; ctx.arc(x, yp, 3, 0, Math.PI * 2); ctx.fill();
+          ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(13,20,20,.85)'; ctx.stroke();
+        }
+        ctx.restore();
+      }
+    };
     const c2 = $('#mfChart2');
     if (c2){
       state.chart2 = new Chart(c2, {
@@ -1158,14 +1202,16 @@
         data: {
           labels,
           datasets: [
-            { label: 'Stock on hand',   data: repStockD, backgroundColor: COMP, stack: 'r' },
-            { label: 'Incoming PO qty', data: repPoD,    backgroundColor: INF,  stack: 'r' }
+            { label: 'Stock on hand',      data: repStockD, backgroundColor: STK_BLUE, borderColor: REP_SEP, borderWidth: { top: 1.5, right: 0, bottom: 0, left: 0 }, stack: 'r' },
+            { label: 'PO qty (MRP)',       data: repPoMrpD, backgroundColor: PO_GREEN, borderColor: REP_SEP, borderWidth: { top: 1.5, right: 0, bottom: 0, left: 0 }, borderSkipped: false, stack: 'r' },
+            { label: 'PO qty (manual)',    data: repPoManD, backgroundColor: PO_HATCH, borderColor: REP_SEP, borderWidth: { top: 1.5, right: 0, bottom: 0, left: 0 }, borderSkipped: false, stack: 'r' }
           ]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
-          layout: { padding: { right: 26, bottom: period === 'month' ? 10 : 44 } },
+          events: ['click'],   // click-triggered helper, not hover
+          layout: { padding: { right: 26, bottom: period === 'month' ? 42 : 62 } },
           scales: {
             x: { stacked: true, grid: { display: false }, ticks: { color:'#9BABA8', maxRotation: 0, autoSkip: true, maxTicksLimit: 20, padding: 8, font:{ family:'JetBrains Mono', size:9 } } },
             y: { stacked: true, beginAtZero: true, suggestedMax: repSuggMax, afterFit: (s) => { s.width = Y_AX_W; }, ticks: { color:'#9BABA8', font:{ family:'JetBrains Mono', size:10 } }, grid:{ color:'rgba(31,206,216,.06)' } }
@@ -1179,21 +1225,60 @@
                   if (!items.length) return [];
                   const idx = items[0].dataIndex;
                   const s = repStock[idx] || 0, p = repPo[idx] || 0, tot = s + p;
-                  if (p <= 0) return [];
-                  const L = ['Projected after receipt: ' + Math.round(tot).toLocaleString()];
-                  if (dotInfo.min != null) L.push('Min: ' + Math.round(dotInfo.min).toLocaleString());
-                  if (dotInfo.max != null) L.push('Max: ' + Math.round(dotInfo.max).toLocaleString());
-                  if (dotInfo.min != null && tot < dotInfo.min)      L.push('↓ still below Min after receipt');
-                  else if (dotInfo.max != null && tot > dotInfo.max) L.push('↑ above Max (over-ordered)');
-                  else if (dotInfo.min != null || dotInfo.max != null) L.push('● replenished into band');
+                  const L = [];
+                  if (p > 0){
+                    L.push('Projected after receipt: ' + Math.round(tot).toLocaleString());
+                    if (repPoMan[idx] > 0) L.push('PO qty — MRP ' + Math.round(repPoMrp[idx]).toLocaleString() + ' · manual ' + Math.round(repPoMan[idx]).toLocaleString());
+                    if (dotInfo.min != null) L.push('Min: ' + Math.round(dotInfo.min).toLocaleString());
+                    if (dotInfo.max != null) L.push('Max: ' + Math.round(dotInfo.max).toLocaleString());
+                    if (dotInfo.min != null && tot < dotInfo.min)      L.push('↓ still below Min after receipt');
+                    else if (dotInfo.max != null && tot > dotInfo.max) L.push('↑ above Max (over-ordered)');
+                    else if (dotInfo.min != null || dotInfo.max != null) L.push('● replenished into band');
+                  }
+                  if (repCancelStock[idx] != null) L.push('✕ cancelled PR — stock then ' + Math.round(repCancelStock[idx]).toLocaleString());
                   return L;
                 }
-              }
+              },
+              // Hide null/zero rows so an empty slot (no PO that period) no longer
+              // reports a misleading "Stock on hand: 0" — the per-day stock the top dot
+              // strip shows still applies; this chart only plots stock on PO dates.
+              filter: (item) => (item.parsed.y || 0) > 0
             }
           }
         },
-        plugins: [makeMonthBands(8), minmaxLines]
+        plugins: [makeDateAxis(8), minmaxLines, cancelDots]
       });
+    }
+
+    // APP-MRPFREQ-DOTCLICK (2026-08-17) — CLICK the stock-status dot strip to toggle a
+    // small fixed legend card (top-right of the plot) explaining that the dots are
+    // STOCK levels vs Current-SAP Min/SS — a different thing from the bar's PO outcome,
+    // so the colours shouldn't be matched. Click-to-toggle (not hover) so it isn't
+    // distracting; no per-day value, no permanent legend → costs no vertical space.
+    const c1el = $('#mfChart');
+    if (c1el && dotInfo.ok){
+      const thr = dotInfo.thrLabel || 'Min/SS';
+      const sw = (c) => `<span class="mf-dot" style="background:${c}"></span>`;
+      const legendHtml = `<div class="mf-tip-h">Stock-on-hand dots</div>`
+        + `<div class="mf-dottip-desc">Your <b>stock level</b> per day vs Current SAP ${thr} — <b>not</b> the bar's PO outcome.</div>`
+        + `<div class="mf-dottip-leg">${sw('#2FBF88')}at / above ${thr}<br>${sw('#FBBF24')}below ${thr}<br>${sw('#EF4444')}stockout (0)</div>`;
+      const CARDW = 196;
+      const onDotClick = (evt) => {
+        const ch = state.chart; if (!ch) return;
+        const ca = ch.chartArea;
+        const rect = c1el.getBoundingClientRect();
+        const x = evt.clientX - rect.left, y = evt.clientY - rect.top;
+        let el = document.getElementById('mfDotTip');
+        if (!el){ el = document.createElement('div'); el.id = 'mfDotTip'; el.className = 'mf-tip mf-dottip'; el.innerHTML = legendHtml; document.body.appendChild(el); }
+        const inBand = Math.abs(y - (ca.bottom + 9)) <= 9 && x >= ca.left && x <= ca.right;
+        // Toggle when the dot strip is clicked; any other click on the chart dismisses.
+        const show = inBand && el.style.opacity !== '1';
+        if (!show){ el.style.opacity = '0'; return; }
+        el.style.left = (rect.left + window.scrollX + Math.max(ca.left, ca.right - CARDW - 6)) + 'px';
+        el.style.top  = (rect.top + window.scrollY + ca.top + 4) + 'px';
+        el.style.opacity = '1';
+      };
+      c1el.addEventListener('click', onDotClick);
     }
 
     // APP-MRPFREQ-TILE (2026-08-17) — the chart lives in a tile the operator resizes
