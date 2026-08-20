@@ -12,7 +12,7 @@
   const state = {
     json:            null,       // canonical JSON loaded from storage
     result:          null,       // pipeline result
-    selectedBucket:  null,       // bucket key
+    selectedBuckets: new Set(),  // APP-TREND-FLEET-TILES — fleets selected for the review view (union). 1 selected = that fleet; ≥2 = a synthesized combined bucket (deduped union) so the existing single-bucket code keeps working.
     selectedMaterial:null,       // material no
     filterTl:        'ALL',
     filterAction:    false,       // APP-TREND-ACTFILTER — show only For-Action-flagged materials
@@ -94,7 +94,10 @@
       if (b.materials.some(m => String(m.material) === mat)) { foundKey = b.key; break; }
     }
     if (!foundKey) return false;
-    if (state.selectedBucket !== foundKey) selectBucket(foundKey);
+    // APP-TREND-FLEET-TILES — if the material's fleet is already in the review
+    // selection (union view), leave the selection untouched so the jump doesn't
+    // collapse a multi-fleet view; otherwise narrow to just that fleet.
+    if (!state.selectedBuckets.has(foundKey)) selectBucket(foundKey);
     state.selectedMaterial = mat;
     renderList();
     renderDetail();
@@ -205,7 +208,7 @@
       const iaLink = document.getElementById('iaMetaLink');
       if (iaLink) iaLink.addEventListener('click', () => openInvAdjModal());
       renderSummaryTiles();
-      renderBucketTabs();
+      renderFleetTiles();
       if (state.result.buckets.length) selectBucket(state.result.buckets[0].key);
       renderExportActions();
       // APP-E25 (2026-05-17) — auto-popup the Inv Adj modal on first run when
@@ -299,36 +302,100 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
-     BUCKET TABS
+     FLEET TILES (APP-TREND-FLEET-TILES — multi-select → union view)
+     Little fleet tiles between the Pipeline strip and the material table. Ticking
+     more than one fleet shows the deduped UNION of their materials; currentBucket()
+     synthesizes a combined bucket so the list, detail Prev/Next, Mass LLM review,
+     and exports (all keyed on a single "current bucket") keep working unchanged.
+     Reuses the export picker's fleetUnitCounts() for the per-tile unit count.
   ═════════════════════════════════════════════════════════════════════════ */
-  function renderBucketTabs(){
+  function renderFleetTiles(){
     const host = $('#bucketTabs');
-    host.innerHTML = '';
-    for (const b of state.result.buckets) {
-      const tab = document.createElement('button');
-      tab.className = 'bucket-tab' + (b.kind === 'multi' ? ' multi' : '');
-      tab.dataset.bucket = b.key;
-      tab.innerHTML = `${escapeHtml(b.name)}<span class="badge">${b.materials.length}</span>`;
-      tab.addEventListener('click', () => selectBucket(b.key));
-      host.appendChild(tab);
-    }
+    if (!host || !state.result) return;
+    const buckets = state.result.buckets;
+    const units   = fleetUnitCounts();
+    const multi   = buckets.length > 1;   // header + All/None only earn their space with >1 fleet
+    const tiles = buckets.map(b => {
+      const on = state.selectedBuckets.has(b.key);
+      // MULTI · cross-fleet bucket spans fleets → no single unit count (mirrors the export picker).
+      const u  = b.kind === 'multi' ? null : units.get(b.name);
+      const unitTxt = (u != null) ? `<span class="bt-units">${u} unit${u === 1 ? '' : 's'}</span>` : '';
+      return `<button type="button" class="bucket-tab${on ? ' active' : ''}${b.kind === 'multi' ? ' multi' : ''}" `
+           + `data-bucket="${escapeAttr(b.key)}" aria-pressed="${on ? 'true' : 'false'}">`
+           + `<span class="bt-name">${escapeHtml(b.name)}</span>`
+           + `<span class="badge">${b.materials.length}</span>${unitTxt}</button>`;
+    }).join('');
+    const head = multi
+      ? `<div class="fleet-tiles-head"><span class="ft-lab">Fleets in review</span>`
+        + `<span class="ft-actions"><button type="button" class="ft-mini" id="ftAll">All</button>`
+        + `<button type="button" class="ft-mini" id="ftNone">None</button></span></div>`
+      : '';
+    host.innerHTML = head + `<div class="fleet-tiles-row">${tiles}</div>`;
+    host.querySelectorAll('.bucket-tab').forEach(t => t.addEventListener('click', () => toggleBucket(t.dataset.bucket)));
+    const all = $('#ftAll'), none = $('#ftNone');
+    // "None" never empties the view — it falls back to the first fleet (a table needs a source).
+    if (all)  all.addEventListener('click',  () => setSelectedBuckets(buckets.map(b => b.key)));
+    if (none) none.addEventListener('click', () => setSelectedBuckets([buckets[0].key]));
   }
 
+  // Toggle one fleet in/out of the review selection. Never empties (clicking the
+  // last-selected fleet keeps it). Preserves the active TL/search/column filters —
+  // only drops the selected material if it leaves the union.
+  function toggleBucket(key){
+    const sel = new Set(state.selectedBuckets);
+    if (sel.has(key)) { if (sel.size > 1) sel.delete(key); }
+    else sel.add(key);
+    applyBucketSelection(sel);
+  }
+
+  function setSelectedBuckets(keys){
+    if (!keys || !keys.length) keys = [state.result.buckets[0].key];
+    applyBucketSelection(new Set(keys));
+  }
+
+  function applyBucketSelection(sel){
+    state.selectedBuckets = sel;
+    const bucket = currentBucket();
+    if (state.selectedMaterial && bucket && !bucket.materials.some(m => String(m.material) === String(state.selectedMaterial))) {
+      state.selectedMaterial = null;   // selected material fell out of the union
+    }
+    closeColFilterPopover();
+    renderFleetTiles();
+    renderList();
+    renderDetail();
+  }
+
+  // Select exactly ONE fleet (resets the view filters, like the old single tabs).
+  // Used by the initial load, the #mat= deep-link, and the "Back to Trend" /
+  // saved-mass-review re-select paths.
   function selectBucket(key){
-    state.selectedBucket = key;
+    state.selectedBuckets = new Set([key]);
     state.selectedMaterial = null;
     state.filterTl = 'ALL';
     state.searchText = '';
     state.colFilters = {};
     closeColFilterPopover();
-    $$('#bucketTabs .bucket-tab').forEach(t => t.classList.toggle('active', t.dataset.bucket === key));
+    renderFleetTiles();
     renderList();
     renderDetail();
     renderFilterButtons();
   }
 
+  // The bucket the list/detail/exports operate on. 1 fleet selected → that real
+  // bucket; ≥2 → a synthesized combined bucket (deduped union, deterministic key
+  // so Mass-review session keying stays stable); 0 → null.
   function currentBucket(){
-    return state.result.buckets.find(b => b.key === state.selectedBucket);
+    if (!state.result) return null;
+    const chosen = state.result.buckets.filter(b => state.selectedBuckets.has(b.key));
+    if (chosen.length === 0) return null;
+    if (chosen.length === 1) return chosen[0];
+    const seen = new Set(), mats = [];
+    for (const b of chosen) for (const m of b.materials) {
+      const id = String(m.material);
+      if (!seen.has(id)) { seen.add(id); mats.push(m); }
+    }
+    const keyStr = chosen.map(b => b.key).sort().join('|');
+    return { key: 'multi:' + keyStr, name: chosen.length + ' fleets', kind: 'combined', materials: mats };
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -967,8 +1034,10 @@
     if (pop.classList.contains('hidden')){
       if (!pop._placed){                       // first open → sensible default size/position
         pop._placed = true;
-        pop.style.width  = Math.min(1040, window.innerWidth - 60) + 'px';
-        pop.style.height = Math.min(700, window.innerHeight - 70) + 'px';
+        // APP-ACT-04-GROW — default card ~15% larger (was 1040×700) to match the
+        // zoomed (.gp-detail zoom:1.15) content, so the bigger detail fits without scroll.
+        pop.style.width  = Math.min(1196, window.innerWidth - 60) + 'px';
+        pop.style.height = Math.min(805, window.innerHeight - 70) + 'px';
         pop.classList.remove('hidden');        // unhide so offsetWidth is real
         pop.style.left = Math.max(16, (window.innerWidth  - pop.offsetWidth ) / 2) + 'px';
         pop.style.top  = Math.max(16, (window.innerHeight - pop.offsetHeight) / 2) + 'px';
@@ -1027,6 +1096,9 @@
     const opts = buildDetailOpts(mat, bucket);
     opts.notes = null;          // the pop-out owns its own notes panel (right side)
     opts.enablePopout = false;  // no nested pop-out button
+    // APP-ACT-04-GROW — the chart + stats + MRP table render at the normal inline
+    // size; the whole .gp-detail pane is uniformly scaled ~15% in CSS (zoom), so
+    // everything grows together with NO reflow (tables keep their exact layout).
     MaterialDetail.render(detail, mat, opts);
     gpSyncNotes();
   }
@@ -2674,8 +2746,9 @@
         toast(`Bucket "${bucketKey}" not in the current analysis — load the matching intake JSON first.`, 'crit');
         return;
       }
-      // Switch the active bucket if necessary
-      if (state.selectedBucket !== bucket.key) selectBucket(bucket.key);
+      // Switch to exactly this fleet if we're not already showing only it — a saved
+      // mass review belongs to one bucket (APP-TREND-FLEET-TILES).
+      if (!(state.selectedBuckets.size === 1 && state.selectedBuckets.has(bucket.key))) selectBucket(bucket.key);
       ensureMassState();
       state.mass.session  = AppMassLlm.hydrate(saved, state.result, bucket.key);
       state.mass.hydrated = true;

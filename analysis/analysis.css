@@ -94,30 +94,49 @@
 .tl-tile.GREY   .v{ color:var(--text-disabled); }
 .tl-tile.PURPLE .v{ color:#B07CC6; }
 
-/* ─── Bucket tabs ───────────────────────────────────────────────────────── */
-.bucket-tabs{
-  display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;
-  border-bottom:1px solid var(--border-soft);
+/* ─── Fleet tiles (APP-TREND-FLEET-TILES — multi-select → union view) ─────── */
+.bucket-tabs{ margin-bottom:18px; }
+.fleet-tiles-head{
+  display:flex;align-items:center;gap:12px;margin-bottom:8px;
 }
+.fleet-tiles-head .ft-lab{
+  font-family:var(--font-mono);font-size:10.5px;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--text-muted);
+}
+.fleet-tiles-head .ft-actions{ display:flex;gap:6px; }
+.ft-mini{
+  font-family:var(--font-mono);font-size:10.5px;padding:3px 9px;
+  border:1px solid var(--border);background:transparent;color:var(--text-sec);
+  border-radius:5px;cursor:pointer;
+}
+.ft-mini:hover{ border-color:var(--accent);color:var(--accent); }
+.fleet-tiles-row{
+  display:flex;flex-wrap:wrap;gap:6px;
+  border-bottom:1px solid var(--border-soft);padding-bottom:8px;
+}
+/* Each fleet is a selectable chip; several can be lit at once (union view). */
 .bucket-tab{
+  display:inline-flex;align-items:center;gap:8px;
   font-family:var(--font-display);font-weight:700;font-size:13px;
   text-transform:uppercase;letter-spacing:1.3px;color:var(--text-muted);
-  padding:10px 18px;border:1px solid transparent;
-  border-bottom:none;background:transparent;cursor:pointer;
-  border-radius:var(--r-sm) var(--r-sm) 0 0;
+  padding:9px 15px;border:1px solid var(--border-soft);
+  background:transparent;cursor:pointer;border-radius:var(--r-sm);
   transition:color .15s, background .15s, border-color .15s;
 }
-.bucket-tab:hover{ color:var(--text-pri); background:rgba(31,206,216,.04); }
+.bucket-tab:hover{ color:var(--text-pri); background:rgba(31,206,216,.05); }
 .bucket-tab.active{
-  color:var(--accent);background:var(--bg-panel);
-  border-color:var(--border-soft);border-bottom-color:var(--bg-panel);
-  margin-bottom:-1px;
+  color:var(--accent);background:rgba(31,206,216,.10);
+  border-color:var(--accent);
 }
 .bucket-tab .badge{
   font-family:var(--font-mono);font-size:10px;color:var(--text-muted);
-  margin-left:8px;letter-spacing:.4px;
+  letter-spacing:.4px;
 }
 .bucket-tab.active .badge{ color:var(--accent-glow); }
+.bucket-tab .bt-units{
+  font-family:var(--font-mono);font-weight:400;font-size:9.5px;
+  letter-spacing:.3px;color:var(--text-muted);text-transform:none;
+}
 .bucket-tab.multi{ color:var(--accent); }
 .bucket-tab.multi::before{ content:"⊕ "; opacity:.6; }
 
@@ -1334,7 +1353,8 @@ main.shell{ position:relative; }
 .gp-backdrop.hidden{ display:none; }
 .graph-popout{
   position:fixed; z-index:80; left:40px; top:80px;
-  width:1040px; height:700px; max-width:calc(100vw - 20px); max-height:calc(100vh - 20px);
+  /* APP-ACT-04-GROW — card scaled ~15% (was 1040×700) to fit the larger pop-out chart. */
+  width:1196px; height:805px; max-width:calc(100vw - 20px); max-height:calc(100vh - 20px);
   display:flex; flex-direction:column;
   background:var(--bg-panel, #0f2b3a);
   border:1px solid var(--accent); border-radius:12px;
@@ -1358,7 +1378,11 @@ main.shell{ position:relative; }
    FIXED width (fits the 936px chart + padding) so the visuals never reflow. Shrink
    the card past the content and gp-body scrolls instead of squeezing the chart. */
 .gp-body{ flex:1 1 auto; display:flex; min-height:0; overflow:auto; }
-.gp-detail{ flex:0 0 auto; width:964px; padding:12px 14px; }
+/* APP-ACT-04-GROW — uniformly zoom the whole detail pane (chart + stats + MRP
+   table) ~15% as a single unit, so nothing reflows or shifts. `zoom` scales the
+   layout too (unlike transform:scale), so the card + scroll container size to the
+   zoomed content correctly. Base width stays 964 (× zoom = ~1109 effective). */
+.gp-detail{ flex:0 0 auto; width:964px; padding:12px 14px; zoom:1.15; }
 .gp-notes{ flex:0 0 300px; display:flex; flex-direction:column; border-left:1px solid var(--border); background:rgba(255,255,255,0.015); }
 .gp-notes.hidden{ display:none; }
 .gp-notes-head{ padding:9px 12px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px; letter-spacing:.5px; color:var(--accent); }

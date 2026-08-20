@@ -18,6 +18,11 @@
   gap:0;
   align-items:start;
   min-height:calc(100vh - 50px); /* nav height roughly */
+  /* APP-TRACE-CENTER — match the Trend page's .shell (max-width:1280 + margin auto)
+     so Trace is a centered column on wide screens instead of a left-hugged,
+     full-width grid that sprawls with empty space on the right. */
+  max-width:1280px;
+  margin:0 auto;
 }
 @media (max-width:980px){
   .trace-shell{ grid-template-columns:64px 1fr; }
