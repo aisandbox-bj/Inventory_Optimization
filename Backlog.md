@@ -1,14 +1,14 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-20 (the **APP-ACT-04-GROW** pop-out zoom + **APP-TRACE-CENTER** layout tweak — see the SHIPPED sections directly below; built + browser-verified, pending push alongside the still-unpushed **APP-TREND-FLEET-TILES**). Prior: "template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks" (`c311841`).
+**Updated:** 2026-08-20 (**APP-ACT-04-GROW** pop-out zoom + **APP-TRACE-CENTER** layout tweak + **APP-TREND-FLEET-TILES** — all three **pushed `f1a7f28`** on top of `c311841`, pending operator off-repo validation; safety refs `backup/pre-push-2026-08-20` + `checkpoint/pre-push-2026-08-20` at `c311841`). Prior: "template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks" (`c311841`).
 
-## ✅ SHIPPED — APP-ACT-04-GROW · Trend pop-out ~15% bigger (uniform zoom, no reflow) (2026-08-20) — built + browser-verified, pending push
+## ✅ SHIPPED — APP-ACT-04-GROW · Trend pop-out ~15% bigger (uniform zoom, no reflow) (2026-08-20) — built + browser-verified, pushed `f1a7f28`,
 Local snapshot `_rollback/APP-ACT-04-GROW-pre/analysis/`. No SCHEMA_VERSION change. Files: `analysis/analysis.js`, `analysis/analysis.css`.
 - Operator wanted the Trend material-detail pop-out ~15% larger, but as a **true zoom** — chart AND stat/MRP tables scale together, nothing reflows. Fix: `zoom:1.15` on `.gp-detail` (scales the whole pane as one unit; `zoom` affects layout so the scroll container sizes correctly, unlike `transform:scale`), and bumped the on-open default card size in `openGraphPopout` from **1040×700 → 1196×805** (× 1.15) so the zoomed content fits. The inline detail panel is untouched (only the pop-out zooms). **Note:** the card size is set inline on open by `openGraphPopout` (overrides CSS) — that JS default is the real knob; the `.graph-popout` CSS is the pre-open fallback, kept in sync.
 - Verified in-browser: `.gp-detail` zoom 1.15; card 1196×805; zoomed detail (1109px) fits the body (1194px), no clip; chart ~936→~1065px; stat-grid + MRP table scaled with no reflow; inline panel unchanged; zero console errors.
 
 
-## ✅ SHIPPED — APP-TRACE-CENTER · centre the Trace page like the Trend .shell (2026-08-20) — built + browser-verified, pending push + operator off-repo validation
+## ✅ SHIPPED — APP-TRACE-CENTER · centre the Trace page like the Trend .shell (2026-08-20) — built + browser-verified, pushed `f1a7f28`, + operator off-repo validation
 Local snapshot `_rollback/APP-TRACE-CENTER-pre/trace/trace.css`. No SCHEMA_VERSION change. File: `trace/trace.css`.
 - On wide screens the Trace page hugged the left with a large empty band on the right, while Trend sits as a centred column. Root cause: Trend's `.shell` is `max-width:1280px; margin:0 auto` but `.trace-shell` was a full-width grid with neither. Fix: added the same two properties to `.trace-shell` → Trace is now a centred 1280 column that lines up with Trend (nav stays full-width; rail sits at the left of the centred block; graphs fill the content column). Fixes the sprawl for **all** Trace views; resize grip untouched.
 - Verified in-browser (material 1003380, cadence view): `.trace-shell` max-width 1280, centred at 1440 vp (margins 73/88 incl. scrollbar), rail x0→x73, both charts render inside the centred column, zero app console errors.
