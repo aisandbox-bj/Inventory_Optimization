@@ -388,7 +388,7 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="date">2026-08-20</span>
         <span class="tag dev">dev</span>
       </div>
-      <h4>APP-TRACE-WIDER — widen the Trace centred column 1280 → 1920 (+50%) so the graph views aren't squeezed — <b>built + browser-verified; pending push + operator off-repo validation</b></h4>
+      <h4>APP-TRACE-WIDER — widen the Trace centred column 1280 → 1920 (+50%) so the graph views aren't squeezed — <b>built + browser-verified; pushed <code>4b42716</code> (2026-08-20), pending operator off-repo validation</b></h4>
       <ul>
         <li><b>Follow-up to APP-TRACE-CENTER (operator).</b> Centring Trace at 1280 (to match Trend) fixed the sprawl but <b>squeezed the fill-width graph views</b> — Phase Distribution, Procurement Chain, Volume, Year-on-Year — down to a ~1004px content area. They looked cramped; only the MRP-run cadence view was fine (its tile is resizable). Operator asked to make it 50% wider and re-try.</li>
         <li><b>Fix.</b> <code>.trace-shell max-width</code> 1280 → <b>1920</b> (+50%). Diagnostic first confirmed the views <em>fill</em> the column (none broken/overflowing at 1280 — they were just narrow), so more column width is the right lever. This <b>diverges from Trend's 1280 by operator choice</b> — the Trace graphs need the room. File: <code>trace/trace.css</code> (one value).</li>
