@@ -18,10 +18,14 @@
   gap:0;
   align-items:start;
   min-height:calc(100vh - 50px); /* nav height roughly */
-  /* APP-TRACE-CENTER — match the Trend page's .shell (max-width:1280 + margin auto)
-     so Trace is a centered column on wide screens instead of a left-hugged,
-     full-width grid that sprawls with empty space on the right. */
-  max-width:1280px;
+  /* APP-TRACE-CENTER — centre Trace on wide screens (margin auto) instead of a
+     left-hugged, full-width grid that sprawls with empty space on the right.
+     APP-TRACE-WIDER (2026-08-20) — cap widened 1280 → 1920 (+50%): 1280 centred
+     the page but squeezed the fill-width graph views (Phase Distribution,
+     Procurement Chain, Volume, Year-on-Year); 1920 gives them ~640px more room
+     while still centring on very wide (4K) screens. (Diverges from Trend's 1280
+     by operator choice — the Trace graphs need the extra width.) */
+  max-width:1920px;
   margin:0 auto;
 }
 @media (max-width:980px){

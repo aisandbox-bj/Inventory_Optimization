@@ -1,6 +1,12 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-20 (**APP-ACT-04-GROW** pop-out zoom + **APP-TRACE-CENTER** layout tweak + **APP-TREND-FLEET-TILES** — all three **pushed `f1a7f28`** on top of `c311841`, pending operator off-repo validation; safety refs `backup/pre-push-2026-08-20` + `checkpoint/pre-push-2026-08-20` at `c311841`). Prior: "template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks" (`c311841`).
+**Updated:** 2026-08-20 (**APP-TRACE-WIDER** — Trace centred cap 1280 → 1920 so the graph views aren't squeezed; built + browser-verified, pending push). Prior same day: **APP-ACT-04-GROW** + **APP-TRACE-CENTER** + **APP-TREND-FLEET-TILES** all **pushed `f1a7f28`** (doc follow-up `212332f`) on top of `c311841`; safety refs `backup/pre-push-2026-08-20` + `checkpoint/pre-push-2026-08-20` at `c311841`.
+
+## ✅ SHIPPED — APP-TRACE-WIDER · widen the Trace centred column 1280 → 1920 (+50%) (2026-08-20) — built + browser-verified, pending push
+Local snapshot `_rollback/APP-TRACE-WIDER-pre/trace/trace.css` (= the pushed 1280 version). No SCHEMA_VERSION change. File: `trace/trace.css` (one value).
+- Follow-up to APP-TRACE-CENTER: centring at 1280 squeezed the fill-width graph views (Phase Distribution, Procurement Chain, Volume, Year-on-Year) to ~1004px; only the resizable MRP-run cadence tile was fine. Operator asked for 50% wider. Diagnostic confirmed the views *fill* the column (not broken) → more width is the right lever. `.trace-shell max-width` 1280 → **1920**. Diverges from Trend's 1280 by operator choice (Trace graphs need the room).
+- Verified at a 2400px viewport: centred at 1920 (margins 233/248); content column 1040 → **1680**; graph views ~1004 → ~1644px, no new overflow; zero console errors. Narrower-than-1920 screens go effectively full-width; 4K centres at 1920.
+
 
 ## ✅ SHIPPED — APP-ACT-04-GROW · Trend pop-out ~15% bigger (uniform zoom, no reflow) (2026-08-20) — built + browser-verified, pushed `f1a7f28`,
 Local snapshot `_rollback/APP-ACT-04-GROW-pre/analysis/`. No SCHEMA_VERSION change. Files: `analysis/analysis.js`, `analysis/analysis.css`.
