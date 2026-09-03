@@ -1,8 +1,8 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-20 (**APP-INT-UITIDY** — intake roll-ups: params primary/advanced + collapsible per-file mapping; params browser-verified, mapping code-complete/pending operator upload; pending push). Prior: **APP-USERLIST-SHOWALL** ("Show all list materials" Trend override, **pushed `aab1f11`**), **APP-TRACE-WIDER** (**pushed `4b42716`**).
+**Updated:** 2026-08-20 (**APP-INT-UITIDY** — intake roll-ups: params primary/advanced + collapsible per-file mapping; **pushed `2294bd4`**; params browser-verified, mapping pending operator upload; rollback refs `backup/pre-int-uitidy` + `checkpoint/pre-int-uitidy` at `882650d`). Prior: **APP-USERLIST-SHOWALL** ("Show all list materials" Trend override, **pushed `aab1f11`**), **APP-TRACE-WIDER** (**pushed `4b42716`**).
 
-## ✅ SHIPPED — APP-INT-UITIDY · intake UI roll-ups (2026-08-20) — params browser-verified, mapping pending operator upload, pending push
+## ✅ SHIPPED — APP-INT-UITIDY · intake UI roll-ups (2026-08-20) — pushed `2294bd4`; params browser-verified, mapping pending operator upload
 Local snapshot `_rollback/APP-INT-UITIDY-pre/intake/`. No SCHEMA_VERSION change; presentation only (no parser / DQ / scope logic touched). Files: `intake/intake.{html,js,css}`.
 - **Params (Step 05):** primary grid always shown (Threshold · Min consumption events · Min months · Max months · Stock history window) + collapsed **"Advanced parameters"** roll-up (14 settings, 5 sub-groups: Analysis windows · Consumption pattern · Batched Min · Working-redundant · Inventory-adjustment). Toggle shows count + "N overridden"; editing keeps it open. Shared `buildCell()`; all 19 params render; wired via `#step5 [data-pkey]`.
 - **Mapping (Step 02):** each source file is a collapsible tile — header shows "X/Y mapped · N unmapped"; fully-mapped files collapse by default, unmapped-bearing files auto-expand (never hide a broken mapping); click header to toggle.

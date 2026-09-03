@@ -388,7 +388,7 @@ git -C /tmp/peek push --force-with-lease origin main
         <span class="date">2026-08-20</span>
         <span class="tag dev">dev</span>
       </div>
-      <h4>APP-INT-UITIDY — intake UI: parameters primary/advanced roll-up + collapsible per-file mapping (less scrolling) — <b>params browser-verified; mapping code-complete, boots clean, pending operator upload to eyeball; pending push</b></h4>
+      <h4>APP-INT-UITIDY — intake UI: parameters primary/advanced roll-up + collapsible per-file mapping (less scrolling) — <b>params browser-verified; mapping code-complete, boots clean, pending operator upload to eyeball; pushed <code>2294bd4</code> (2026-08-20)</b></h4>
       <ul>
         <li><b>Why (operator).</b> The intake page is a long single scroll; the operator wanted the Parameters and Schema-mapping steps rolled up so the primary controls are up front and you don't scroll to the bottom. (A light slice of the parked APP-INT-WIZARD idea.)</li>
         <li><b>Step 05 · Parameters — primary shown, advanced rolled up.</b> The five the operator actually tweaks per run stay in the always-visible grid — <b>Threshold · Min consumption events · Min months · Max months · Stock history window (months)</b>. The remaining 14 move into a collapsed <b>"Advanced parameters"</b> roll-up, sub-grouped (Analysis windows · Consumption pattern · Batched Min · Working-redundant · Inventory-adjustment). The toggle shows the setting count + an "N overridden" badge so nothing hidden is changed unseen; editing keeps it open (state flag). Refactored to a shared <code>buildCell()</code>; all 19 params still render, all inputs wired via <code>#step5 [data-pkey]</code>. Files: <code>intake/intake.{html,js,css}</code>.</li>
