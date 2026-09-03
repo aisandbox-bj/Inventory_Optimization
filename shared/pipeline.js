@@ -769,11 +769,35 @@
     for (const bucket of buckets) {
       const desc = buildMaterialDescIndex(bucket.transactions);
       const net  = netConsumptionByMaterial(bucket.transactions, desc);
+      // APP-USERLIST-SHOWALL — "Show all list materials" override (Trend toggle,
+      // User-Specified material lists only). When on, include EVERY material the
+      // operator listed, bypassing BOTH the quantity (threshold) and event
+      // (minEvents) screens — even the structural "must have consumption" one,
+      // since a material with no transactions isn't in `net`. Parts with no
+      // consumption in the window flow through as net 0 / no events → assess()
+      // gives them GREY ("no recent consumption"), so nothing drops silently.
+      const showAllList = !!options.showAllUserList
+                          && bucket.kind === 'manual' && bucket.listType === 'materials'
+                          && bucket.materials;
       const qualifying = [];
-      for (const [mat, agg] of net) {
-        if (agg.net < threshold) continue;
-        if (agg.eventCount < minEvents) continue;   // APP-E9 — min consumption events screen
-        qualifying.push({ material: mat, description: agg.description, totalNet: agg.net });
+      if (showAllList) {
+        for (const mat of bucket.materials) {
+          const m = String(mat || '').trim();
+          if (!m) continue;
+          const agg = net.get(m);
+          const mr  = masterIdx.get(m);
+          qualifying.push({
+            material:    m,
+            description: (agg && agg.description) || (mr && mr.description) || '',
+            totalNet:    (agg && agg.net) || 0
+          });
+        }
+      } else {
+        for (const [mat, agg] of net) {
+          if (agg.net < threshold) continue;
+          if (agg.eventCount < minEvents) continue;   // APP-E9 — min consumption events screen
+          qualifying.push({ material: mat, description: agg.description, totalNet: agg.net });
+        }
       }
       qualifying.sort((a, b) => b.totalNet - a.totalNet);
 
@@ -1219,7 +1243,8 @@
       (json && json.SCHEMA_VERSION) || m.schemaVersion || '',
       c('mb51'), c('inventoryMaster'), c('iw39'), c('prHistory'), c('fleetMaster'), c('materialVendor'), c('userList'),
       JSON.stringify((json && json.parameters) || {}),
-      (options && options.runDate) || ''
+      (options && options.runDate) || '',
+      (options && options.showAllUserList) ? 'showall' : ''   // APP-USERLIST-SHOWALL — cache on/off separately
     ].join('|');
   }
   const PIPE_CACHE_KEY = 'invOpt.pipelineResultCache';

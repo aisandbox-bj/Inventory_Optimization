@@ -381,6 +381,23 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.1.5-dev - APP-USERLIST-SHOWALL: "Show all list materials" override on Trend - 2026-08-20 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-20</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>APP-USERLIST-SHOWALL — "Show all list materials" override on Trend (surfaces user-list parts that the screens were silently dropping) — <b>built + browser-verified; pending push + operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Why (operator, credibility).</b> Reviewing how intake screening decides what shows in Trend, we confirmed a <b>silent-drop</b>: <code>run()</code> builds the displayed material set from <code>netConsumptionByMaterial(bucket.transactions)</code> — i.e. from materials that actually have consumption — so a part in a <b>user-typed list</b> with <b>no consumption in the window</b> (or below the quantity/event screens) never enters the loop and <b>vanishes with no trace</b>, even with both screens set to 0. This is exactly the "never hide issues" case.</li>
+        <li><b>Fix — a live Trend toggle.</b> New <b>"⊕ Show all list materials"</b> toggle in the traffic-light filter row, shown <b>only for a User-Specified material list</b> (manual scope, <code>listType:'materials'</code> — not work-order lists, not fleet/vendor scopes where "all" would mean the whole master). When on, the pipeline re-runs with <code>options.showAllUserList</code> and includes <b>every</b> material the operator listed, bypassing the quantity + event screens. Parts with no consumption come back as <b>GREY</b> ("no recent consumption" / "not in Inventory Master") — visible and reviewable, never dropped. Styled violet + a distinct tooltip so it doesn't read as another display filter (unlike the TL / ★ toggles, this re-runs the analysis, not a client-side filter). In-memory, defaults off; the result caches on/off separately (fingerprint extended) so toggling is instant.</li>
+        <li><b>Scope of change.</b> <code>shared/pipeline.js</code> — <code>run()</code> gains a per-bucket show-all branch that builds <code>qualifying</code> from <code>bucket.materials</code> (Set) instead of the transaction-keyed <code>net</code>, with description falling back to the Inventory Master; the <code>runPipeline</code>/<code>runPipelineCached</code> path is unchanged and the OFF path is byte-identical to before (zero regression). <code>analysis/analysis.{js,css}</code> — the toggle, an <code>isUserSpecifiedList()</code> gate, the flag on the pipeline call, and a violet button style.</li>
+        <li><b>Verified</b> in-browser on a manual list of 5 real + 2 phantom parts (phantoms have zero MB51 rows): toggle appears only for the user list; OFF → <b>5</b> materials (phantoms dropped, exactly as before); ON → <b>7</b>, the two phantoms shown as <b>GREY</b> with no crash; pipeline count updates 5↔7; OFF restores 5; zero console errors.</li>
+        <li><b>Rollback.</b> Local snapshot <code>_rollback/APP-USERLIST-SHOWALL-pre/</code> (pipeline.js + analysis.js/css). No SCHEMA_VERSION change. <em>(A matching intake-time checkbox / persistence was scoped out for now — operator chose the live toggle; easy fast-follow.)</em></li>
+      </ul>
+    </article>
+
     <!-- v2.1.5-dev - APP-TRACE-WIDER: widen the Trace centred cap 1280 -> 1920 - 2026-08-20 -->
     <article class="roc-entry dev">
       <div class="head">

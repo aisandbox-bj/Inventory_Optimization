@@ -1,6 +1,14 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-20 (**APP-TRACE-WIDER** — Trace centred cap 1280 → 1920 so the graph views aren't squeezed; **pushed `4b42716`**, pending operator off-repo validation). Prior same day: **APP-ACT-04-GROW** + **APP-TRACE-CENTER** + **APP-TREND-FLEET-TILES** all **pushed `f1a7f28`** (doc follow-up `212332f`) on top of `c311841`; safety refs `backup/pre-push-2026-08-20` + `checkpoint/pre-push-2026-08-20` at `c311841`.
+**Updated:** 2026-08-20 (**APP-USERLIST-SHOWALL** — "Show all list materials" override on Trend so user-list parts with no consumption aren't silently dropped; built + browser-verified, pending push). Prior: **APP-TRACE-WIDER** (Trace cap 1280 → 1920, **pushed `4b42716`**).
+
+## ✅ SHIPPED — APP-USERLIST-SHOWALL · "Show all list materials" override on Trend (2026-08-20) — built + browser-verified, pending push
+Local snapshot `_rollback/APP-USERLIST-SHOWALL-pre/` (pipeline.js + analysis.js/css). No SCHEMA_VERSION change.
+- **Root cause (credibility):** `run()` builds the shown set from `netConsumptionByMaterial(bucket.transactions)`, so a user-listed part with no consumption in the window never enters the loop and drops silently — even with the quantity/event screens set to 0.
+- **Fix:** a live **"⊕ Show all list materials"** toggle in the Trend filter row, shown only for a User-Specified list (manual scope, `listType:'materials'`). When on, the pipeline re-runs (`options.showAllUserList`) and includes **every** listed material, bypassing both screens; zero-consumption parts show **GREY**. Violet styling + distinct tooltip (it re-runs the analysis, not a client-side filter). In-memory, defaults off; cache fingerprint extended so on/off cache separately. OFF path byte-identical to before.
+- **Verified:** manual list 5 real + 2 phantom (no MB51 rows) → OFF 5, ON 7 (phantoms GREY, no crash), OFF 5; toggle only on user lists; zero console errors.
+- **Follow-up (not built):** an intake-time checkbox + persistence — operator chose the live toggle; easy add later.
+ Prior same day: **APP-ACT-04-GROW** + **APP-TRACE-CENTER** + **APP-TREND-FLEET-TILES** all **pushed `f1a7f28`** (doc follow-up `212332f`) on top of `c311841`; safety refs `backup/pre-push-2026-08-20` + `checkpoint/pre-push-2026-08-20` at `c311841`.
 
 ## ✅ SHIPPED — APP-TRACE-WIDER · widen the Trace centred column 1280 → 1920 (+50%) (2026-08-20) — pushed `4b42716`, pending operator off-repo validation
 Local snapshot `_rollback/APP-TRACE-WIDER-pre/trace/trace.css` (= the pushed 1280 version). No SCHEMA_VERSION change. File: `trace/trace.css` (one value).

@@ -16,6 +16,7 @@
     selectedMaterial:null,       // material no
     filterTl:        'ALL',
     filterAction:    false,       // APP-TREND-ACTFILTER — show only For-Action-flagged materials
+    showAllUserList: false,       // APP-USERLIST-SHOWALL — override: show EVERY material in a user-specified list (bypass the usage + event screens). In-memory, defaults off.
     selectedFleets:  new Set(),   // APP-ACT-02b — buckets ticked for the "Selected fleets" exports
     traceExcl:       { manualByMat:{}, sigmaLimit:null },  // APP-FIX-TREND-LT-SUPPRESS — Trace outlier suppression (from trace.viewState)
     sortKey:         'totalNet',
@@ -193,7 +194,7 @@
     await new Promise(r => setTimeout(r, 30));
     try {
       const t0 = performance.now();
-      state.result = AppPipeline.runPipelineCached(state.json, { runDate: AppLocale.localDateISO() });
+      state.result = AppPipeline.runPipelineCached(state.json, { runDate: AppLocale.localDateISO(), showAllUserList: state.showAllUserList });
       enrichLeadTimes();   // APP-TREND-LT — attach m.leadMonths for the list column
       // APP-ACT-03 — set of every material in the pack, for the "See <7-digit>"
       // description jump (only linkify references that are actually navigable).
@@ -411,12 +412,33 @@
     const actHtml = state.analyst
       ? `<span class="tl-sep"></span><button data-actfilter="1" class="act-filter${state.filterAction ? ' active' : ''}" title="Show only materials flagged For Action (★)">★ Action</button>`
       : '';
-    host.innerHTML = tlHtml + actHtml;
+    // APP-USERLIST-SHOWALL — "Show all list materials" override, only for a
+    // User-Specified material list. Unlike the traffic-light / ★ toggles (which
+    // filter the already-computed rows), this RE-RUNS the pipeline with the
+    // usage + event screens bypassed, so every listed part shows — even ones
+    // with no consumption in the window (they come back GREY). Styled distinctly
+    // (violet) so it doesn't read as another display filter.
+    const saHtml = isUserSpecifiedList()
+      ? `<span class="tl-sep"></span><button data-showall="1" class="showall-toggle${state.showAllUserList ? ' active' : ''}" title="Show EVERY material in your uploaded list — including parts with no consumption in the window. Bypasses the usage (threshold) and event-count filters; parts with nothing to recommend on appear GREY. Re-runs the analysis.">⊕ Show all list materials</button>`
+      : '';
+    host.innerHTML = tlHtml + actHtml + saHtml;
     $$('#tlFilter button[data-tl]').forEach(b => {
       b.addEventListener('click', () => { state.filterTl = b.dataset.tl; renderList(); renderFilterButtons(); });
     });
     const af = host.querySelector('button[data-actfilter]');
     if (af) af.addEventListener('click', () => { state.filterAction = !state.filterAction; renderList(); renderFilterButtons(); });
+    const sa = host.querySelector('button[data-showall]');
+    if (sa) sa.addEventListener('click', async () => { state.showAllUserList = !state.showAllUserList; await runPipelineNow(false); });
+  }
+
+  // APP-USERLIST-SHOWALL — the "Show all" override applies only to a user-typed
+  // material list (manual scope, materials list — not a work-order list, not a
+  // fleet/vendor-derived scope where "all materials" would mean the whole master).
+  function isUserSpecifiedList(){
+    const sc = state.json && state.json.scope;
+    if (!sc || sc.mode !== 'manual') return false;
+    const lt = (sc.manual && sc.manual.listType) || 'materials';
+    return lt === 'materials';
   }
 
   // APP-TREND-LISTCOLS (2026-08-15) — MRP moved to sit right after P2/mo (operator
