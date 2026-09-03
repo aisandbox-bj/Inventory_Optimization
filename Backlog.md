@@ -1,8 +1,8 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-20 (**APP-USERLIST-SHOWALL** — "Show all list materials" override on Trend so user-list parts with no consumption aren't silently dropped; built + browser-verified, pending push). Prior: **APP-TRACE-WIDER** (Trace cap 1280 → 1920, **pushed `4b42716`**).
+**Updated:** 2026-08-20 (**APP-USERLIST-SHOWALL** — "Show all list materials" override on Trend so user-list parts with no consumption aren't silently dropped; **pushed `aab1f11`**, pending operator off-repo validation; rollback refs `backup/pre-showall` + `checkpoint/pre-showall` at `08e4e14`). Prior: **APP-TRACE-WIDER** (Trace cap 1280 → 1920, **pushed `4b42716`**).
 
-## ✅ SHIPPED — APP-USERLIST-SHOWALL · "Show all list materials" override on Trend (2026-08-20) — built + browser-verified, pending push
+## ✅ SHIPPED — APP-USERLIST-SHOWALL · "Show all list materials" override on Trend (2026-08-20) — pushed `aab1f11`, pending operator off-repo validation
 Local snapshot `_rollback/APP-USERLIST-SHOWALL-pre/` (pipeline.js + analysis.js/css). No SCHEMA_VERSION change.
 - **Root cause (credibility):** `run()` builds the shown set from `netConsumptionByMaterial(bucket.transactions)`, so a user-listed part with no consumption in the window never enters the loop and drops silently — even with the quantity/event screens set to 0.
 - **Fix:** a live **"⊕ Show all list materials"** toggle in the Trend filter row, shown only for a User-Specified list (manual scope, `listType:'materials'`). When on, the pipeline re-runs (`options.showAllUserList`) and includes **every** listed material, bypassing both screens; zero-consumption parts show **GREY**. Violet styling + distinct tooltip (it re-runs the analysis, not a client-side filter). In-memory, defaults off; cache fingerprint extended so on/off cache separately. OFF path byte-identical to before.
