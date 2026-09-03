@@ -686,6 +686,7 @@
       const head = document.createElement('div');
       head.className = 'schema-group-head';
       head.innerHTML = `
+        <div class="chev">▸</div>
         <div class="name">${escapeHtml(labelLeft)}</div>
         <div class="desc">${escapeHtml(sourceTagline(source))} · ${sheetTxt}${parsed.rowCount.toLocaleString()} rows</div>
         <div class="count" data-count></div>
@@ -716,8 +717,14 @@
       }
 
       const countEl = head.querySelector('[data-count]');
-      countEl.textContent = `${groupMatched} / ${fields.length} matched`;
-      countEl.classList.add(groupMatched === fields.length ? 'ok' : 'warn');
+      const unmatched = fields.length - groupMatched;
+      countEl.innerHTML = `${groupMatched}/${fields.length} mapped${unmatched ? ` · <b>${unmatched} unmapped</b>` : ''}`;
+      countEl.classList.add(unmatched === 0 ? 'ok' : 'warn');
+      // APP-INT-UITIDY — each file's mapping is a collapsible tile: fully-mapped
+      // files start collapsed (short by default), any file with unmapped columns
+      // auto-expands so a broken mapping is never hidden. Click the tile to toggle.
+      group.classList.toggle('collapsed', unmatched === 0);
+      head.addEventListener('click', () => group.classList.toggle('collapsed'));
 
       host.appendChild(group);
     }
@@ -1770,12 +1777,12 @@
     ];
 
     const descs = CanonicalSchema.PARAMETER_DESCRIPTIONS || {};
-    const host = $('#paramsGrid');
-    host.innerHTML = '';
-    for (const f of fields) {
+    const byKey = {}; for (const f of fields) byKey[f.key] = f;
+
+    // Build one param cell (shared by the primary grid + the advanced roll-up).
+    function buildCell(f){
       const cell = document.createElement('div');
       cell.className = 'param-cell' + (JSON.stringify(run[f.key]) !== JSON.stringify(saved[f.key]) ? ' dirty' : '');
-
       let input;
       if (f.type === 'select') {
         input = `<select data-pkey="${f.key}">${f.opts.map(o => `<option value="${o}" ${run[f.key]===o?'selected':''}>${o}</option>`).join('')}</select>`;
@@ -1793,9 +1800,57 @@
       const savedDisplay   = Array.isArray(saved[f.key])   ? saved[f.key].join(', ')   : saved[f.key];
       const factoryNote = factoryDiff ? `<div class="factory-note">factory: ${escapeHtml(String(factoryDisplay))} · saved: ${escapeHtml(String(savedDisplay))}</div>` : '';
       cell.innerHTML = `<label>${f.label}</label><div class="param-desc">${desc}</div>${input}${factoryNote}`;
-      host.appendChild(cell);
+      return cell;
     }
-    $$('#paramsGrid [data-pkey]').forEach(el => {
+
+    // APP-INT-UITIDY — the params the operator actually tweaks per run are shown
+    // up front; the rest live in a collapsed, sub-grouped "Advanced parameters"
+    // roll-up so the step is short. Editing keeps the roll-up open (state flag).
+    const PRIMARY = ['threshold','minEventsThreshold','minMonths','maxMonths','socBackCalcMonths'];
+    const ADV_GROUPS = [
+      { label:'Analysis windows',     keys:['minMaxMethod','p1Start','p1End','p2Months'] },
+      { label:'Consumption pattern',  keys:['hcePctThreshold','hceMultThreshold','lumpyCvThreshold','lumpyTopWoThreshold'] },
+      { label:'Batched Min',          keys:['batchedMinFactor','batchedMinGoverns'] },
+      { label:'Working-redundant',    keys:['wrSoftMonths','wrHardMonths','wrMrpTypes'] },
+      { label:'Inventory-adjustment', keys:['invAdjSigmaThreshold'] }
+    ];
+
+    const host = $('#paramsGrid');
+    host.innerHTML = '';
+    for (const k of PRIMARY) if (byKey[k]) host.appendChild(buildCell(byKey[k]));
+
+    const adv = $('#paramsAdvanced');
+    if (adv){
+      const advKeys = ADV_GROUPS.flatMap(g => g.keys);
+      const dirtyCount = advKeys.filter(k => JSON.stringify(run[k]) !== JSON.stringify(saved[k])).length;
+      const open = !!state._paramsAdvOpen;
+      adv.innerHTML = '';
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'params-adv-toggle' + (open ? ' open' : '');
+      toggle.innerHTML = `<span class="chev">▸</span> Advanced parameters <span class="adv-meta">${advKeys.length} settings${dirtyCount ? ` · <b>${dirtyCount} overridden</b>` : ''}</span>`;
+      adv.appendChild(toggle);
+      const body = document.createElement('div');
+      body.className = 'params-adv-body' + (open ? '' : ' collapsed');
+      for (const g of ADV_GROUPS){
+        const grp = document.createElement('div'); grp.className = 'params-adv-group';
+        const gl = document.createElement('div'); gl.className = 'params-adv-label'; gl.textContent = g.label;
+        grp.appendChild(gl);
+        const grid = document.createElement('div'); grid.className = 'param-grid';
+        for (const k of g.keys) if (byKey[k]) grid.appendChild(buildCell(byKey[k]));
+        grp.appendChild(grid);
+        body.appendChild(grp);
+      }
+      adv.appendChild(body);
+      toggle.addEventListener('click', () => {
+        state._paramsAdvOpen = !state._paramsAdvOpen;
+        toggle.classList.toggle('open', state._paramsAdvOpen);
+        body.classList.toggle('collapsed', !state._paramsAdvOpen);
+      });
+    }
+
+    // Wire every param input (primary grid + advanced roll-up live in #step5).
+    $$('#step5 [data-pkey]').forEach(el => {
       el.addEventListener('change', (e) => {
         const k = el.dataset.pkey;
         const f = fields.find(x => x.key === k);

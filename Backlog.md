@@ -1,6 +1,13 @@
 # Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-20 (**APP-USERLIST-SHOWALL** — "Show all list materials" override on Trend so user-list parts with no consumption aren't silently dropped; **pushed `aab1f11`**, pending operator off-repo validation; rollback refs `backup/pre-showall` + `checkpoint/pre-showall` at `08e4e14`). Prior: **APP-TRACE-WIDER** (Trace cap 1280 → 1920, **pushed `4b42716`**).
+**Updated:** 2026-08-20 (**APP-INT-UITIDY** — intake roll-ups: params primary/advanced + collapsible per-file mapping; params browser-verified, mapping code-complete/pending operator upload; pending push). Prior: **APP-USERLIST-SHOWALL** ("Show all list materials" Trend override, **pushed `aab1f11`**), **APP-TRACE-WIDER** (**pushed `4b42716`**).
+
+## ✅ SHIPPED — APP-INT-UITIDY · intake UI roll-ups (2026-08-20) — params browser-verified, mapping pending operator upload, pending push
+Local snapshot `_rollback/APP-INT-UITIDY-pre/intake/`. No SCHEMA_VERSION change; presentation only (no parser / DQ / scope logic touched). Files: `intake/intake.{html,js,css}`.
+- **Params (Step 05):** primary grid always shown (Threshold · Min consumption events · Min months · Max months · Stock history window) + collapsed **"Advanced parameters"** roll-up (14 settings, 5 sub-groups: Analysis windows · Consumption pattern · Batched Min · Working-redundant · Inventory-adjustment). Toggle shows count + "N overridden"; editing keeps it open. Shared `buildCell()`; all 19 params render; wired via `#step5 [data-pkey]`.
+- **Mapping (Step 02):** each source file is a collapsible tile — header shows "X/Y mapped · N unmapped"; fully-mapped files collapse by default, unmapped-bearing files auto-expand (never hide a broken mapping); click header to toggle.
+- **Verified:** params in-browser (5 primary + 14 advanced across 5 groups, collapsed default, toggle opens, zero console errors). Mapping: `renderSchema()` boots clean; live collapse needs an operator upload to eyeball (no headless file-upload in preview).
+
 
 ## ✅ SHIPPED — APP-USERLIST-SHOWALL · "Show all list materials" override on Trend (2026-08-20) — pushed `aab1f11`, pending operator off-repo validation
 Local snapshot `_rollback/APP-USERLIST-SHOWALL-pre/` (pipeline.js + analysis.js/css). No SCHEMA_VERSION change.

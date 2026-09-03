@@ -381,6 +381,23 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.1.5-dev - APP-INT-UITIDY: intake roll-ups (params primary/advanced + collapsible mapping) - 2026-08-20 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.1.5</span>
+        <span class="date">2026-08-20</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>APP-INT-UITIDY — intake UI: parameters primary/advanced roll-up + collapsible per-file mapping (less scrolling) — <b>params browser-verified; mapping code-complete, boots clean, pending operator upload to eyeball; pending push</b></h4>
+      <ul>
+        <li><b>Why (operator).</b> The intake page is a long single scroll; the operator wanted the Parameters and Schema-mapping steps rolled up so the primary controls are up front and you don't scroll to the bottom. (A light slice of the parked APP-INT-WIZARD idea.)</li>
+        <li><b>Step 05 · Parameters — primary shown, advanced rolled up.</b> The five the operator actually tweaks per run stay in the always-visible grid — <b>Threshold · Min consumption events · Min months · Max months · Stock history window (months)</b>. The remaining 14 move into a collapsed <b>"Advanced parameters"</b> roll-up, sub-grouped (Analysis windows · Consumption pattern · Batched Min · Working-redundant · Inventory-adjustment). The toggle shows the setting count + an "N overridden" badge so nothing hidden is changed unseen; editing keeps it open (state flag). Refactored to a shared <code>buildCell()</code>; all 19 params still render, all inputs wired via <code>#step5 [data-pkey]</code>. Files: <code>intake/intake.{html,js,css}</code>.</li>
+        <li><b>Step 02 · Schema mapping — collapsible per-file tiles.</b> Each source file's mapping is now a collapsible tile whose header shows <b>"X/Y mapped · N unmapped"</b>; fully-mapped files start <b>collapsed</b> (short by default) and any file with unmapped columns <b>auto-expands</b> (a broken mapping is never hidden). Click the header tile to toggle; chevron rotates. Files: <code>intake/intake.{js,css}</code>.</li>
+        <li><b>Verified.</b> Params: in-browser (renders from defaults, no upload needed) — primary grid = the 5 named fields; advanced roll-up = 14 settings across 5 sub-groups, collapsed by default, toggle opens; zero console errors. Mapping: <code>renderSchema()</code> runs clean on load and the code is a straightforward collapsible add, but the live per-file collapse needs an <b>operator upload</b> to eyeball (headless file-upload isn't available in the preview).</li>
+        <li><b>Rollback.</b> Local snapshot <code>_rollback/APP-INT-UITIDY-pre/intake/</code>. No SCHEMA_VERSION change; presentation only — no parser / DQ-gate / scope logic touched.</li>
+      </ul>
+    </article>
+
     <!-- v2.1.5-dev - APP-USERLIST-SHOWALL: "Show all list materials" override on Trend - 2026-08-20 -->
     <article class="roc-entry dev">
       <div class="head">

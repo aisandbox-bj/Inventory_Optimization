@@ -294,6 +294,15 @@
 }
 .schema-group-head .count.ok{ color:var(--status-ok); }
 .schema-group-head .count.warn{ color:var(--status-warn); }
+/* APP-INT-UITIDY — collapsible per-file mapping tiles */
+.schema-group-head{ cursor:pointer; }
+.schema-group-head:hover{ background:rgba(31,206,216,0.09); }
+.schema-group-head .chev{
+  font-size:11px; color:var(--text-muted); flex-shrink:0;
+  transition:transform .15s ease; transform:rotate(0deg);
+}
+.schema-group:not(.collapsed) .schema-group-head .chev{ transform:rotate(90deg); color:var(--accent); }
+.schema-group.collapsed .schema-row{ display:none; }
 
 .schema-row{
   display:grid;
@@ -520,6 +529,28 @@
 }
 .param-cell.dirty{ border-color:var(--status-warn); }
 .param-cell.dirty label::after{ content:" · OVERRIDDEN"; color:var(--status-warn); }
+/* APP-INT-UITIDY — "Advanced parameters" roll-up (secondary, grouped, collapsed) */
+.params-advanced{ margin-top:14px; }
+.params-adv-toggle{
+  display:flex; align-items:center; gap:9px; width:100%;
+  padding:10px 14px; cursor:pointer;
+  background:var(--bg-panel-2); border:1px solid var(--border-soft); border-radius:var(--r-sm);
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.6px; text-transform:uppercase;
+  color:var(--text-sec); text-align:left;
+}
+.params-adv-toggle:hover{ border-color:var(--accent); color:var(--text-pri); }
+.params-adv-toggle .chev{ font-size:11px; color:var(--text-muted); transition:transform .15s ease; }
+.params-adv-toggle.open .chev{ transform:rotate(90deg); color:var(--accent); }
+.params-adv-toggle .adv-meta{ margin-left:auto; font-size:10px; letter-spacing:1px; color:var(--text-muted); text-transform:none; }
+.params-adv-toggle .adv-meta b{ color:var(--status-warn); }
+.params-adv-body{ margin-top:12px; }
+.params-adv-body.collapsed{ display:none; }
+.params-adv-group{ margin-bottom:16px; }
+.params-adv-group:last-child{ margin-bottom:0; }
+.params-adv-label{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--accent); margin:2px 0 8px;
+}
 
 .params-actions{
   display:flex; gap:10px; align-items:center;
