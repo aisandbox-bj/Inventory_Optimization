@@ -748,7 +748,9 @@
      its placed rectangle.
   ═════════════════════════════════════════════════════════════════════════ */
 
-  const CARD_W = 640;   // logical render width of a card (px); AR derived from content
+  const CARD_W = 980;   // logical render width of a card (px) — matches the on-screen
+                        // detail width so the stat grid / MRP table don't squeeze and
+                        // truncate to "…". AR is derived from the rendered content.
 
   function cardTheme(theme){
     return theme === 'dark'
@@ -815,7 +817,9 @@
     const el = document.createElement('div');
     el.style.cssText = `width:${CARD_W}px;box-sizing:border-box;background:#0c2d3b;border:1px solid rgba(31,206,216,.28);border-radius:8px;padding:6px`;
     if (id === 'trend' && typeof MaterialDetail !== 'undefined'){
-      MaterialDetail.render(el, ctx.m, { bucket: ctx.bucket, parameters: ctx.json.parameters, enableLlm:false, chartWidth: 900, chartHeight: 300 });
+      // Use the on-screen default chart size (936×320) so the whole detail renders
+      // exactly as on screen — no squeeze, no truncated stat cells.
+      MaterialDetail.render(el, ctx.m, { bucket: ctx.bucket, parameters: ctx.json.parameters, enableLlm:false });
       // Operator ask (2026-09-25): chart + short stat table only. Drop the "More
       // stats" toggle + secondary grid and the Current-vs-Recommended MRP table
       // (the recommendation already reads in the header).
@@ -888,8 +892,8 @@
         const stats=years.map(y=>{const cs=byYear.get(y);const mn=PK.map(ph=>{const s=TracePhase.boxStats(cs.map(c=>c[ph]));return s?s.mean:0;});return {y,n:cs.length,mn,toSite:mn[0]+mn[1]+mn[2]+mn[3]};});
         const mx=Math.max(1,...stats.map(s=>s.toSite));
         inner += stats.map(s=>{
-          const segs=s.mn.slice(0,4).map((v,i)=>v>0?`<div style="width:${(v/s.toSite*100)*(s.toSite/mx)}%;background:${CO[i]};min-width:${v>0?'3px':'0'}"></div>`:'').join('');
-          return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="width:52px;font-size:11px;color:${TH.text}"><b>${s.y}</b> <span style="color:${TH.sub}">n=${s.n}</span></div><div style="flex:1;display:flex;height:16px;border-radius:3px;overflow:hidden;background:${TH.alt}">${segs}</div><div style="width:56px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:${TH.accent}"><b>${s.toSite.toFixed(1)}d</b></div></div>`;
+          const segs=s.mn.slice(0,4).map((v,i)=>v>0?`<div style="width:${(v/s.toSite*100)*(s.toSite/mx)}%;background:${CO[i]};min-width:3px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;color:#0f1620;overflow:hidden;white-space:nowrap">${v.toFixed(1)}d</div>`:'').join('');
+          return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="width:52px;font-size:11px;color:${TH.text}"><b>${s.y}</b> <span style="color:${TH.sub}">n=${s.n}</span></div><div style="flex:1;display:flex;height:20px;border-radius:3px;overflow:hidden;background:${TH.alt}">${segs}</div><div style="width:56px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:${TH.accent}"><b>${s.toSite.toFixed(1)}d</b></div></div>`;
         }).join('');
       }
     }
@@ -910,7 +914,8 @@
     }
     else if (id === 'comment'){
       const txt=(opts&&opts.comment||'').trim();
-      inner = sectionTitle(TH,'Comments') + `<div style="border-left:3px solid ${TH.accent};padding:6px 10px;background:${TH.alt};font-size:13px;color:${TH.text};white-space:pre-wrap;min-height:40px">${esc(txt)||'<span style="color:'+TH.sub+'">(empty)</span>'}</div>`;
+      el.style.display='flex'; el.style.flexDirection='column';   // fill the (freely-resized) box
+      inner = sectionTitle(TH,'Comments') + `<div style="flex:1;border-left:3px solid ${TH.accent};padding:8px 12px;background:${TH.alt};font-size:14px;color:${TH.text};white-space:pre-wrap;min-height:40px;overflow:hidden">${esc(txt)||'<span style="color:'+TH.sub+'">(empty)</span>'}</div>`;
     }
     el.innerHTML = inner;
     return el;
@@ -937,8 +942,9 @@
     cards.forEach(c => {
       const col = colY.indexOf(Math.min(...colY));
       c.w = colW; c.x = gap + col*(colW+gap); c.y = colY[col];
-      const h = c.w * 1.7778 * c.ar;   // height as fraction of stage height (16:9)
-      colY[col] += h + gap;
+      c.freeAspect = (c.id === 'comment');   // the comment box resizes freely (flexible aspect)
+      c.h = c.w * 1.7778 * c.ar;             // height fraction of the 16:9 stage (used when freeAspect)
+      colY[col] += c.h + gap;
     });
 
     const modal = ov.querySelector('.rb-modal');
@@ -964,10 +970,17 @@
 
     function place(c){
       c.box.style.left = (c.x*100)+'%'; c.box.style.top = (c.y*100)+'%'; c.box.style.width = (c.w*100)+'%';
-      // height follows fixed aspect ratio
-      const wpx = c.w * stage.clientWidth; c.box.style.height = (wpx * c.ar) + 'px';
-      // scale the card DOM to the box width
-      const s = wpx / CARD_W; c.el.style.transform = `scale(${s})`;
+      const wpx = c.w * stage.clientWidth;
+      if (c.freeAspect){
+        // free width + height — the card fills the box (used for the comment box)
+        const hpx = (c.h || c.w*1.7778*c.ar) * stage.clientHeight;
+        c.box.style.height = hpx + 'px';
+        c.el.style.transform = 'none'; c.el.style.width = wpx + 'px'; c.el.style.height = hpx + 'px';
+      } else {
+        // height follows the card's fixed aspect ratio; card scaled to the box width
+        c.box.style.height = (wpx * c.ar) + 'px';
+        c.el.style.transform = `scale(${wpx / CARD_W})`;
+      }
     }
     function makeBox(c){
       const box = document.createElement('div'); box.className='rb-cardbox'; c.box = box;
@@ -987,11 +1000,15 @@
         const up = () => { box.classList.remove('drag'); box.releasePointerCapture(e.pointerId); box.removeEventListener('pointermove',mv); box.removeEventListener('pointerup',up); };
         box.addEventListener('pointermove',mv); box.addEventListener('pointerup',up);
       });
-      // resize (width only; height follows AR)
+      // resize — width follows aspect (height derived); comment box resizes freely
       grip.addEventListener('pointerdown', (e) => {
         e.preventDefault(); e.stopPropagation(); grip.setPointerCapture(e.pointerId);
-        const r = stage.getBoundingClientRect(); const sx=e.clientX, ow=c.w;
-        const mv = (ev) => { c.w = Math.max(0.12, Math.min(1-c.x, ow + (ev.clientX-sx)/r.width)); place(c); };
+        const r = stage.getBoundingClientRect(); const sx=e.clientX, sy=e.clientY, ow=c.w, oh=(c.h||c.w*1.7778*c.ar);
+        const mv = (ev) => {
+          c.w = Math.max(0.12, Math.min(1-c.x, ow + (ev.clientX-sx)/r.width));
+          if (c.freeAspect) c.h = Math.max(0.06, oh + (ev.clientY-sy)/r.height);
+          place(c);
+        };
         const up = () => { grip.releasePointerCapture(e.pointerId); grip.removeEventListener('pointermove',mv); grip.removeEventListener('pointerup',up); };
         grip.addEventListener('pointermove',mv); grip.addEventListener('pointerup',up);
       });
@@ -1002,7 +1019,7 @@
 
     pane.querySelector('.rb-w-back').addEventListener('click', () => { ro.disconnect(); stage_host.remove(); pane.remove(); modal.classList.remove('rb-has-preview'); modal.style.width=''; modal.style.height=''; });
     pane.querySelector('.rb-w-reset').addEventListener('click', () => {
-      const colY2=new Array(cols).fill(gap); cards.forEach(c=>{const col=colY2.indexOf(Math.min(...colY2)); c.w=colW; c.x=gap+col*(colW+gap); c.y=colY2[col]; place(c); colY2[col]+=c.w*1.7778*c.ar+gap;});
+      const colY2=new Array(cols).fill(gap); cards.forEach(c=>{const col=colY2.indexOf(Math.min(...colY2)); c.w=colW; c.x=gap+col*(colW+gap); c.y=colY2[col]; c.h=c.w*1.7778*c.ar; place(c); colY2[col]+=c.h+gap;});
     });
     pane.querySelector('.rb-w-render').addEventListener('click', async (ev) => {
       const btn = ev.currentTarget; const orig = btn.textContent; btn.disabled=true; btn.textContent='Rendering…';
@@ -1025,7 +1042,8 @@
       const imgs = [...el.querySelectorAll('img')];
       await Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r => { im.onload = im.onerror = r; })));
       const ar = el.offsetHeight / el.offsetWidth || 1;
-      const c = { id: blockId, opts, el, ar, w: 0.3, x: 0.03, y: 0.03 };
+      const c = { id: blockId, opts, el, ar, w: 0.3, x: 0.03, y: 0.03, freeAspect: blockId === 'comment' };
+      c.h = c.w * 1.7778 * c.ar;
       cards.push(c); makeBox(c);
     }
     pane.querySelector('.rb-w-add').addEventListener('click', (e) => {
@@ -1111,14 +1129,16 @@
         if (theme==='dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
         const ectx = ctxForEntry(base, entries[pi]);
         for (const c of cards){
+          // box (mm) from the arranged template
+          const bx=c.x*g.W, by=c.y*g.H, bw=c.w*g.W;
+          const bh = c.freeAspect ? (c.h || c.w*1.7778*c.ar)*g.H : bw*c.ar;
+          if (c.id === 'comment'){ drawCommentBox(doc, bx, by, bw, bh, (c.opts && c.opts.comment) || '', theme); continue; }
           const el = await buildCardDom(c.id, ectx, c.opts||{}, theme);
           host.appendChild(el);
           const imgs=[...el.querySelectorAll('img')];
           await Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r=>{im.onload=im.onerror=r;})));
           const cardH = el.offsetHeight || CARD_W;
-          // box (mm) from the arranged template; contain-scale this material's card
-          const bx=c.x*g.W, by=c.y*g.H, bw=c.w*g.W, bh=bw*c.ar;
-          let sc = bw/CARD_W; if (cardH*sc > bh) sc = bh/cardH;
+          let sc = bw/CARD_W; if (cardH*sc > bh) sc = bh/cardH;   // contain-scale into the box
           const iw = CARD_W*sc, ih = cardH*sc;
           const canvas = await global.html2canvas(el, { scale:2, backgroundColor: theme==='dark'?'#0c2d3b':'#ffffff', logging:false });
           doc.addImage(canvas.toDataURL('image/jpeg',0.86), 'JPEG', bx, by, iw, ih);
@@ -1130,6 +1150,19 @@
     } finally { host.remove(); }
   }
 
+  // Native-text comment box for the PDF (fills its freely-sized rectangle, crisp text).
+  function drawCommentBox(doc, x, y, w, h, text, theme){
+    const dark = theme === 'dark';
+    doc.setFillColor(dark ? 12 : 246, dark ? 45 : 249, dark ? 59 : 250); doc.rect(x, y, w, h, 'F');
+    doc.setDrawColor(dark ? 60 : 210, dark ? 90 : 216, dark ? 100 : 220); doc.setLineWidth(0.2); doc.rect(x, y, w, h);
+    doc.setFillColor(31, 206, 216); doc.rect(x, y, 1.6, h, 'F');
+    doc.setTextColor(dark ? 223 : 12, dark ? 243 : 45, dark ? 245 : 59); doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
+    doc.text('Comments', x + 4.5, y + 6.5);
+    doc.setTextColor(dark ? 220 : 40, dark ? 231 : 48, dark ? 233 : 58); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    const lines = doc.splitTextToSize(pdfSafe(text || ''), w - 9);
+    let ty = y + 13; for (const l of lines){ if (ty > y + h - 3) break; doc.text(l, x + 4.5, ty); ty += 4.6; }
+  }
+
   async function renderWidePdf(ctx, cards, theme){
     await ensureLibs();
     const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
@@ -1138,13 +1171,15 @@
     // page background for dark theme
     if (theme === 'dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
     for (const c of cards){
+      const x = c.x*g.W, y = c.y*g.H, w = c.w*g.W;
+      const h = c.freeAspect ? (c.h || c.w*1.7778*c.ar)*g.H : w * c.ar;
+      if (c.id === 'comment'){ drawCommentBox(doc, x, y, w, h, (c.opts && c.opts.comment) || '', theme); continue; }
       const prevT = c.el.style.transform; c.el.style.transform = 'none';   // capture at natural resolution
       let img;
       try {
         const canvas = await global.html2canvas(c.el, { scale: 2, backgroundColor: theme==='dark' ? '#0c2d3b' : '#ffffff', logging:false });
         img = canvas.toDataURL('image/jpeg', 0.88);
       } finally { c.el.style.transform = prevT; }
-      const x = c.x*g.W, y = c.y*g.H, w = c.w*g.W, h = w * c.ar;
       doc.addImage(img, 'JPEG', x, y, w, h);
     }
     const safe = (ctx.assessmentName||'assessment').replace(/[^A-Za-z0-9_-]+/g,'_');
