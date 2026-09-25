@@ -787,7 +787,8 @@
       modal.style.width = 'min(1100px,100%)'; modal.style.height = 'min(90vh,960px)';
       modal.appendChild(pv);
       if (regen) attachCommentEditor(pv, ctx, regen);
-      pv.querySelector('.rb-pv-back').addEventListener('click', () => { pv.remove(); modal.classList.remove('rb-has-preview'); modal.style.width=''; modal.style.height=''; try { URL.revokeObjectURL(res.url); } catch(e){} });
+      makePreviewInteractive(modal, pv);
+      pv.querySelector('.rb-pv-back').addEventListener('click', () => { pv.remove(); modal.classList.remove('rb-has-preview'); modal.style.width=''; modal.style.height=''; modal.style.transform=''; try { URL.revokeObjectURL(res.url); } catch(e){} });
       pv.querySelector('.rb-pv-print').addEventListener('click', () => { try { pv.querySelector('.rb-pv-frame').contentWindow.print(); } catch(e){ window.open(res.url, '_blank'); } });
     }
 
@@ -1293,6 +1294,61 @@
     });
   }
 
+  // Make the inline preview a movable/resizable "workbench": drag the top bar to
+  // move it, drag the corner grip to resize (bigger = zoom in on the report), and
+  // a ⤢ Maximize toggle for a quick full-screen look. Applied to both Letter and
+  // Widescreen previews.
+  function makePreviewInteractive(modal, pv){
+    const bar = pv.querySelector('.rb-pv-bar');
+    let tx = 0, ty = 0;
+    const applyT = () => { modal.style.transform = (tx || ty) ? `translate(${tx}px,${ty}px)` : ''; };
+    // Move — drag the bar (but not its buttons/links)
+    if (bar){
+      bar.classList.add('rb-pv-bar-move');
+      bar.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('button,a')) return;
+        e.preventDefault();
+        const sx = e.clientX, sy = e.clientY, ox = tx, oy = ty;
+        try { bar.setPointerCapture(e.pointerId); } catch (_) {}
+        const mv = (ev) => { tx = ox + (ev.clientX - sx); ty = oy + (ev.clientY - sy); applyT(); };
+        const up = () => { try { bar.releasePointerCapture(e.pointerId); } catch (_) {} bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); };
+        bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
+      });
+    }
+    // Resize — bottom-right grip
+    const grip = document.createElement('div'); grip.className = 'rb-pv-resize'; grip.title = 'Drag to resize';
+    modal.appendChild(grip);
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { grip.setPointerCapture(e.pointerId); } catch (_) {}
+      const r = modal.getBoundingClientRect(); const sx = e.clientX, sy = e.clientY, ow = r.width, oh = r.height;
+      const mv = (ev) => {
+        modal.style.width  = Math.max(480, Math.min(window.innerWidth  * 0.98, ow + (ev.clientX - sx))) + 'px';
+        modal.style.height = Math.max(360, Math.min(window.innerHeight * 0.96, oh + (ev.clientY - sy))) + 'px';
+      };
+      const up = () => { try { grip.releasePointerCapture(e.pointerId); } catch (_) {} grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); };
+      grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up);
+    });
+    // Maximize / restore
+    const actions = pv.querySelector('.rb-pv-actions');
+    if (actions){
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'rb-btn ghost rb-pv-max';
+      btn.textContent = '⤢ Maximize';
+      let maxed = false, saved = {};
+      btn.addEventListener('click', () => {
+        if (!maxed){
+          saved = { w: modal.style.width, h: modal.style.height };
+          modal.style.width = '98vw'; modal.style.height = '96vh'; tx = 0; ty = 0; applyT();
+          btn.textContent = '⤡ Restore'; maxed = true;
+        } else {
+          modal.style.width = saved.w || ''; modal.style.height = saved.h || ''; tx = 0; ty = 0; applyT();
+          btn.textContent = '⤢ Maximize'; maxed = false;
+        }
+      });
+      actions.insertBefore(btn, actions.firstChild);
+    }
+  }
+
   async function renderWidePdf(ctx, cards, theme){
     await ensureLibs();
     const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
@@ -1324,7 +1380,8 @@
     pv.innerHTML = `<div class="rb-pv-bar"><span class="rb-pv-meta">Widescreen · ${res.pages} page${res.pages===1?'':'s'}</span><span class="rb-pv-actions"><button class="rb-btn ghost rb-pv-back">‹ Back to layout</button><button class="rb-btn ghost rb-pv-print">🖨 Print</button><a class="rb-btn primary rb-pv-dl" download="${esc(res.filename)}" href="${res.url}">⤓ Download PDF</a></span></div><iframe class="rb-pv-frame" title="Report preview" src="${res.url}"></iframe>`;
     modal.appendChild(pv);
     if (ctx && regen) attachCommentEditor(pv, ctx, regen);
-    pv.querySelector('.rb-pv-back').addEventListener('click', ()=>{ pv.remove(); try{URL.revokeObjectURL(res.url);}catch(e){} });
+    makePreviewInteractive(modal, pv);
+    pv.querySelector('.rb-pv-back').addEventListener('click', ()=>{ pv.remove(); modal.style.transform=''; try{URL.revokeObjectURL(res.url);}catch(e){} });
     pv.querySelector('.rb-pv-print').addEventListener('click', ()=>{ try { pv.querySelector('.rb-pv-frame').contentWindow.print(); } catch(e){ window.open(res.url, '_blank'); } });
   }
 
