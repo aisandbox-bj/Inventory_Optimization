@@ -112,13 +112,23 @@
     }
     if (!(complete + inflight + cancelled)) return { empty:true, reason:'no dated requisitions' };
 
-    // continuous slots — always end today, span ≥ 3 months
+    // continuous slots. If the caller passes an explicit span (opts.spanStart /
+    // spanEnd) — e.g. the Trend consumption chart's date range, so the two line up
+    // for assessing system behaviour — use exactly that; otherwise fall back to
+    // "first PR .. today, ≥ 3 months".
     const used = [...agg.keys()].sort((a,b)=>a-b);
-    const todayIso  = (typeof AppLocale !== 'undefined' && AppLocale.localDateISO) ? AppLocale.localDateISO() : mfIso(Date.now());
-    const todaySlot = mfSlotStart(todayIso, period);
-    const minStart  = mfSlotStart(isoMonthsAgo(todayIso, 3), period);
-    const spanStart = Math.min(used[0], minStart != null ? minStart : used[0]);
-    const spanEnd   = Math.max(used[used.length-1], todaySlot != null ? todaySlot : used[used.length-1]);
+    const optS = opts.spanStart ? mfSlotStart(opts.spanStart, period) : null;
+    const optE = opts.spanEnd   ? mfSlotStart(opts.spanEnd,   period) : null;
+    let spanStart, spanEnd;
+    if (optS != null && optE != null){
+      spanStart = Math.min(optS, optE); spanEnd = Math.max(optS, optE);
+    } else {
+      const todayIso  = (typeof AppLocale !== 'undefined' && AppLocale.localDateISO) ? AppLocale.localDateISO() : mfIso(Date.now());
+      const todaySlot = mfSlotStart(todayIso, period);
+      const minStart  = mfSlotStart(isoMonthsAgo(todayIso, 3), period);
+      spanStart = Math.min(used[0], minStart != null ? minStart : used[0]);
+      spanEnd   = Math.max(used[used.length-1], todaySlot != null ? todaySlot : used[used.length-1]);
+    }
     const slots = []; let cur = spanStart, guard = 0;
     while (cur <= spanEnd && guard++ < 8000){ slots.push(cur); cur = mfNextSlot(cur, period); }
     const emptySlots = slots.filter(ms => !agg.has(ms)).length;

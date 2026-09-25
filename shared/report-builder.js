@@ -276,8 +276,19 @@
     if (typeof MrpCadence === 'undefined' || !MrpCadence.renderImages) return { empty:true, reason:'cadence renderer unavailable' };
     const key = (ctx.assessmentName || '') + '|' + String(ctx.m && ctx.m.material);
     if (_cadCache.has(key)) return _cadCache.get(key);
+    // Weekly is the standard, and the axis matches the Trend consumption chart's
+    // date range [min(p1Start, first movement) .. max(p2End, last movement)] so the
+    // cadence and the consumption line line up for assessing system behaviour.
+    const m = ctx.m || {};
+    const cum = m.cumulative || [];
+    const firstCum = cum.length ? cum[0].date : null;
+    const lastCum  = cum.length ? cum[cum.length - 1].date : null;
+    const minIso = (a,b) => !a ? b : !b ? a : (a < b ? a : b);
+    const maxIso = (a,b) => !a ? b : !b ? a : (a > b ? a : b);
+    const spanStart = minIso(m.p1Start, firstCum);
+    const spanEnd   = maxIso(m.p2End,   lastCum);
     let res;
-    try { res = await MrpCadence.renderImages(ctx.json, ctx.m.material, mRecFor(ctx), { period:'month', width:900, cadenceH:300, replenH:230 }); }
+    try { res = await MrpCadence.renderImages(ctx.json, ctx.m.material, mRecFor(ctx), { period:'week', width:900, cadenceH:300, replenH:230, spanStart, spanEnd }); }
     catch (e){ res = { empty:true, reason:(e && e.message) || 'render error' }; }
     _cadCache.set(key, res);
     return res;
