@@ -102,7 +102,7 @@
     { id:'yoy',     label:'Trace — annual progression (YoY)',       needs:'pr', on:false },
     { id:'rawpr',   label:'Trace — last X PRs (raw data)',          needs:'pr', on:false, opt:'lastN', lastN:8 },
     { id:'chains',  label:'Trace — last X procurement chains',      needs:'pr', on:false, opt:'lastN', lastN:5 },
-    { id:'cadence', label:'Trace — MRP run cadence (both graphs)',  needs:'pr', on:false, soon:true },
+    { id:'cadence', label:'Trace — MRP run cadence (both graphs)',  needs:'pr', on:false },
     { id:'comment', label:'Comment',                                needs:null, on:false, opt:'comment' }
   ];
 
@@ -262,6 +262,25 @@
     const act = TracePhase.activeChains(chains, ctx.traceFilters || {});
     const drawn = act.filter(c => !!c.siteWH);
     return { chains, act, drawn };
+  }
+
+  // APP-SCR-REPORT-CADENCE — MRP-run cadence images (both graphs), via the shared
+  // static renderer. Current-SAP Min/Max/SS off the pipeline material. Cached per
+  // assessment+material so Letter + widescreen don't re-render the same charts.
+  function mRecFor(ctx){
+    const m = ctx.m || {};
+    return { soh: m.stock, mrpInd: m.mrpType, safetyStock: m.safetyStock, mrpMin: m.cmin, mrpMax: m.cmax };
+  }
+  const _cadCache = new Map();
+  async function cadenceImages(ctx){
+    if (typeof MrpCadence === 'undefined' || !MrpCadence.renderImages) return { empty:true, reason:'cadence renderer unavailable' };
+    const key = (ctx.assessmentName || '') + '|' + String(ctx.m && ctx.m.material);
+    if (_cadCache.has(key)) return _cadCache.get(key);
+    let res;
+    try { res = await MrpCadence.renderImages(ctx.json, ctx.m.material, mRecFor(ctx), { period:'month', width:900, cadenceH:300, replenH:230 }); }
+    catch (e){ res = { empty:true, reason:(e && e.message) || 'render error' }; }
+    _cadCache.set(key, res);
+    return res;
   }
 
   async function blockAvgDur(P, host, opts, fit){
@@ -450,6 +469,25 @@
     P.y = doc.lastAutoTable.finalY + 5;
   }
 
+  async function blockCadence(P, host, opts, fit){
+    const { doc, g, ctx } = P; const M = g.M; const CW = g.W - 2*M;
+    P.sectionLabel('MRP-run cadence', 70);
+    if (!ctx.hasPr){ noPrNote(P, 'the MRP-run cadence'); return; }
+    const res = await cadenceImages(ctx);
+    if (!res || res.empty){ thinNote(P, 'MRP-run cadence — ' + ((res && res.reason) || 'nothing to show') + '.'); return; }
+    const scale = (fit && fit.imgScale) ? fit.imgScale : 1;
+    // cadence bars
+    doc.setTextColor(95,95,105); doc.setFont('helvetica','normal'); doc.setFontSize(7); P.ensure(4);
+    doc.text(pdfSafe(`Requisitions raised per ${res.meta.period} — PR → PO vs Cancelled · ${res.meta.chains} chains · ${res.meta.cancelled} cancelled · ${res.meta.manualCt} manual`), M, P.y); P.y += 2.5;
+    if (res.cadence){ const h = CW * (res.cadenceAR || 0.333) * scale; P.ensure(h + 2); doc.addImage(res.cadence, 'PNG', M, P.y, CW, h); P.y += h + 4; }
+    // replenishment
+    if (res.replen){
+      doc.setTextColor(95,95,105); doc.setFontSize(7); P.ensure(4);
+      doc.text('Replenishment — stock + incoming PO qty vs Min/Max', M, P.y); P.y += 2.5;
+      const rH = CW * (res.replenAR || 0.255) * scale; P.ensure(rH + 2); doc.addImage(res.replen, 'PNG', M, P.y, CW, rH); P.y += rH + 4;
+    }
+  }
+
   function blockComment(P, host, opts){
     const { doc, g } = P; const M = g.M; const CW = g.W - 2*M;
     const txt = (opts && opts.comment || '').trim();
@@ -479,7 +517,7 @@
     P.y += 2;
   }
 
-  const RENDERERS = { trend:blockTrend, avgDur:blockAvgDur, yoy:blockYoY, rawpr:blockRawPr, chains:blockChains, comment:blockComment };
+  const RENDERERS = { trend:blockTrend, avgDur:blockAvgDur, yoy:blockYoY, rawpr:blockRawPr, chains:blockChains, cadence:blockCadence, comment:blockComment };
 
   // very rough per-block height estimate (mm) for the overflow warning
   function estimate(id, opts, ctx, g){
@@ -490,6 +528,7 @@
       case 'yoy':    { const { drawn } = safeDrawn(ctx); const yrs = new Set((drawn||[]).map(c=>(c.prDate||'').slice(0,4))).size || 1; return 16 + 6 + yrs*17 + 6; }
       case 'rawpr':  { const n = Math.min((opts&&opts.lastN)||8, (safeDrawn(ctx).act||[]).length); return 16 + 8 + n*5.5; }
       case 'chains': { const n = Math.min((opts&&opts.lastN)||5, (safeDrawn(ctx).drawn||[]).length); return 16 + 8 + n*7; }
+      case 'cadence': return 16 + CW*(0.333+0.255) + 14;
       case 'comment':{ const t=(opts&&opts.comment||''); return t.trim()? 16 + Math.max(10, Math.ceil(t.length/90)*4.4+5) : 0; }
       default: return 0;
     }
@@ -909,6 +948,19 @@
         } else {
           const rows=(dc.drawn||[]).slice(0,N).map(c=>[c.pr||'—',c.po||'—',c.prDate||'—',c.siteWH||'—',c.A!=null?c.A+'d':'—',c.B!=null?c.B+'d':'—',c.C!=null?c.C+'d':'—',c.D!=null?c.D+'d':'—',c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'—',c.qty!=null?String(c.qty):'—']);
           inner += rows.length?htmlTable(TH,['PR','PO','PR date','Site WH','A','B','C','D','To site','Qty'],rows,{center:[4,5,6,7,8,9]}):`<div style="color:${TH.sub};font-size:12px">No chains.</div>`;
+        }
+      }
+    }
+    else if (id === 'cadence'){
+      inner = sectionTitle(TH,'MRP-run cadence');
+      if (!ctx.hasPr){ inner += `<div style="color:${TH.sub};font-size:12px">Needs PR History.</div>`; }
+      else {
+        const res = await cadenceImages(ctx);
+        if (!res || res.empty){ inner += `<div style="color:${TH.sub};font-size:12px">${esc((res && res.reason) || 'Nothing to show.')}</div>`; }
+        else {
+          inner += `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${TH.sub};margin-bottom:4px">Per ${res.meta.period} · ${res.meta.chains} chains · ${res.meta.cancelled} cancelled · ${res.meta.manualCt} manual</div>`;
+          if (res.cadence) inner += `<img src="${res.cadence}" style="width:100%;display:block;border:1px solid ${TH.border};border-radius:4px;margin-bottom:6px"/>`;
+          if (res.replen)  inner += `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${TH.sub};margin:2px 0 4px">Replenishment — stock + PO qty vs Min/Max</div><img src="${res.replen}" style="width:100%;display:block;border:1px solid ${TH.border};border-radius:4px"/>`;
         }
       }
     }
