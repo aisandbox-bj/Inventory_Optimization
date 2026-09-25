@@ -210,6 +210,56 @@
     $('#btnExport').addEventListener('click', buildExportPdf);
     const rb = $('#btnBuildReport');
     if (rb) rb.addEventListener('click', openReportBuilder);
+    const cb = $('#btnComments');
+    if (cb) cb.addEventListener('click', openCommentsMenu);
+    const ci = $('#commentsImport');
+    if (ci) ci.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f || typeof CommentStore === 'undefined') return;
+      CommentStore.importFile(f, (res) => {
+        if (res.ok) toast(`Comments restored — ${res.added} added, ${res.updated} updated.`, 'ok');
+        else toast('Import failed: ' + (res.reason || 'unknown'), 'crit');
+        updateCommentsButton();
+      });
+      e.target.value = '';   // allow re-importing the same file
+    });
+    // Refresh the count when a comment is written from anywhere (e.g. the report editor).
+    document.addEventListener('calibre:comments-changed', updateCommentsButton);
+    updateCommentsButton();
+  }
+
+  // APP-COMMENT-DURABLE — comments are kept per material in this browser (survive
+  // deleting the JSON). This backup menu exports/imports them as a small file so
+  // they also survive a browser-data clear or a move to another machine.
+  function updateCommentsButton(){
+    const btn = $('#btnComments'); if (!btn || typeof CommentStore === 'undefined') return;
+    const n = CommentStore.count();
+    btn.textContent = n ? `💬 Comments (${n})` : '💬 Comments';
+  }
+  function openCommentsMenu(e){
+    document.querySelector('.scr-cmt-menu')?.remove();
+    if (typeof CommentStore === 'undefined'){ toast('Comment store unavailable.', 'crit'); return; }
+    const n = CommentStore.count();
+    const menu = document.createElement('div');
+    menu.className = 'scr-cmt-menu';
+    menu.innerHTML =
+      `<div class="scr-cmt-count">${n} material${n===1?'':'s'} with a saved comment</div>` +
+      `<button class="scr-cmt-item" data-act="export"${n?'':' disabled'}>⤓ Export backup file…</button>` +
+      `<button class="scr-cmt-item" data-act="import">⤒ Import from file…</button>`;
+    const r = e.currentTarget.getBoundingClientRect();
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    document.body.appendChild(menu);
+    const close = () => { menu.remove(); document.removeEventListener('click', off, true); };
+    const off = (ev) => { if (!menu.contains(ev.target) && ev.target !== e.currentTarget) close(); };
+    setTimeout(() => document.addEventListener('click', off, true), 0);
+    menu.querySelector('[data-act="export"]').addEventListener('click', () => {
+      const c = CommentStore.download();
+      if (c >= 0) toast(`Exported ${c} comment${c===1?'':'s'} to calibre-comments.json.`, 'ok');
+      else toast('Export failed.', 'crit');
+      close();
+    });
+    menu.querySelector('[data-act="import"]').addEventListener('click', () => { $('#commentsImport').click(); close(); });
   }
 
   // APP-SCR-REPORT — enable the "Build report" button only when a material is

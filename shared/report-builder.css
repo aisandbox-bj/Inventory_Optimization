@@ -96,6 +96,19 @@
 a.rb-pv-dl{ text-decoration:none; }
 .rb-pv-frame{ flex:1; width:100%; border:none; background:#5c6b70; border-radius:0 0 12px 12px; }
 
+/* Docked live-comment editor (single-material preview) — write the comment while
+   viewing the report; it saves to the material's note and reloads next time. */
+.rb-cmt-editor{ display:flex; align-items:flex-start; gap:10px; padding:9px 18px;
+  background:#0a2432; border-top:1px solid rgba(31,206,216,.16); border-bottom:1px solid rgba(31,206,216,.16); }
+.rb-cmt-lab{ display:flex; flex-direction:column; gap:2px; font-family:'JetBrains Mono',monospace;
+  font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:#1FCED8; padding-top:6px; white-space:nowrap; }
+.rb-cmt-carry{ font-size:9px; letter-spacing:.3px; text-transform:none; color:#8aa6ac; font-style:italic; }
+.rb-cmt-ta{ flex:1; resize:vertical; min-height:38px; font-family:'Barlow',sans-serif; font-size:13px;
+  line-height:1.4; color:#eef4f5; background:#081722; border:1px solid rgba(155,176,182,.28);
+  border-radius:6px; padding:7px 10px; }
+.rb-cmt-ta:focus{ outline:none; border-color:#1FCED8; box-shadow:0 0 0 2px rgba(31,206,216,.18); }
+.rb-cmt-upd{ white-space:nowrap; align-self:flex-start; }
+
 /* Widescreen drag-and-drop layout canvas */
 .rb-wide{ position:absolute; inset:0; background:#0c2d3b; border-radius:12px; display:flex; flex-direction:column; z-index:5; }
 .rb-stage-wrap{ flex:1; display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; background:#081722; }

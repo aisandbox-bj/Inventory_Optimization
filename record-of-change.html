@@ -381,6 +381,22 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Durable report comments + live comment editor - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>Report comments you can write in the preview and never lose</b> (APP-RB-LIVECMT + APP-COMMENT-DURABLE) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Write the comment while you look at the report.</b> The inline report preview (US Letter and Widescreen, single material) now has a docked <b>✎ Comment</b> box right above the page — type your note while you read the report, it saves as you type, and <b>↻ Update</b> re-renders the preview with it. No more flipping back to a picker.</li>
+        <li><b>Comments are kept against the material and survive deleting the JSON.</b> Every comment is saved two ways: (1) as that material's <b>analyst note</b> for the current assessment (so it still shows in the Trend notes drawer and travels inside a downloaded JSON, exactly as before), and (2) in a new <b>durable per-material store</b> that is completely separate from the uploaded data. So you can delete the JSON, upload a fresh one later — even a differently-named assessment — and the moment it contains that material, your last comment is there waiting, labelled <em>"carried forward · &lt;date&gt; · from &lt;the assessment you wrote it in&gt;"</em>. Small data, written once, never lost.</li>
+        <li><b>Back it up to a file.</b> A new <b>💬 Comments</b> button on the Screener toolbar (with a live count) exports every saved comment to a tiny <code>calibre-comments.json</code> and imports one back — so your comments also survive clearing the browser or moving to another machine. Import <b>merges</b> (a newer edit wins; an older one never overwrites a newer one). New module <code>shared/comment-store.js</code>.</li>
+        <li><b>Verified in-browser</b> on the real 175-material June assessment: the comment saves to both stores as you type; the same comment reappears after a full reload; with the live note cleared it carries across from another assessment with the "carried forward" label; ↻ Update re-renders; the store round-trips (blank clears, export shape, newer-wins / older-no-clobber merge) and the toolbar count updates live. No console errors. <b>Pending:</b> operator run on their own data + the actual file export/import click-through. Files: <code>shared/comment-store.js</code> (new), <code>shared/report-builder.{js,css}</code>, <code>screener/screener.{html,js,css}</code>. No <code>SCHEMA_VERSION</code> change (the durable store is its own browser key, additive).</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Screener report builder + filter-hold + Trace-it no-history fix - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">

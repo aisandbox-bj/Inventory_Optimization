@@ -265,3 +265,24 @@
 }
 .scr-toast.ok{ border-color:var(--status-ok); }
 .scr-toast.crit{ border-color:var(--status-crit); color:#fff; }
+
+/* ─── Comments backup menu (APP-COMMENT-DURABLE) ────────────────────────────
+   Small popover off the "💬 Comments" toolbar button — export/import the durable
+   per-material comment store. */
+.scr-cmt-menu{
+  position:fixed; z-index:1300; min-width:220px; padding:6px;
+  background:var(--bg-elevated); border:1px solid var(--border-soft);
+  border-radius:8px; box-shadow:0 16px 40px rgba(0,0,0,.5);
+  display:flex; flex-direction:column; gap:2px;
+}
+.scr-cmt-count{
+  font-family:var(--font-mono); font-size:10.5px; letter-spacing:.4px;
+  color:var(--text-sec); padding:6px 9px 8px; border-bottom:1px solid var(--border-soft); margin-bottom:2px;
+}
+.scr-cmt-item{
+  text-align:left; padding:8px 10px; border:none; background:none; cursor:pointer;
+  color:var(--text-pri); font-family:var(--font-body); font-size:13px; border-radius:5px;
+}
+.scr-cmt-item:hover{ background:rgba(31,206,216,.10); }
+.scr-cmt-item[disabled]{ opacity:.4; cursor:default; }
+.scr-cmt-item[disabled]:hover{ background:none; }

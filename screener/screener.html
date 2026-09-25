@@ -63,6 +63,8 @@
       <button id="btnClearBands" class="ghost" title="Clear all bands — show every analysed material">Clear bands</button>
       <button id="btnExport" class="primary" title="Export one letter-size PDF page per flagged material — both tiles side by side. Flag materials with the checkbox in the list.">⤓ Export flagged (0)</button>
       <button id="btnBuildReport" class="primary" title="Build a customisable report for the selected material — pick page size, choose &amp; reorder blocks, add a comment, export a PDF." disabled>⤓ Build report…</button>
+      <button id="btnComments" class="ghost" title="Back up or restore your saved comments. Comments are kept against each material in this browser and survive deleting the JSON — export a small file to keep them across browsers or machines.">💬 Comments</button>
+      <input type="file" id="commentsImport" accept="application/json,.json" hidden />
     </div>
 
     <div class="scr-main" id="scrMain" hidden>
@@ -120,6 +122,7 @@
 <script src="../shared/movement-detail.js"></script>
 <script src="../shared/material-detail.js"></script>
 <script src="../shared/analyst-marks.js"></script><!-- R2-7 — For-Action ★ + Analyst rec in list/detail/export -->
+<script src="../shared/comment-store.js"></script><!-- APP-COMMENT-DURABLE — per-material comments that survive JSON deletion -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script><!-- APP-SCR-REPORT-CADENCE — MRP-run cadence charts in the report -->
 <script src="../shared/mrp-cadence.js"></script><!-- APP-SCR-REPORT-CADENCE — shared static cadence renderer -->
 <script src="../shared/report-builder.js"></script><!-- APP-SCR-REPORT — customisable per-material report -->

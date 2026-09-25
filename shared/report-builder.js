@@ -271,6 +271,28 @@
     const m = ctx.m || {};
     return { soh: m.stock, mrpInd: m.mrpType, safetyStock: m.safetyStock, mrpMin: m.cmin, mrpMax: m.cmax };
   }
+  // The report comment for a material = its analyst NOTE (the same per-material store
+  // as the Trend notes — persisted per assessment, round-trips in the JSON), falling
+  // back to the picker's default comment for materials with no note.
+  // Read priority: the current assessment's analyst note (keeps report ⇄ Trend in
+  // sync within THIS assessment) → the durable per-material comment (carries across
+  // assessments, survives deleting the JSON) → the picker fallback.
+  function noteFor(ctx, opts){
+    let n = '';
+    try { n = (ctx.analyst && ctx.analyst.getNote) ? (ctx.analyst.getNote(ctx.m.material) || '') : ''; } catch (e) {}
+    if (n && n.trim()) return n;
+    try { if (typeof CommentStore !== 'undefined'){ const c = CommentStore.get(ctx.m.material); if (c && c.trim()) return c; } } catch (e) {}
+    return (opts && opts.comment) || '';
+  }
+  // Dual-write: the per-assessment analyst note (round-trips into the JSON + drives
+  // the Trend notes drawer) AND the durable per-material store (survives JSON
+  // deletion; reappears on any future assessment that contains this material).
+  function saveNote(ctx, text){
+    try { if (ctx.analyst && ctx.analyst.setNote) ctx.analyst.setNote(ctx.m.material, text || ''); } catch (e) {}
+    try { if (typeof CommentStore !== 'undefined') CommentStore.set(ctx.m && ctx.m.material, text || '', ctx.assessmentName || ''); } catch (e) {}
+    // Let the host page (e.g. the Screener toolbar count) refresh without coupling.
+    try { document.dispatchEvent(new CustomEvent('calibre:comments-changed')); } catch (e) {}
+  }
   const _cadCache = new Map();
   async function cadenceImages(ctx){
     if (typeof MrpCadence === 'undefined' || !MrpCadence.renderImages) return { empty:true, reason:'cadence renderer unavailable' };
@@ -501,7 +523,7 @@
 
   function blockComment(P, host, opts){
     const { doc, g } = P; const M = g.M; const CW = g.W - 2*M;
-    const txt = (opts && opts.comment || '').trim();
+    const txt = (noteFor(P.ctx, opts) || '').trim();
     if (!txt) return;
     P.sectionLabel('Comments');
     doc.setDrawColor(BW.cyan[0],BW.cyan[1],BW.cyan[2]); doc.setLineWidth(0.3);
@@ -620,7 +642,7 @@
       on: b.on && (b.needs !== 'pr' || ctx.hasPr) && !b.soon,
       box: b.id==='avgDur',
       lastN: b.lastN || 8,
-      comment: ''
+      comment: b.id === 'comment' ? noteFor(ctx, {}) : ''   // pre-fill from the reference material's note
     }));
 
     const ov = document.createElement('div');
@@ -687,7 +709,7 @@
       if (onBox) onBox.addEventListener('change', () => { it.on = onBox.checked; li.classList.toggle('on', it.on); refreshWarn(); });
       const box = li.querySelector('.rb-box'); if (box) box.addEventListener('change', () => { it.box = box.checked; refreshWarn(); });
       const n = li.querySelector('.rb-n'); if (n) n.addEventListener('input', () => { it.lastN = Math.max(1, Math.min(50, parseInt(n.value||'1',10)||1)); refreshWarn(); });
-      const cm = li.querySelector('.rb-comment'); if (cm) cm.addEventListener('input', () => { it.comment = cm.value; });
+      const cm = li.querySelector('.rb-comment'); if (cm) cm.addEventListener('input', () => { it.comment = cm.value; saveNote(ctx, cm.value); });   // persist like a Trend note
       // DnD
       li.addEventListener('dragstart', e => { li.classList.add('drag'); e.dataTransfer.setData('text/plain', it.id); });
       li.addEventListener('dragend',   () => li.classList.remove('drag'));
@@ -744,7 +766,10 @@
     ov.addEventListener('click', e => { if (e.target === ov) close(); });
 
     // Preview panel (renders the PDF in-app; download is explicit).
-    function showPreview(res){
+    // `regen` (optional) lets the docked comment editor re-render the preview
+    // after the operator edits the comment — passed only for the single-material
+    // report where one comment maps to one material's note.
+    function showPreview(res, regen){
       const pv = document.createElement('div');
       pv.className = 'rb-preview';
       pv.innerHTML = `
@@ -761,6 +786,7 @@
       modal.classList.add('rb-has-preview');
       modal.style.width = 'min(1100px,100%)'; modal.style.height = 'min(90vh,960px)';
       modal.appendChild(pv);
+      if (regen) attachCommentEditor(pv, ctx, regen);
       pv.querySelector('.rb-pv-back').addEventListener('click', () => { pv.remove(); modal.classList.remove('rb-has-preview'); modal.style.width=''; modal.style.height=''; try { URL.revokeObjectURL(res.url); } catch(e){} });
       pv.querySelector('.rb-pv-print').addEventListener('click', () => { try { pv.querySelector('.rb-pv-frame').contentWindow.print(); } catch(e){ window.open(res.url, '_blank'); } });
     }
@@ -776,7 +802,9 @@
           await openWideCanvas(ov, close, ctx, blocks, theme);
         } else {
           const res = await build(ctx, pageSize, blocks, 'multi', 'preview', (k, n) => { if (n > 1) gen.textContent = `Rendering ${k}/${n}…`; });
-          showPreview(res);
+          // Live comment editor only when the set is a single material (one comment ↔ one note).
+          const regen = nMat > 1 ? null : (() => build(ctx, pageSize, blocks, 'multi', 'preview'));
+          showPreview(res, regen);
         }
         gen.disabled = false; gen.textContent = orig;
       } catch (e){
@@ -976,7 +1004,7 @@
       }
     }
     else if (id === 'comment'){
-      const txt=(opts&&opts.comment||'').trim();
+      const txt=(noteFor(ctx,opts)||'').trim();
       el.style.display='flex'; el.style.flexDirection='column';   // fill the (freely-resized) box
       inner = sectionTitle(TH,'Comments') + `<div style="flex:1;border-left:3px solid ${TH.accent};padding:8px 12px;background:${TH.alt};font-size:14px;color:${TH.text};white-space:pre-wrap;min-height:40px;overflow:hidden">${esc(txt)||'<span style="color:'+TH.sub+'">(empty)</span>'}</div>`;
     }
@@ -1088,7 +1116,9 @@
       const btn = ev.currentTarget; const orig = btn.textContent; btn.disabled=true; btn.textContent='Rendering…';
       try {
         const res = await renderWidePdf(ctx, cards, theme);
-        showWidePreview(modal, res);
+        // Live comment editor only when the flagged set is a single material.
+        const single = !(ctx.batch && ctx.batch.list && ctx.batch.list.length > 1);
+        showWidePreview(modal, res, single ? ctx : null, single ? (() => renderWidePdf(ctx, cards, theme)) : null);
       } catch(e){ console.error(e); btn.textContent='Failed'; setTimeout(()=>{btn.textContent=orig;btn.disabled=false;},1500); return; }
       btn.disabled=false; btn.textContent=orig;
     });
@@ -1195,7 +1225,7 @@
           // box (mm) from the arranged template
           const bx=c.x*g.W, by=c.y*g.H, bw=c.w*g.W;
           const bh = c.freeAspect ? (c.h || c.w*1.7778*c.ar)*g.H : bw*c.ar;
-          if (c.id === 'comment'){ drawCommentBox(doc, bx, by, bw, bh, (c.opts && c.opts.comment) || '', theme); continue; }
+          if (c.id === 'comment'){ drawCommentBox(doc, bx, by, bw, bh, noteFor(ectx, c.opts), theme); continue; }
           const el = await buildCardDom(c.id, ectx, c.opts||{}, theme);
           host.appendChild(el);
           const imgs=[...el.querySelectorAll('img')];
@@ -1226,6 +1256,43 @@
     let ty = y + 13; for (const l of lines){ if (ty > y + h - 3) break; doc.text(l, x + 4.5, ty); ty += 4.6; }
   }
 
+  // Live comment editor docked in the preview — write while you see the report.
+  // Saves to the material's analyst note (persists like a Trend note); "↻ Update"
+  // regenerates the preview with the new comment.
+  function attachCommentEditor(pv, ctx, regen){
+    // "Carried from" hint — if this material has a durable comment stored under a
+    // DIFFERENT assessment, show that it was carried across, so the operator sees
+    // their previous note surfaced on reload.
+    let carried = '';
+    try {
+      if (typeof CommentStore !== 'undefined'){
+        const meta = CommentStore.getMeta(ctx.m && ctx.m.material);
+        const liveNote = (ctx.analyst && ctx.analyst.getNote) ? (ctx.analyst.getNote(ctx.m.material) || '') : '';
+        if (meta && meta.text && !(liveNote && liveNote.trim())){
+          const when = meta.updated ? String(meta.updated).slice(0,10) : '';
+          const fromOther = meta.assessment && meta.assessment !== (ctx.assessmentName || '');
+          carried = `<span class="rb-cmt-carry">carried forward${when ? ' · '+esc(when) : ''}${fromOther ? ' · from “'+esc(meta.assessment)+'”' : ''}</span>`;
+        }
+      }
+    } catch (e) {}
+    const bar = document.createElement('div'); bar.className = 'rb-cmt-editor';
+    bar.innerHTML =
+      `<span class="rb-cmt-lab">✎ Comment${carried}</span>` +
+      `<textarea class="rb-cmt-ta" rows="2" placeholder="Write a comment while you see the report — kept against this material and reloaded next time, even after you delete the JSON.">${esc(noteFor(ctx, {}))}</textarea>` +
+      (regen ? `<button class="rb-btn primary rb-cmt-upd" title="Save + refresh the preview">↻ Update</button>` : '');
+    const frame = pv.querySelector('.rb-pv-frame');
+    pv.insertBefore(bar, frame);
+    const ta = bar.querySelector('.rb-cmt-ta');
+    ta.addEventListener('input', () => saveNote(ctx, ta.value));
+    const upd = bar.querySelector('.rb-cmt-upd');
+    if (upd && regen) upd.addEventListener('click', async (e) => {
+      const b = e.currentTarget; const o = b.textContent; b.disabled = true; b.textContent = '…';
+      saveNote(ctx, ta.value);
+      try { const nres = await regen(); const fr = pv.querySelector('.rb-pv-frame'); const old = fr.src; fr.src = nres.url; try { URL.revokeObjectURL(old); } catch (er){} } catch (err){ console.error(err); }
+      b.disabled = false; b.textContent = o;
+    });
+  }
+
   async function renderWidePdf(ctx, cards, theme){
     await ensureLibs();
     const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
@@ -1236,7 +1303,7 @@
     for (const c of cards){
       const x = c.x*g.W, y = c.y*g.H, w = c.w*g.W;
       const h = c.freeAspect ? (c.h || c.w*1.7778*c.ar)*g.H : w * c.ar;
-      if (c.id === 'comment'){ drawCommentBox(doc, x, y, w, h, (c.opts && c.opts.comment) || '', theme); continue; }
+      if (c.id === 'comment'){ drawCommentBox(doc, x, y, w, h, noteFor(ctx, c.opts), theme); continue; }
       const prevT = c.el.style.transform; c.el.style.transform = 'none';   // capture at natural resolution
       let img;
       try {
@@ -1250,10 +1317,13 @@
     return { url: URL.createObjectURL(doc.output('blob')), filename, pages:1 };
   }
 
-  function showWidePreview(modal, res){
+  // `ctx`/`regen` are passed only for a single-material widescreen render, so the
+  // docked comment editor maps to exactly one material's note. Batch omits them.
+  function showWidePreview(modal, res, ctx, regen){
     const pv = document.createElement('div'); pv.className='rb-preview';
     pv.innerHTML = `<div class="rb-pv-bar"><span class="rb-pv-meta">Widescreen · ${res.pages} page${res.pages===1?'':'s'}</span><span class="rb-pv-actions"><button class="rb-btn ghost rb-pv-back">‹ Back to layout</button><button class="rb-btn ghost rb-pv-print">🖨 Print</button><a class="rb-btn primary rb-pv-dl" download="${esc(res.filename)}" href="${res.url}">⤓ Download PDF</a></span></div><iframe class="rb-pv-frame" title="Report preview" src="${res.url}"></iframe>`;
     modal.appendChild(pv);
+    if (ctx && regen) attachCommentEditor(pv, ctx, regen);
     pv.querySelector('.rb-pv-back').addEventListener('click', ()=>{ pv.remove(); try{URL.revokeObjectURL(res.url);}catch(e){} });
     pv.querySelector('.rb-pv-print').addEventListener('click', ()=>{ try { pv.querySelector('.rb-pv-frame').contentWindow.print(); } catch(e){ window.open(res.url, '_blank'); } });
   }
