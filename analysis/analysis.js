@@ -55,6 +55,10 @@
     state.analyst = (typeof AnalystMarks !== 'undefined')
       ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
       : null;
+    // APP-TREND-FILTERHOLD — capture any view filters saved before this page was
+    // last left (e.g. a Trace round-trip full-page reload). Read NOW, before the
+    // boot-time selectBucket() clears them, then re-apply at the end of boot.
+    const savedFilters = readSavedFilters();
     renderLoadedBanner();
     // APP-FIX-TREND-LT-SUPPRESS — load Trace's persisted outlier suppression (manual
     // PO excludes + sigma) so the lead-time figures reflect what the operator trimmed
@@ -73,6 +77,55 @@
     wireNotes();   // APP-TREND-NOTES — bind the docked notes drawer once
     wireGraphPopout();   // APP-ACT-04 — bind the floating pop-out card once
     applyHashMaterial();   // APP-TRACE-BACK — honour analysis.html#mat=<n> deep link
+    applySavedFilters(savedFilters);   // APP-TREND-FILTERHOLD — restore the held view filters last, after all selectBucket() resets
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     APP-TREND-FILTERHOLD — hold the list view filters (search text + traffic-
+     light + ★ Action) across the full-page reload a Trace round-trip incurs, so
+     returning to Trend keeps the filter the operator had in place. Session-scoped
+     (survives navigation within the tab, clears when the tab closes) and keyed by
+     assessment so filters don't bleed between assessments. Only view filters —
+     never the math. colFilters are intentionally excluded (per-column, and reset
+     on a fleet switch anyway).
+  ═════════════════════════════════════════════════════════════════════════ */
+  function filterHoldKey(){
+    const n = (state.json && state.json.metadata && state.json.metadata.assessmentName) || '';
+    return 'invOpt.trend.viewFilters.' + n;
+  }
+  function persistFilters(){
+    try {
+      sessionStorage.setItem(filterHoldKey(), JSON.stringify({
+        s:   state.searchText   || '',
+        tl:  state.filterTl     || 'ALL',
+        act: !!state.filterAction
+      }));
+    } catch (e) { /* private mode / quota / no sessionStorage — non-fatal */ }
+  }
+  function readSavedFilters(){
+    try {
+      const raw = sessionStorage.getItem(filterHoldKey());
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      if (!o || typeof o !== 'object') return null;
+      return {
+        s:   typeof o.s  === 'string' ? o.s  : '',
+        tl:  typeof o.tl === 'string' ? o.tl : 'ALL',
+        act: !!o.act
+      };
+    } catch (e) { return null; }
+  }
+  function applySavedFilters(f){
+    if (!f) return;
+    // Nothing held (all defaults) → leave the fresh view untouched.
+    if (!f.s && (f.tl === 'ALL' || !f.tl) && !f.act) return;
+    state.searchText   = f.s;
+    state.filterTl     = f.tl || 'ALL';
+    state.filterAction = f.act;
+    const inp = $('#listSearch');
+    if (inp) inp.value = f.s;
+    renderFilterButtons();
+    renderList();
   }
 
   // APP-TRACE-BACK (2026-08-15) — Calibre Trace's "← Back to Trend" link lands here
@@ -298,6 +351,7 @@
         state.filterTl = state.filterTl === tl ? 'ALL' : tl;
         renderList();
         renderFilterButtons();
+        persistFilters();   // APP-TREND-FILTERHOLD
       });
     });
   }
@@ -380,6 +434,7 @@
     renderList();
     renderDetail();
     renderFilterButtons();
+    persistFilters();   // APP-TREND-FILTERHOLD — keep the held filters in sync with the reset a fleet switch performs
   }
 
   // The bucket the list/detail/exports operate on. 1 fleet selected → that real
@@ -423,10 +478,10 @@
       : '';
     host.innerHTML = tlHtml + actHtml + saHtml;
     $$('#tlFilter button[data-tl]').forEach(b => {
-      b.addEventListener('click', () => { state.filterTl = b.dataset.tl; renderList(); renderFilterButtons(); });
+      b.addEventListener('click', () => { state.filterTl = b.dataset.tl; renderList(); renderFilterButtons(); persistFilters(); });
     });
     const af = host.querySelector('button[data-actfilter]');
-    if (af) af.addEventListener('click', () => { state.filterAction = !state.filterAction; renderList(); renderFilterButtons(); });
+    if (af) af.addEventListener('click', () => { state.filterAction = !state.filterAction; renderList(); renderFilterButtons(); persistFilters(); });
     const sa = host.querySelector('button[data-showall]');
     if (sa) sa.addEventListener('click', async () => { state.showAllUserList = !state.showAllUserList; await runPipelineNow(false); });
   }
@@ -845,6 +900,7 @@
     $('#listSearch').addEventListener('input', (e) => {
       state.searchText = e.target.value;
       renderList();
+      persistFilters();   // APP-TREND-FILTERHOLD
     });
   }
 

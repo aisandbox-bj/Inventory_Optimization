@@ -138,15 +138,26 @@
     // assessment, persists it as the new selection, then consumes the hash so a
     // later reload respects the normal last-picked selection.
     const hashMat = readHashMaterial();
-    if (hashMat && state.matIndex.has(hashMat)) {
-      state.scopeMode = 'single';
-      state.scopeSingle = hashMat;
-      await persistState();
+    if (hashMat) {
       clearHash();
+      if (state.matIndex.has(hashMat)) {
+        state.scopeMode = 'single';
+        state.scopeSingle = hashMat;
+        state.traceItMissing = null;
+        await persistState();
+      } else {
+        // APP-FIX-TRACE-NOHIST — an explicit "Trace it" for a material with no
+        // purchase-order history: say so plainly instead of silently landing on a
+        // different material's chains (which read as if they were the traced part).
+        state.scopeMode = 'single';
+        state.scopeSingle = null;
+        state.traceItMissing = hashMat;
+      }
     }
 
-    // Default the single-mode picker to first material if nothing persisted
-    if (state.scopeMode === 'single' && !state.scopeSingle) {
+    // Default the single-mode picker to first material if nothing persisted —
+    // but NOT when we're showing the "no history for X" notice.
+    if (state.scopeMode === 'single' && !state.scopeSingle && !state.traceItMissing) {
       state.scopeSingle = state.materials[0].material;
     }
 
@@ -461,6 +472,7 @@
     $$('#matListCompact .mat-compact').forEach(el => {
       el.addEventListener('click', () => {
         state.scopeSingle = el.dataset.mat;
+        state.traceItMissing = null;   // APP-FIX-TRACE-NOHIST — clear the no-history notice on a real pick
         renderMatListCompact();
         renderBanner();
         renderActiveView();
@@ -639,6 +651,17 @@
     const host = $('#contentView');
     // Force-clear any leftover Chart.js canvas instance
     if (state.chart) { state.chart.destroy(); state.chart = null; }
+
+    // APP-FIX-TRACE-NOHIST — an explicit "Trace it" for a material with no PR
+    // history lands here with no valid selection; name it and say there's nothing
+    // to trace, rather than the generic "pick a material" (or a wrong material).
+    if (state.traceItMissing && state.scopeMode === 'single' && !state.scopeSingle) {
+      host.innerHTML = `<div class="view-empty">
+        <div style="font-size:16px;color:var(--text-pri,#e7eef0);margin-bottom:8px"><b>Material ${escapeHtml(state.traceItMissing)}</b> has no purchase-order history in this assessment.</div>
+        There's nothing to trace for it — the procurement chain, distribution, year-on-year and lead-time views all need PR&nbsp;&rarr;&nbsp;PO records. Pick another material from the list on the left.
+      </div>`;
+      return;
+    }
 
     // POST-T-04 PATCH (2026-05-17) — views aren't locked to scope mode any
     // more. Routing logic:

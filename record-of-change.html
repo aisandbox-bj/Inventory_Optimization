@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · v2.1.5-dev · 2026-08-15
+     Inventory Optimization App · v2.2.0-dev · 2026-08-15
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      Latest tag : https://github.com/aisandbox-bj/Inventory_Optimization/releases/tag/v2.1.1
      This file is the canonical changelog — the version above is the build
@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Record of Change</title>
-<meta name="app-version" content="2.1.5-dev" />
+<meta name="app-version" content="2.2.0-dev" />
 <meta name="app-released" content="2026-08-15" />
 <link rel="stylesheet" href="shared/brand-tokens.css" />
 <script src="shared/no-hovers.js"></script><!-- APP-HOVER-KILL (temp) — strips all native title tooltips; remove this line to restore -->
@@ -324,7 +324,7 @@ main.shell { padding-top: 28px; }
   <div class="brand">
     <span class="brand-mark"><svg viewBox="0 0 100 100" fill="none" role="img" aria-label="Calibre"><rect x="3" y="3" width="94" height="94" rx="24" fill="#0B111B" stroke="currentColor" stroke-opacity=".42" stroke-width="2"/><g stroke="currentColor" stroke-opacity=".55" stroke-width="2.4" stroke-linecap="round"><path d="M16 16 H26 M16 16 V26"/><path d="M84 16 H74 M84 16 V26"/><path d="M16 84 H26 M16 84 V74"/><path d="M84 84 H74 M84 84 V74"/></g><g stroke="currentColor" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M34 34 V66"/><path d="M66 34 V66"/><path d="M34 50 H66"/><path d="M34 50 L41 45 M34 50 L41 55"/><path d="M66 50 L59 45 M66 50 L59 55"/></g></svg></span>
     Calibre
-    <a class="sub active" href="record-of-change.html" title="You are on the Record of Change page">v2.1.5-dev · RoC</a>
+    <a class="sub active" href="record-of-change.html" title="You are on the Record of Change page">v2.2.0-dev · RoC</a>
   </div>
   <div class="links">
     <a href="index.html">Dashboard</a>
@@ -381,7 +381,31 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
-    <!-- v2.1.5-dev - APP-INT-UITIDY: intake roll-ups (params primary/advanced + collapsible mapping) - 2026-08-20 -->
+    <!-- v2.2.0-dev - Screener report builder + filter-hold + Trace-it no-history fix - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>Screener Report Builder</b> (customisable per-material report + widescreen drag-and-drop layout + batch print) · <b>APP-TREND-FILTERHOLD</b> · <b>APP-FIX-TRACE-NOHIST</b> — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>New version.</b> Bumped <code>APP_VERSION</code> 2.1.5-dev → 2.2.0-dev; v2.2.0-dev frozen as the rollback snapshot. No <code>SCHEMA_VERSION</code> change (still 1.0.0). Rollback for this push: remote <code>backup/pre-v2.2.0</code> branch + <code>checkpoint/pre-v2.2.0</code> tag (both at the prior origin/main <code>00ccee7</code>).</li>
+        <li><b>APP-TREND-FILTERHOLD — the "my filter gets wiped when I come back from Trace" fix.</b> The Trend list's search text, traffic-light filter and ★ Action filter now survive the full-page reload a Trace round-trip incurs. They're held in <code>sessionStorage</code> (survives same-tab navigation, clears when the tab closes) keyed by assessment, captured at boot before the boot-time bucket-select clears them, then re-applied last. <b>Verified:</b> set search "FILTER" + traffic-light ORANGE (3 rows) → Trace → ← Back to Trend → search box still "FILTER", ORANGE chip still active, list back to the 3 rows. Files: <code>analysis/analysis.js</code>.</li>
+        <li><b>APP-SCR-REPORT — Screener Report Builder (new <code>shared/report-builder.js</code> + <code>report-builder.css</code>).</b> A "⤓ Build report…" button on the Screener (enabled when a material is selected) opens a builder: pick <b>page size</b> → tick &amp; drag-reorder <b>blocks</b> (Trend graph+metrics · Trace average supply duration [±box-plots] · Trace annual progression (YoY) · Trace last-X PRs · Trace last-X chains · Comment; MRP-run cadence shown but deferred) → add a comment → <b>inline preview + Print + Download</b> (renders in-app, no auto-save to Downloads). Blocks reuse the existing analytical renderers (AppChart, TracePhase) — presentation only, no new maths.
+          <ul>
+            <li><b>US Letter (Light):</b> Birchwood-branded header, full-size <b>multi-page</b> (no forced cramming — operator decision, quality first), discreet section separators between blocks, and <b>tables never split</b> across a page break (each keeps whole; verified all 8 raw-PR rows stay together). <b>Cancelled PRs render with a bold red strikethrough</b> so they poke you in the eye.</li>
+            <li><b>Widescreen 16:9 (for 1080p / 4K):</b> a <b>drag-and-drop layout canvas</b> — each block is a card you move and resize (aspect ratio fixed per card, size free, grid-snapped), with a <b>red ✕ to delete a tile</b> and <b>"+ Add tile"</b> to drop another block in. Export places each card where you put it onto a landscape page. <b>Batch print:</b> arrange the layout once, "Print set…", pick a set of materials → one landscape page per material, all sharing the arranged layout (verified 2-material set: identical layout, each material's own data).</li>
+            <li><b>Dark = an exact on-screen grab.</b> In Dark, the Trend detail and Trace phase-distribution cards are the <em>real</em> app components (<code>MaterialDetail.render</code> / <code>TracePhase.render</code>, same CSS the app draws), captured verbatim via html2canvas (charts rasterised for a crisp capture) — not a re-style. Per operator ask the grabbed Trend card is trimmed to <b>chart + short stat table only</b> (the "More stats" toggle + the Current-vs-Recommended MRP table are dropped; the recommendation still reads in the header). The Trace-only views (YoY / raw-PRs / chains / cadence) render in a matched dark style, not yet a literal grab.</li>
+          </ul>
+        </li>
+        <li><b>APP-FIX-TRACE-NOHIST — "Trace it" on a part with no purchase history no longer jumps to another material.</b> Trace's material index is built only from parts that have PR history; an explicit <code>#mat=</code> deep-link for a part that isn't in it used to silently fall through to another material (read as if it were the traced part). Now it names the part and says plainly <em>"Material X has no purchase-order history in this assessment — nothing to trace"</em>, keeping the rail so you can pick another. Files: <code>trace/trace.js</code>. <b>Code done; pending operator click-through.</b></li>
+        <li><b>Verified vs pending.</b> Verified in-browser: filter-hold round-trip; Letter report (multi-page, separators, table-not-split, cancelled strikethrough); widescreen canvas (cards render, delete ✕, add-tile, batch 2-up); Dark exact-grab (real MaterialDetail component captured, trimmed). Pending operator off-repo validation: the Trace-it no-history notice (click-through), and a full operator run of the report builder on their own data.</li>
+        <li><b>Still queued (operator enhancements, next):</b> #3 Duplicate-flag upload + Trend filter wired into Intake, then #2 Inv-Master helper card on SAP# click (SAP# · Description · Manufacturer · VPN), then #4 average-lead-time-with-one-year-of-PR-history investigation; plus optional exact-grab for the remaining Trace views.</li>
+      </ul>
+    </article>
+
+    <!-- v2.2.0-dev - APP-INT-UITIDY: intake roll-ups (params primary/advanced + collapsible mapping) - 2026-08-20 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -398,7 +422,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - APP-USERLIST-SHOWALL: "Show all list materials" override on Trend - 2026-08-20 -->
+    <!-- v2.2.0-dev - APP-USERLIST-SHOWALL: "Show all list materials" override on Trend - 2026-08-20 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -415,7 +439,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - APP-TRACE-WIDER: widen the Trace centred cap 1280 -> 1920 - 2026-08-20 -->
+    <!-- v2.2.0-dev - APP-TRACE-WIDER: widen the Trace centred cap 1280 -> 1920 - 2026-08-20 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -431,7 +455,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - APP-ACT-04-GROW: Trend pop-out zoomed ~15% (uniform, no reflow) - 2026-08-20 -->
+    <!-- v2.2.0-dev - APP-ACT-04-GROW: Trend pop-out zoomed ~15% (uniform, no reflow) - 2026-08-20 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -448,7 +472,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - APP-TRACE-CENTER: centre the Trace page like the Trend .shell - 2026-08-20 -->
+    <!-- v2.2.0-dev - APP-TRACE-CENTER: centre the Trace page like the Trend .shell - 2026-08-20 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -465,7 +489,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - APP-TREND-FLEET-TILES: multi-select fleet tiles on Trend (union view) - 2026-08-18 on top of c311841 -->
+    <!-- v2.2.0-dev - APP-TREND-FLEET-TILES: multi-select fleet tiles on Trend (union view) - 2026-08-18 on top of c311841 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -481,7 +505,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - Template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks - 2026-08-18 on top of 54cdee1 -->
+    <!-- v2.2.0-dev - Template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks - 2026-08-18 on top of 54cdee1 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -500,7 +524,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - MRP-run cadence graph pass 3: 2-state bars + stacked date axis + replenishment colours/hatch/dots + click-triggered native helpers - PUSHED 2026-08-17 (code cf5f31f) on top of 275a54d -->
+    <!-- v2.2.0-dev - MRP-run cadence graph pass 3: 2-state bars + stacked date axis + replenishment colours/hatch/dots + click-triggered native helpers - PUSHED 2026-08-17 (code cf5f31f) on top of 275a54d -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -521,7 +545,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - MRP-run cadence dual-chart overhaul: one resizable tile + stock-status dot strip + replenishment chart + axis spacing/span fixes - PUSHED 2026-08-17 on top of 838a93f -->
+    <!-- v2.2.0-dev - MRP-run cadence dual-chart overhaul: one resizable tile + stock-status dot strip + replenishment chart + axis spacing/span fixes - PUSHED 2026-08-17 on top of 838a93f -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -542,7 +566,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - graph/Screener pass: Screener->Trend read-only alignment + Trend Min/SS threshold line + resizable MRP-cadence tile - PUSHED 2026-08-17 on top of 2f5e981 -->
+    <!-- v2.2.0-dev - graph/Screener pass: Screener->Trend read-only alignment + Trend Min/SS threshold line + resizable MRP-cadence tile - PUSHED 2026-08-17 on top of 2f5e981 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -560,7 +584,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - post-round-3 enhancements: Trace Raw Data MRP/Manual Trigger column + robust (median+MAD) sigma trim + global native-tooltip suppression - PUSHED 2026-08-17 on top of ccfd895 -->
+    <!-- v2.2.0-dev - post-round-3 enhancements: Trace Raw Data MRP/Manual Trigger column + robust (median+MAD) sigma trim + global native-tooltip suppression - PUSHED 2026-08-17 on top of ccfd895 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -577,7 +601,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - 16-Aug round-3 feedback: MRP-cadence allocation reconcile + month axis + MRP/Manual hover table + analyst-data-loss fix (download embed + non-destructive merge) + Calibre nav rebrand + hover-helper sweep - PUSHED 2026-08-16 on top of b911ed1 -->
+    <!-- v2.2.0-dev - 16-Aug round-3 feedback: MRP-cadence allocation reconcile + month axis + MRP/Manual hover table + analyst-data-loss fix (download embed + non-destructive merge) + Calibre nav rebrand + hover-helper sweep - PUSHED 2026-08-16 on top of b911ed1 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -597,7 +621,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - 16-Aug rev02 (round-2) feedback: cadence rebuild + Screener report + pop-out fixed-content + hover-helper cleanup + notes free-drag + Excel notes block + sigma scoped/parked - PUSHED 2026-08-16 on top of 88112ae -->
+    <!-- v2.2.0-dev - 16-Aug rev02 (round-2) feedback: cadence rebuild + Screener report + pop-out fixed-content + hover-helper cleanup + notes free-drag + Excel notes block + sigma scoped/parked - PUSHED 2026-08-16 on top of 88112ae -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -619,7 +643,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - 16-Aug feedback pass: toggle fix + cadence per-material + lead-time DAYS/colour/tie + Screener·Sandbox tie + banner 3-col + fleet cross-fleet + MRP-template tweaks + PD-blank + dashboard Upload-JSON + notes-drag + pop-out aspect/notes-grow + sandbox analyst - PUSHED 76b521f (2026-08-16) -->
+    <!-- v2.2.0-dev - 16-Aug feedback pass: toggle fix + cadence per-material + lead-time DAYS/colour/tie + Screener·Sandbox tie + banner 3-col + fleet cross-fleet + MRP-template tweaks + PD-blank + dashboard Upload-JSON + notes-drag + pop-out aspect/notes-grow + sandbox analyst - PUSHED 76b521f (2026-08-16) -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -645,7 +669,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - "No-test sprint": MRP Request Template + LLM-split/Selected-fleets + pop-out + See-jump + Trace tidy/demand/cadence + Lead-time suppression - PUSHED 74baea5 -->
+    <!-- v2.2.0-dev - "No-test sprint": MRP Request Template + LLM-split/Selected-fleets + pop-out + See-jump + Trace tidy/demand/cadence + Lead-time suppression - PUSHED 74baea5 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -670,7 +694,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - Phase 3 follow-up: stat-grid unit cost + operator layout + Lead time - PUSHED 74baea5 -->
+    <!-- v2.2.0-dev - Phase 3 follow-up: stat-grid unit cost + operator layout + Lead time - PUSHED 74baea5 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -689,7 +713,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - Phase 3 (Everything on one screen) + review-screen tweaks - PUSHED 74baea5 -->
+    <!-- v2.2.0-dev - Phase 3 (Everything on one screen) + review-screen tweaks - PUSHED 74baea5 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -716,7 +740,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - Phase 1 (Capture & keep) - PUSHED 3511b53 -->
+    <!-- v2.2.0-dev - Phase 1 (Capture & keep) - PUSHED 3511b53 -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -736,7 +760,7 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - APP-ACT-02 (Phase 2a) Export overhaul -->
+    <!-- v2.2.0-dev - APP-ACT-02 (Phase 2a) Export overhaul -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
@@ -756,16 +780,16 @@ git -C /tmp/peek push --force-with-lease origin main
       </ul>
     </article>
 
-    <!-- v2.1.5-dev - APP-ACT-01 For Action + Analyst Rec + Prev/Next -->
+    <!-- v2.2.0-dev - APP-ACT-01 For Action + Analyst Rec + Prev/Next -->
     <article class="roc-entry dev">
       <div class="head">
         <span class="ver">v2.1.5</span>
         <span class="date">2026-08-15</span>
         <span class="tag dev">dev</span>
       </div>
-      <h4>Version bump &rarr; v2.1.5-dev · APP-ACT-01 — "For Action" flag + Analyst Recommendation column + Prev/Next (Trend)</h4>
+      <h4>Version bump &rarr; v2.2.0-dev · APP-ACT-01 — "For Action" flag + Analyst Recommendation column + Prev/Next (Trend)</h4>
       <ul>
-        <li><b>New version folder.</b> v2.1.4-dev was copied to <b>v2.1.5-dev</b> (now the live dev folder + repo mirror); v2.1.4-dev is frozen as the rollback snapshot. Current-version labels (nav, <code>&lt;meta app-version&gt;</code>, build-stamps, the Trend PDF footer that was stale at <code>v2.0.0-dev</code>) relabelled to 2.1.5-dev; historical RoC entries kept at their original versions.</li>
+        <li><b>New version folder.</b> v2.1.4-dev was copied to <b>v2.2.0-dev</b> (now the live dev folder + repo mirror); v2.1.4-dev is frozen as the rollback snapshot. Current-version labels (nav, <code>&lt;meta app-version&gt;</code>, build-stamps, the Trend PDF footer that was stale at <code>v2.0.0-dev</code>) relabelled to 2.1.5-dev; historical RoC entries kept at their original versions.</li>
         <li><b>APP-ACT-01a · "For Action" flag.</b> A gold ★ marks a material for analyst follow-up — toggle from the right-click row menu ("Flag for Action") <em>or</em> the star button in the detail banner. Flagged rows show a ★ badge + gold left-edge cue in the list. State lives in a new <b>sidecar store</b> (<code>shared/analyst-marks.js</code>, localStorage key <code>tune.analyst.&lt;assessment&gt;</code>), <b>deliberately separate from the canonical JSON</b> — no SCHEMA_VERSION change, the shared dataset stays pure per the locked principles.</li>
         <li><b>APP-ACT-01b · Analyst Recommendation column.</b> The <b>MRP Settings · Current vs Recommended</b> table gains a 3rd <b>Analyst</b> column: a V1/PD dropdown + free-text Min/Max/Safety inputs. Editable only when the material is flagged For Action (otherwise a muted "flag to edit" lock). Values persist to the same sidecar and survive an unflag&rarr;reflag.</li>
         <li><b>APP-ACT-01c · Prev/Next.</b> ‹ Prev / Next › on the chart toolbar step through the material list <b>in the on-screen order</b> (current traffic-light filter + search + column filters + sort), clamped at the ends.</li>

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · Screener · v2.1.5-dev · APP-SCR-01
+     Inventory Optimization App · Screener · v2.2.0-dev · APP-SCR-01
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      RoC  : ../record-of-change.html
      A post-analysis band filter. Reads the same canonical JSON as Analysis +
@@ -13,12 +13,13 @@
 <head>
 <meta charset="UTF-8" />
 <title>Inventory Optimization · Screener</title>
-<meta name="app-version" content="2.1.5-dev" />
+<meta name="app-version" content="2.2.0-dev" />
 <link rel="stylesheet" href="../shared/brand-tokens.css" />
 <script src="../shared/no-hovers.js"></script><!-- APP-HOVER-KILL (temp) — strips all native title tooltips; remove this line to restore -->
 <link rel="stylesheet" href="../shared/material-detail.css" />
 <link rel="stylesheet" href="../shared/trace-phase.css" />
 <link rel="stylesheet" href="screener.css" />
+<link rel="stylesheet" href="../shared/report-builder.css" /><!-- APP-SCR-REPORT -->
 </head>
 <body>
 
@@ -26,7 +27,7 @@
   <div class="brand">
     <span class="brand-mark"><svg viewBox="0 0 100 100" fill="none" role="img" aria-label="Calibre"><rect x="3" y="3" width="94" height="94" rx="24" fill="#0B111B" stroke="currentColor" stroke-opacity=".42" stroke-width="2"/><g stroke="currentColor" stroke-opacity=".55" stroke-width="2.4" stroke-linecap="round"><path d="M16 16 H26 M16 16 V26"/><path d="M84 16 H74 M84 16 V26"/><path d="M16 84 H26 M16 84 V74"/><path d="M84 84 H74 M84 84 V74"/></g><g stroke="currentColor" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M34 34 V66"/><path d="M66 34 V66"/><path d="M34 50 H66"/><path d="M34 50 L41 45 M34 50 L41 55"/><path d="M66 50 L59 45 M66 50 L59 55"/></g></svg></span>
     Calibre
-    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.1.5-dev · Screener</a>
+    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.2.0-dev · Screener</a>
   </div>
   <div class="links">
     <a href="../index.html">Dashboard</a>
@@ -61,6 +62,7 @@
       <button id="btnBands" class="primary" title="Set the bands (filters) that decide which analysed materials appear in the Screener">⚙ Screener bands…</button>
       <button id="btnClearBands" class="ghost" title="Clear all bands — show every analysed material">Clear bands</button>
       <button id="btnExport" class="primary" title="Export one letter-size PDF page per flagged material — both tiles side by side. Flag materials with the checkbox in the list.">⤓ Export flagged (0)</button>
+      <button id="btnBuildReport" class="primary" title="Build a customisable report for the selected material — pick page size, choose &amp; reorder blocks, add a comment, export a PDF." disabled>⤓ Build report…</button>
     </div>
 
     <div class="scr-main" id="scrMain" hidden>
@@ -118,6 +120,7 @@
 <script src="../shared/movement-detail.js"></script>
 <script src="../shared/material-detail.js"></script>
 <script src="../shared/analyst-marks.js"></script><!-- R2-7 — For-Action ★ + Analyst rec in list/detail/export -->
+<script src="../shared/report-builder.js"></script><!-- APP-SCR-REPORT — customisable per-material report -->
 <script src="screener.js"></script>
 
 </body>

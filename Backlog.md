@@ -1,6 +1,22 @@
-# Calibre Tune v2.1.5-dev — Deferred items / next-version backlog
+# Calibre Tune v2.2.0-dev — Deferred items / next-version backlog
 
-**Updated:** 2026-08-20 (**APP-INT-UITIDY** — intake roll-ups: params primary/advanced + collapsible per-file mapping; **pushed `2294bd4`**; params browser-verified, mapping pending operator upload; rollback refs `backup/pre-int-uitidy` + `checkpoint/pre-int-uitidy` at `882650d`). Prior: **APP-USERLIST-SHOWALL** ("Show all list materials" Trend override, **pushed `aab1f11`**), **APP-TRACE-WIDER** (**pushed `4b42716`**).
+**Updated:** 2026-09-25 (**v2.2.0-dev** — Screener Report Builder + APP-TREND-FILTERHOLD + APP-FIX-TRACE-NOHIST; browser-verified, **pushed** on top of `00ccee7`; rollback refs `backup/pre-v2.2.0` + `checkpoint/pre-v2.2.0` at `00ccee7`). Prior tip: v2.1.5-dev (**APP-INT-UITIDY** `2294bd4`).
+
+## ✅ SHIPPED — v2.2.0-dev · Screener Report Builder + filter-hold + Trace-it no-history (2026-09-25) — pushed; pending operator off-repo validation
+New version (APP_VERSION 2.1.5-dev → 2.2.0-dev; SCHEMA_VERSION unchanged). New files: `shared/report-builder.js` + `report-builder.css`. Touched: `analysis/analysis.js` (filter-hold), `trace/trace.js` (no-history), `screener/screener.{html,js}` (Build-report button + batch material set).
+- **APP-TREND-FILTERHOLD** — Trend search + traffic-light + ★ filters survive the Trace round-trip (sessionStorage, per-assessment; captured at boot before the bucket-select reset, re-applied last). Verified round-trip keeps "FILTER"+ORANGE → 3 rows.
+- **APP-SCR-REPORT** — "⤓ Build report…" on the Screener → page size → drag-reorder block picker (Trend graph+metrics · Trace avg supply duration [±box-plots] · Trace YoY · Trace last-X PRs · Trace last-X chains · Comment; cadence deferred) → inline **preview + Print + Download** (no auto-save to Downloads).
+  - **US Letter (Light):** Birchwood header, full-size multi-page (no forced cramming), section separators, **tables never split**, **cancelled PRs = bold red strikethrough**.
+  - **Widescreen 16:9:** **drag-and-drop canvas** (move/resize, aspect fixed, grid snap, **✕ delete tile**, **+ Add tile**), placed-layout landscape export, **batch print** (arrange once → pick a set → one page/material).
+  - **Dark = exact on-screen grab** (real `MaterialDetail` / `TracePhase`, html2canvas, charts rasterised). Grabbed Trend card trimmed to **chart + short stat table** (More-stats + MRP compare dropped; recommendation stays in the header). Trace-only views (YoY/raw/chains/cadence) matched in dark style, not yet literal grabs.
+- **APP-FIX-TRACE-NOHIST** — "Trace it" on a part with no PR history now names it and says "nothing to trace" (keeps the rail), instead of silently landing on another material. Code done; pending operator click-through.
+
+## 🔜 QUEUED — operator enhancements (order per operator 2026-09-25: #3 then #2, then #4, #5)
+- **#3 Duplicate-flag (NEXT).** Upload a duplicate-flag list (a material list) in **Intake**, display the flag, and **filter for duplicates in Trend**. Additive: a new optional intake source `duplicateList` (no SCHEMA_VERSION bump — backward compatible) → a per-material `isDuplicate` flag → a Trend filter chip. Include it in the intake data-needs flags.
+- **#2 Inv-Master helper card.** Clicking the **SAP#** in the chart header (Trend + Trace) pops a helper card: **SAP# · Description · Manufacturer · VPN** (vendor part number), sourced from the Inventory Master.
+- **#4 Average lead time with 1 year of PR→PO history.** Investigate: the average lead time doesn't populate when only one year of PR→PO history exists; it must not depend on which year it was sourced from.
+- **#5 MRP Cadence replenishment graph — PR-not-yet-PO state.** On the bottom (replenishment) graph: the current filled green box represents a PR that became a PO. A PR **not yet** converted to a PO (manual or MRP) should be **outline-only, no fill** (no commitment yet) + a small label showing **how long the PR has been in the system**.
+- **Optional:** exact-grab (Dark) for the remaining Trace report views (YoY / raw-PRs / chains / cadence) — needs the Trace-page renderers exposed as shared modules. Mirror the cancelled-PR strikethrough onto the Trace page's own Raw Data view. Trim the Letter/Light Trend blocks to match the grabbed card (operator to confirm).
 
 ## ✅ SHIPPED — APP-INT-UITIDY · intake UI roll-ups (2026-08-20) — pushed `2294bd4`; params browser-verified, mapping pending operator upload
 Local snapshot `_rollback/APP-INT-UITIDY-pre/intake/`. No SCHEMA_VERSION change; presentation only (no parser / DQ / scope logic touched). Files: `intake/intake.{html,js,css}`.

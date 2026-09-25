@@ -208,6 +208,36 @@
       renderList();
     });
     $('#btnExport').addEventListener('click', buildExportPdf);
+    const rb = $('#btnBuildReport');
+    if (rb) rb.addEventListener('click', openReportBuilder);
+  }
+
+  // APP-SCR-REPORT — enable the "Build report" button only when a material is
+  // selected (the report is per-material, like the flagged PDF export).
+  function updateReportButton(){
+    const btn = $('#btnBuildReport'); if (!btn) return;
+    btn.disabled = !state.selectedMaterial;
+  }
+  function openReportBuilder(){
+    const entry = state.materials.find(e => e.m.material === state.selectedMaterial);
+    if (!entry) { toast('Pick a material first.', 'crit'); return; }
+    if (typeof ReportBuilder === 'undefined') { toast('Report builder unavailable.', 'crit'); return; }
+    ReportBuilder.open({
+      json:           state.json,
+      m:              entry.m,
+      bucket:         entry.bucket,
+      hasPr:          state.hasPr,
+      analyst:        state.analyst,
+      traceFilters:   traceFiltersFor(entry.m.material),
+      assessmentName: (state.json.metadata && state.json.metadata.assessmentName) || '',
+      // APP-SCR-REPORT-WIDE — the currently-in-band material set + a per-material
+      // Trace-filter resolver, so the widescreen layout can be printed for many
+      // materials at once ("arrange once, print the set").
+      batch: {
+        list:          filteredMaterials().map(e => ({ m: e.m, bucket: e.bucket })),
+        traceFiltersFor: (mat) => traceFiltersFor(mat)
+      }
+    });
   }
 
   function updateExportButton(){
@@ -433,6 +463,7 @@
      COMBINED DETAIL (MaterialDetail + TracePhase) — responsive grid
   ═════════════════════════════════════════════════════════════════════════ */
   function renderDetail(){
+    updateReportButton();   // APP-SCR-REPORT — toggle the Build-report button with selection
     const host = $('#scrDetail');
     const entry = state.materials.find(e => e.m.material === state.selectedMaterial);
     if (!entry) {
