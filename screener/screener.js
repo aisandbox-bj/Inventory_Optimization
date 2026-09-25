@@ -214,27 +214,31 @@
 
   // APP-SCR-REPORT — enable the "Build report" button only when a material is
   // selected (the report is per-material, like the flagged PDF export).
+  // APP-SCR-REPORT — the Build-report button works like "Export flagged": it keys
+  // off the flagged materials (the row checkboxes), and the builder operates on the
+  // whole flagged SET (configure once → generate all), not one selected material.
   function updateReportButton(){
     const btn = $('#btnBuildReport'); if (!btn) return;
-    btn.disabled = !state.selectedMaterial;
+    const n = state.exportFlags.size;
+    btn.textContent = `⤓ Build report (${n})`;
+    btn.disabled = n === 0;
   }
   function openReportBuilder(){
-    const entry = state.materials.find(e => e.m.material === state.selectedMaterial);
-    if (!entry) { toast('Pick a material first.', 'crit'); return; }
+    const flagged = state.materials.filter(e => state.exportFlags.has(e.m.material));
+    if (!flagged.length) { toast('Flag at least one material (the checkbox in the list) first.', 'crit'); return; }
     if (typeof ReportBuilder === 'undefined') { toast('Report builder unavailable.', 'crit'); return; }
+    const ref = flagged[0];   // reference material for arranging/previewing the layout
     ReportBuilder.open({
       json:           state.json,
-      m:              entry.m,
-      bucket:         entry.bucket,
+      m:              ref.m,
+      bucket:         ref.bucket,
       hasPr:          state.hasPr,
       analyst:        state.analyst,
-      traceFilters:   traceFiltersFor(entry.m.material),
+      traceFilters:   traceFiltersFor(ref.m.material),
       assessmentName: (state.json.metadata && state.json.metadata.assessmentName) || '',
-      // APP-SCR-REPORT-WIDE — the currently-in-band material set + a per-material
-      // Trace-filter resolver, so the widescreen layout can be printed for many
-      // materials at once ("arrange once, print the set").
+      // The flagged set: configure the layout once, generate a page-set per material.
       batch: {
-        list:          filteredMaterials().map(e => ({ m: e.m, bucket: e.bucket })),
+        list:          flagged.map(e => ({ m: e.m, bucket: e.bucket })),
         traceFiltersFor: (mat) => traceFiltersFor(mat)
       }
     });
@@ -246,6 +250,7 @@
     const n = state.exportFlags.size;
     btn.textContent = `⤓ Export flagged (${n})`;
     btn.disabled = n === 0;
+    updateReportButton();   // APP-SCR-REPORT — Build-report tracks the same flag set
   }
 
   function renderActiveBands(){

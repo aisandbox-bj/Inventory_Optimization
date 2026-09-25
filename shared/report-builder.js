@@ -499,7 +499,7 @@
   /* ═════════════════════════════════════════════════════════════════════════
      BUILD
   ═════════════════════════════════════════════════════════════════════════ */
-  async function build(ctx, pageSize, order, fitMode, mode){
+  async function build(ctx, pageSize, order, fitMode, mode, onProg){
     await ensureLibs();
     const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
     if (!jsPDFCtor) throw new Error('jsPDF unavailable');
@@ -510,26 +510,42 @@
     // always (each block at full size, blocks kept intact across page breaks).
     const fit = null;
 
+    // The flagged SET (configure once → a page-set per material). Falls back to the
+    // single reference material if no batch was passed.
+    const list = (ctx.batch && ctx.batch.list && ctx.batch.list.length)
+      ? ctx.batch.list : [{ m: ctx.m, bucket: ctx.bucket }];
+
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-100000px;top:0;width:1000px;';
     document.body.appendChild(host);
     try {
-      const P = makePager(doc, g, ctx);
-      for (const b of order){
-        const fn = RENDERERS[b.id];
-        if (!fn) continue;
-        await fn(P, host, b.opts || {}, fit);
+      const pageMat = [];   // 1-based page index → material label (for per-material footers)
+      for (let i = 0; i < list.length; i++){
+        if (onProg) onProg(i + 1, list.length);
+        const mctx = ctxForEntry(ctx, list[i]);
+        if (i > 0) doc.addPage(g.format, g.orientation);   // each material starts a fresh page-set
+        const startPage = doc.getNumberOfPages();
+        const P = makePager(doc, g, mctx);
+        for (const b of order){
+          const fn = RENDERERS[b.id];
+          if (!fn) continue;
+          await fn(P, host, b.opts || {}, fit);
+        }
+        for (let p = startPage; p <= doc.getNumberOfPages(); p++) pageMat[p] = mctx.m.material;
+        if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));   // yield so the UI can repaint on big sets
       }
-      // footer page numbers
+      // footers (per-material label + running page number)
       const pages = doc.getNumberOfPages();
       for (let i=1;i<=pages;i++){
         doc.setPage(i);
         doc.setTextColor(140,148,156); doc.setFont('helvetica','normal'); doc.setFontSize(7);
-        doc.text(pdfSafe(`${ctx.m.material}  -  ${ctx.assessmentName||''}`), g.M, g.H - 5);
+        doc.text(pdfSafe(`${pageMat[i] || ctx.m.material}  -  ${ctx.assessmentName||''}`), g.M, g.H - 5);
         doc.text(`Page ${i} / ${pages}`, g.W - g.M, g.H - 5, { align:'right' });
       }
       const safe = (ctx.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g,'_');
-      const filename = `Screener_Report_${ctx.m.material}_${safe}.pdf`;
+      const filename = list.length > 1
+        ? `Screener_Report_SET_${list.length}_${safe}.pdf`
+        : `Screener_Report_${list[0].m.material}_${safe}.pdf`;
       if (mode === 'preview'){
         // Render in-app instead of downloading — the operator downloads explicitly.
         const url = URL.createObjectURL(doc.output('blob'));
@@ -547,6 +563,7 @@
   ═════════════════════════════════════════════════════════════════════════ */
   function open(ctx){
     if (!ctx || !ctx.m){ return; }
+    const nMat = (ctx.batch && ctx.batch.list && ctx.batch.list.length) || 1;
     // seed working list from catalogue (respecting availability)
     const items = BLOCKS.map(b => ({
       id:b.id, label:b.label, needs:b.needs, soon:!!b.soon, opt:b.opt,
@@ -563,8 +580,8 @@
         <div class="rb-head">
           <div>
             <div class="rb-eyebrow">Calibre · Screener report</div>
-            <div class="rb-title">Build report — ${esc(ctx.m.material)}</div>
-            <div class="rb-sub">${esc(ctx.m.description || '')}</div>
+            <div class="rb-title">${nMat > 1 ? 'Build report — ' + nMat + ' flagged materials' : 'Build report — ' + esc(ctx.m.material)}</div>
+            <div class="rb-sub">${nMat > 1 ? 'Configure once → one page-set per material. Reference for layout: ' + esc(ctx.m.material) + ' ' + esc(ctx.m.description || '') : esc(ctx.m.description || '')}</div>
           </div>
           <button class="rb-x" title="Close">✕</button>
         </div>
@@ -708,7 +725,7 @@
           const theme = (ov.querySelector('input[name="rbtheme"]:checked') || {}).value || 'light';
           await openWideCanvas(ov, close, ctx, blocks, theme);
         } else {
-          const res = await build(ctx, pageSize, blocks, 'multi', 'preview');
+          const res = await build(ctx, pageSize, blocks, 'multi', 'preview', (k, n) => { if (n > 1) gen.textContent = `Rendering ${k}/${n}…`; });
           showPreview(res);
         }
         gen.disabled = false; gen.textContent = orig;

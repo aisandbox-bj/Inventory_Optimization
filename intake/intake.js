@@ -2397,6 +2397,12 @@
      Returns a summary for the toast; on any failure it trims nothing. */
   function trimToScope(json){
     const keep = new Set();
+    // APP-FIX-TRIM-BLOAT (2026-09-25) — keep-set = the ACTUAL in-scope materials only.
+    // For a user-list assessment, keep every listed material explicitly (even ones
+    // with no consumption in the window, so the full list survives). Fleet/consumption
+    // scope is resolved from the pipeline's own buckets.
+    const man = (json.scope && json.scope.manual) || {};
+    for (const m of (man.materials || [])){ const mm = String(m||'').trim(); if (mm) keep.add(mm); }
     try {
       const buckets = (window.AppPipeline && AppPipeline.buildBuckets(json)) || [];
       for (const b of buckets){
@@ -2404,9 +2410,14 @@
         for (const t of (b.transactions||[])){ const m = String(t.material||'').trim(); if (m) keep.add(m); }
       }
     } catch(e){ return { ok:false, error: e.message }; }
-    for (const r of (json.data.prHistory||[])){ const m = String(r.material||'').trim(); if (m) keep.add(m); }
     if (keep.size === 0) return { ok:false, error:'no in-scope materials resolved' };
-    const TABLES = ['inventoryMaster','mb51','materialVendor','leadTimes'];
+    // APP-FIX-TRIM-BLOAT — trim EVERY material-keyed table to the in-scope set,
+    // INCLUDING prHistory. Previously prHistory was kept whole AND every prHistory
+    // material was added to the keep-set, so a full-plant PR extract defeated the
+    // trim entirely (a 250-material list stayed ~20 MB, a 2,500 list ~232 MB). Trace
+    // only ever shows in-scope materials + computeChains filters prHistory by
+    // material, so out-of-scope procurement history is safe to drop.
+    const TABLES = ['inventoryMaster','mb51','materialVendor','leadTimes','prHistory'];
     let dropped = 0;
     for (const tbl of TABLES){
       const rows = json.data[tbl];
