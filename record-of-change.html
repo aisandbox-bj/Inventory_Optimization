@@ -381,6 +381,48 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Weighted delivery dates + first use + review wording fixes - 2026-09-26 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-TRACE-WEIGHTED</b> (quantity-weighted delivery dates) + <b>APP-TRACE-FIRSTUSE</b> (201 counts as use) + review wording fixes — <b>browser-verified; pending operator off-repo validation. LEAD TIMES CHANGE (see below).</b></h4>
+      <ul>
+        <li><b>Source:</b> a read-only review (written while scripting the customer explainer video) raised 7 items, all confirmed against code + data. The operator decided: split deliveries → <b>quantity-weighted</b>, "pull through to all delivery lead calcs"; <b>107 = received at the 3PL (stock, blocked) · 109 = received at site (stock available)</b>; first use → "either" (chose to count cost-centre issues).</li>
+        <li><b>APP-TRACE-WEIGHTED</b> (<code>shared/trace-phase.js computeChains</code>). A PO received in several lots now uses Σ(qty × date) ÷ Σ qty for 107 and for 109 (whole days) — was the FIRST row's date. This flows through phases C, D and E, total to site, Phase Distribution, Year-on-Year, the Trend / Canvas / report lead time, the sigma trim and the report tables, because they all read the same chain.
+          <ul>
+            <li>Qty = the total received at site on the PO (was the first lot only). When several PRs of the material share the PO, the PR's own requested qty is shown instead, so the PO total isn't repeated.</li>
+            <li>Raw Data marks a split delivery "×n" with first → last lot dates, plus a legend. The report tables print "x3" after the date, and the chains-table note explains it. The Trace Volume view keeps the actual receipt dates (physical events).</li>
+          </ul></li>
+        <li><b>Impact on the June assessment (old vs new engine side by side, all 267 materials with a lead time):</b> <b>89 materials' lead time to site got longer, none shorter</b> (a weighted date can only be later than the first lot). Largest moves: 1021776 93 → 190 d · 1021775 94 → 167 d · 1021777 95 → 167 d · 1001370 87 → 108 d · 1004923 26 → 44 d. The biggest are POs carrying several PR lines delivered months apart (e.g. 1021775: one PR, 8 line items, one PO, 7 lots Jan–Jun 2026). Every line gets the same weighted date and each counts in the averages — that is the <b>shared-PO question, still pending</b> (below).</li>
+        <li><b>APP-TRACE-FIRSTUSE.</b> First use = the first 261 (work order) <b>or 201 (cost centre)</b> issue on or after the <b>first</b> site receipt (was 261 only, after the site date).
+          <ul>
+            <li>Shelf time E runs from the weighted receipt date, and is 0 if the part was used before it.</li>
+            <li>The Volume view's "Consumed" line adds 201.</li>
+            <li>Effect: <b>14 orders move from NOT YET CONSUMED to COMPLETE</b>. The review's example (1013868 / PR 40096996, site 2026-07-22, "last consumption" 2026-07-31 but "not yet consumed") was this: the 07-31 issue can only have been a 201, because a 261 would already have made the chain COMPLETE.</li>
+          </ul></li>
+        <li><b>Wording / documentation fixes (no calculation change):</b>
+          <ul>
+            <li>Rule-0 GREY message now names the trigger that fired: "N stockouts inside the P2 window" and/or "a stockout covering X% of the P2 window". It used to say "multiple stockouts" even when one long stockout (≥ 25%) fired it. Verified on the 7 stockout-dominated materials; all are count-triggered, so the single-long-stockout wording is untested on real data.</li>
+            <li>Stale comments in <code>pipeline.js</code> fixed: the redundancy header said 12 months (the code uses 9 / 6, both settings), and the rule-0 comments said "count only".</li>
+            <li><code>inventory-back-calc.js</code> now defines 107 as received at the 3PL (blocked). Comment only: 107 was already excluded from the stock back-calc, so stock-on-hand figures are unchanged.</li>
+            <li>User manual:
+              <ul>
+                <li>"ongoing stockout &gt; 7 days" → "7 days or more" (the code uses ≥ 7);</li>
+                <li>the rule-0 duration trigger added to the text and the rule table;</li>
+                <li>a new "Delivery dates — 3PL, site, split deliveries" paragraph;</li>
+                <li>states table and Raw Data column now read "first use";</li>
+                <li>corrected a wrong line that said only COMPLETE orders count toward lead time (every order received at site counts).</li>
+              </ul></li>
+            <li>Pipeline cache tag bumped (pc1 → pc2) so an open tab can't keep a stale cached result.</li>
+          </ul></li>
+        <li><b>Pending (not in this change) — shared POs:</b> several PRs (or PR line items) of one material on one PO each inherit the PO's delivery, so C/D are counted once per PR (June data: 105 of 1,054 received orders; 23 POs with 2+ PRs of the same material, e.g. 2004641 PO 9600003919 = PRs 40014135 (750) + 40017635 (250)). The operator believed PR→PO was 1:1 and is providing an open PR→PO list to confirm before any change.</li>
+        <li>Files: <code>shared/trace-phase.js</code>, <code>shared/pipeline.js</code>, <code>shared/inventory-back-calc.js</code> (comment), <code>shared/report-builder.js</code>, <code>trace/trace.{js,css}</code>, <code>user-manual.html</code>. No SCHEMA_VERSION change. Rollback: local <code>_rollback/WEIGHTED-DELIVERY-pre/</code> + <code>checkpoint/pre-weighted</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Canvas navigation + lead-time blank reason - 2026-09-26 -->
     <article class="roc-entry dev">
       <div class="head">

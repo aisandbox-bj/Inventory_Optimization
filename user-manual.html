@@ -496,7 +496,7 @@
           <span class="lab">Period rate</span>
           rate = (Σ issues − Σ returns) ÷ months · flag = OK | NO_DATA | NEGATIVE_NET
         </div>
-        <p><b>P2 stockout anchoring (APP-E11).</b> Before computing the P2 rate, the engine checks the back-calc tail (§7c). If the most recent period is an <em>ongoing stockout &gt; 7 days</em>, the P2 window re-anchors at the last-consumption date instead of the run date — otherwise the trailing zero-consumption stockout days would masquerade as "demand dropped." The chosen anchor is reported per material (<code>runDate</code> vs <code>lastConsumption</code>).</p>
+        <p><b>P2 stockout anchoring (APP-E11).</b> Before computing the P2 rate, the engine checks the back-calc tail (§7c). If the most recent period is an <em>ongoing stockout of 7 days or more</em>, the P2 window re-anchors at the last-consumption date instead of the run date — otherwise the trailing zero-consumption stockout days would masquerade as "demand dropped." The chosen anchor is reported per material (<code>runDate</code> vs <code>lastConsumption</code>).</p>
 
         <h3 id="m-soh">7c · Stock-on-hand back-calc &amp; stockout-aware drop detection ★ (APP-E1)</h3>
         <p>A sharp drop in recent consumption has two very different causes: <em>demand genuinely fell</em>, or <em>stock ran out so nothing could be issued.</em> They demand opposite actions. To tell them apart the engine reconstructs the site stock-on-hand history (<code>shared/inventory-back-calc.js</code>).</p>
@@ -510,7 +510,7 @@
         <ul>
           <li><b>Stockout windows</b> — contiguous spans where reconstructed SOH ≤ 0. Each carries start / end / day-count.</li>
           <li><b>Rate-drop cause</b> — when a sharp drop is detected, the engine classifies it as <code>STOCKOUT_DRIVEN</code> (a stockout window overlaps the P2 window) or <code>GENUINE_DEMAND_DROP</code> (stock was available; consumption fell anyway).</li>
-          <li><b>Stockout-dominated</b> — if more than one stockout window falls inside the chosen P2 window, P2 is too unreliable for a verdict; the traffic light is forced <span class="tl-pill GREY">GREY</span> (decision-tree rule 0, §7h) and the rate-change flags are suppressed.</li>
+          <li><b>Stockout-dominated</b> — if more than one stockout window falls inside the chosen P2 window, <b>or</b> stockout days cover at least 25% of it (one long stockout counts; setting <code>p2StockoutDomFraction</code>), P2 is too unreliable for a verdict; the traffic light is forced <span class="tl-pill GREY">GREY</span> (decision-tree rule 0, §7h) and the rate-change flags are suppressed.</li>
         </ul>
         <div class="um-note warn">
           <span class="lab">The SOH line is reconstructed, not pulled from SAP</span>
@@ -561,7 +561,7 @@
         <table class="um-table">
           <thead><tr><th>#</th><th>Condition</th><th>Result</th><th>Action shown</th></tr></thead>
           <tbody>
-            <tr><td>0</td><td><b>Stockout-dominated</b> — &gt;1 stockout window inside the P2 window (§7c)</td><td><span class="tl-pill GREY">GREY</span></td><td>Stockout-dominated recent-rate window — verify supply continuity before changing Min/Max</td></tr>
+            <tr><td>0</td><td><b>Stockout-dominated</b> — &gt;1 stockout window inside the P2 window, <b>or</b> stockout days &ge; 25% of the P2 window (§7c)</td><td><span class="tl-pill GREY">GREY</span></td><td>Stockout-dominated recent-rate window — names what fired (e.g. "2 stockouts inside the P2 window" or "a stockout covering 38% of the P2 window") — verify supply continuity before changing Min/Max</td></tr>
             <tr><td>1</td><td>P2 flag ≠ OK OR P2 rate = 0</td><td><span class="tl-pill GREY">GREY</span></td><td>Refer for manual review — no recent (P2) consumption</td></tr>
             <tr><td>2</td><td>MRP type = NOT IN MASTER</td><td><span class="tl-pill GREY">GREY</span></td><td>Not in Inventory Master — excluded</td></tr>
             <tr><td>3</td><td>Recommended Min not calculable</td><td><span class="tl-pill GREY">GREY</span></td><td>Recommended Min/Max not calculable</td></tr>
@@ -787,9 +787,10 @@
           <li><b>Phase Distribution</b> (default) — five box plots, one per phase, sharing one y-axis = the <b>average total lead time</b> (no padding). Each shows the IQR box, whiskers to min/max, the <b>mean as the bold line</b> (value beside it), jittered points per chain, and a ↑ marker counting values above the scale; a total-lead-time chevron sits above, and a stats table below (the table shows on Trace; it's hidden in the Canvas quick look). Needs ≥ 2 complete chains.</li>
           <li><b>Procurement Chain</b> — a swimlane where each row is one PR/PO chain, broken into five phases (A–E) by elapsed days, plus a funnel cascade (PR generated → cancelled → PR-only → progressed to PO → delivered) with counts and units. Hover a bar for all milestone dates, the phase breakdown, total lead time, qty, and source (manual PR vs MRP-generated).</li>
           <li><b>Year-on-Year</b> — each phase compared across years (e.g. 2025 vs 2026) side by side on the same scale; each column is headed by the phase name + a colour-coded change comment underneath (faster / slower / stable, with the days + %). Per-year total-timeline chevrons at the top compare the whole procurement timeline on one shared scale (a shorter bar = a shorter total). Averages over <b>completed chains only</b> (received POs), so the numbers reconcile with Phase Distribution.</li>
-          <li><b>Volume cumulative</b> — cumulative units over time: PR Raised, PO Raised, Site Receipt (109), Consumed (261), plus cancelled-PR ticks (vertical red lines) and a KPI strip (cancelled count / units / rate, delivered units, and a per-material <b>Pack size</b> multiplier).</li>
-          <li><b>Raw Data</b> — every chain in a table (PR / <b>Trigger</b> / dates / PO / 3PL GR / Site WH / first 261 / phases A–E / total / qty / state), with a per-row exclude/include toggle. <b>Trigger</b> says whether the requisition was raised by an <b>MRP</b> run or <b>Manually</b> (from SAP's creation indicator — the same reading the MRP-run cadence view uses).</li>
+          <li><b>Volume cumulative</b> — cumulative units over time: PR Raised, PO Raised, Site Receipt (109, actual dates), Consumed (261 work-order + 201 cost-centre issues), plus cancelled-PR ticks (vertical red lines) and a KPI strip (cancelled count / units / rate, delivered units, and a per-material <b>Pack size</b> multiplier).</li>
+          <li><b>Raw Data</b> — every chain in a table (PR / <b>Trigger</b> / dates / PO / 3PL GR / Site WH / first use / phases A–E / total / qty / state), with a per-row exclude/include toggle. <b>Trigger</b> says whether the requisition was raised by an <b>MRP</b> run or <b>Manually</b> (from SAP's creation indicator — the same reading the MRP-run cadence view uses).</li>
         </ul>
+        <p><b>Delivery dates — 3PL, site, split deliveries.</b> <b>3PL GR</b> is movement 107: the goods arrived at the 3PL (stock, but blocked). <b>Site WH</b> is movement 109: received at site, stock available. Both are matched to the chain by PO number. When a PO arrives in several lots (several 107 or 109 rows), the date used is the <b>quantity-weighted date</b> — Σ(qty × date) ÷ Σ qty — in <b>every</b> lead-time figure (phases C, D, E, total to site, Year-on-Year, Trend / Canvas lead time, reports). Raw Data marks such a delivery <b>×n</b> with the first → last lot dates; the reports print "x3" after the date. Qty is the total received at site on the PO (or the PR's own requested qty when the PO combines several PRs). <b>First use</b> is the first work-order (261) or cost-centre (201) issue on or after the first site receipt; shelf time (E) runs from the weighted receipt date, and is 0 if the part was used before that.</p>
         <p><b>Release-date data quality.</b> PR Approval (phase A, PR→release) and Internal Processing (phase B, release→PO) depend on the PR's release date. When that date is missing or impossible (dated before the PR or after the PO), the chain is dropped from those two phases — shown as <code>n/a</code> in the swimlane tooltip and counted in a data-quality note on Phase Distribution / Year-on-Year — rather than reporting a phantom 0-day or a huge phantom duration. Phases C–E (which don't depend on the release date) are unaffected.</p>
 
         <h3>Chain state machine</h3>
@@ -799,9 +800,9 @@
           <tbody>
             <tr><td><b>CANCELLED</b></td><td>PR, no PO, deletion flag — red-tinted; kept out of the swimlane visual + funnel but visible in Raw Data.</td></tr>
             <tr><td><b>PR_ONLY</b></td><td>PR, no PO, not cancelled — open demand not yet ordered.</td></tr>
-            <tr><td><b>IN_FLIGHT</b></td><td>PO but no site receipt (109) yet.</td></tr>
-            <tr><td><b>NOT_YET_CONSUMED</b></td><td>Received but no consumption (261) yet.</td></tr>
-            <tr><td><b>COMPLETE</b></td><td>PO + receipt + consumption — the only state counted toward average total lead time.</td></tr>
+            <tr><td><b>IN_FLIGHT</b></td><td>PO but no site receipt (109) yet — may be at the 3PL (107, blocked stock).</td></tr>
+            <tr><td><b>NOT_YET_CONSUMED</b></td><td>Received at site but not used yet — no work-order (261) or cost-centre (201) issue since the first site receipt.</td></tr>
+            <tr><td><b>COMPLETE</b></td><td>PO + receipt + consumption. Lead time to site (A–D) counts every order <b>received at site</b> — COMPLETE and NOT_YET_CONSUMED; shelf time (E) needs a use.</td></tr>
           </tbody>
         </table>
         <p>Phase colours on the swimlane: <span class="sw phA"></span>A &nbsp;<span class="sw phB"></span>B &nbsp;<span class="sw phC"></span>C &nbsp;<span class="sw phD"></span>D &nbsp;<span class="sw phE"></span>E. An admin-cancel (PO present but PR deletion flagged) renders in its actual phase colour with an advisory annotation, not red.</p>

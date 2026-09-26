@@ -49,9 +49,12 @@
      ─── SITE OVERRIDE — DO NOT "FIX" BACK TO STANDARD SAP SEMANTICS ───
      This client uses non-standard semantics for 101 / 107:
        101 = GR at the 3PL (off-site) warehouse. Does NOT touch site WH.
-       107 = shipping from 3PL toward site (in-transit). Does NOT touch
-             site WH unrestricted yet.
-       109 = GR at the site WH unrestricted. THIS is the site receipt.
+       107 = received at the 3PL — stock, but BLOCKED (not yet available).
+             Does NOT touch site WH unrestricted. (Operator-confirmed
+             2026-09-26; an earlier note here called it "dispatch from the
+             3PL / in-transit" — wrong. Trace phase C = PO → 107, D = 107 → 109.)
+       109 = received at site — stock AVAILABLE (site WH unrestricted).
+             THIS is the site receipt.
      Standard SAP reference materials treat 101 as a site receipt — that
      is wrong for this client. Operator-confirmed 2026-05-16. Do NOT
      "correct" 101/107 back to standard semantics.

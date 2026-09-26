@@ -1513,7 +1513,7 @@
               <th>PO date</th>
               <th>3PL GR</th>
               <th>Site WH</th>
-              <th>First 261</th>
+              <th>First use</th>
               <th class="num">A</th>
               <th class="num">B</th>
               <th class="num">C</th>
@@ -1527,6 +1527,7 @@
           <tbody id="chainTableBody"></tbody>
         </table>
       </div>
+      <div class="raw-data-note">3PL GR = arrived at the 3PL (MVT 107, blocked stock) · Site WH = received at site (MVT 109, stock available). <b>×n</b> = split delivery in n lots — the date shown is the quantity-weighted date, used in every lead-time figure; first → last lot underneath. First use = first work-order (261) or cost-centre (201) issue after the first site receipt. Qty = total received at site, or the PR's requested qty when the PO combines several PRs.</div>
     `;
     renderChainTable();
     bindRawDataControls(material);
@@ -1763,9 +1764,10 @@
       r => r.postingDate,
       r => Math.abs(parseFloat(r.quantity) || 0) * ps
     );
-    // Consumed: MB51 MVT 261 — same independence rationale
+    // Consumed: MB51 MVT 261 (work order) + 201 (cost centre) — same independence
+    // rationale; 201 added with APP-TRACE-FIRSTUSE so it matches "Last consumption".
     const consSeries = buildCumulativeSeries(
-      mb51.filter(r => String(r.movementType || '').trim() === '261'),
+      mb51.filter(r => { const mt = String(r.movementType || '').trim(); return mt === '261' || mt === '201'; }),
       r => r.postingDate,
       r => Math.abs(parseFloat(r.quantity) || 0) * ps
     );
@@ -2843,6 +2845,13 @@
       </div>`;
   }
 
+  // APP-TRACE-WEIGHTED — a split delivery shows "×n" after its (quantity-weighted)
+  // date, with the first → last lot dates underneath (visible text; hovers are off).
+  function splitTag(s){
+    if (!s) return '';
+    return `<span class="split-tag">×${s.n}</span><div class="split-sub">${escapeHtml(s.first)} → ${escapeHtml(s.last)}</div>`;
+  }
+
   function renderChainTable(){
     // APP-V03-PORT-1 (2026-05-24) — row tint follows STATE, not raw cancellation
     // flag. adminCancelled chains (PR cancel-flag set AFTER PO raised) keep
@@ -2875,8 +2884,8 @@
           <td class="mono">${escapeHtml(c.prDate || '—')}</td>
           <td class="mono">${escapeHtml(c.po || '—')}</td>
           <td class="mono">${escapeHtml(c.poDate || '—')}</td>
-          <td class="mono">${escapeHtml(c.gr3pl || '—')}</td>
-          <td class="mono">${escapeHtml(c.siteWH || '—')}</td>
+          <td class="mono">${escapeHtml(c.gr3pl || '—')}${splitTag(c.split107)}</td>
+          <td class="mono">${escapeHtml(c.siteWH || '—')}${splitTag(c.split109)}</td>
           <td class="mono">${escapeHtml(c.c261  || '—')}</td>
           <td class="num mono">${cellNum(c.A)}</td>
           <td class="num mono">${cellNum(c.B)}</td>

@@ -81,25 +81,46 @@
     const prRows = prHistory.filter(r => String(r.material || '').trim() === material);
 
     const mb51ForMat = mb51.filter(r => String(r.material || '').trim() === material);
-    const firstByPoMvt = new Map();
+    // APP-TRACE-WEIGHTED (2026-09-26, operator decision) — split deliveries. A PO
+    // received in several lots has several 107 (arrived at 3PL, blocked stock) and/or
+    // 109 (received at site, stock available) rows. Per the Trace spec, the delivery
+    // date used in EVERY lead-time calc is the QUANTITY-WEIGHTED date:
+    //   weighted = Σ(qty_i × day_i) / Σ qty_i   (whole days; equal weights if all qty 0)
+    // Was: the FIRST row's date and qty only. Kept per PO+movement for transparency:
+    // n lines, first / last date, total qty.
+    const byPoMvt = new Map();
     for (const r of mb51ForMat) {
       const po = String(r.purchaseOrder || '').trim();
       const mvt = String(r.movementType || '').trim();
-      if (!po || !mvt) continue;
-      const key = po + '|' + mvt;
+      if (!po || (mvt !== '107' && mvt !== '109')) continue;
       const d = parseISO(r.postingDate);
       if (!d) continue;
-      const existing = firstByPoMvt.get(key);
-      if (!existing || d < existing.date) {
-        firstByPoMvt.set(key, { date: d, qty: numOr(r.quantity, 0) });
-      }
+      const key = po + '|' + mvt;
+      const q = Math.abs(numOr(r.quantity, 0));
+      const dayN = d.getTime() / 86400000;
+      const a = byPoMvt.get(key) || { n: 0, sumQ: 0, sumQD: 0, sumD: 0, first: null, last: null };
+      a.n++; a.sumQ += q; a.sumQD += q * dayN; a.sumD += dayN;
+      if (!a.first || d < a.first) a.first = d;
+      if (!a.last  || d > a.last)  a.last  = d;
+      byPoMvt.set(key, a);
+    }
+    for (const a of byPoMvt.values()) {
+      const w = a.sumQ > 0 ? a.sumQD / a.sumQ : a.sumD / a.n;
+      a.date = new Date(Math.round(w) * 86400000);   // weighted date, whole day (UTC)
     }
 
+    // First use = the first consumption: a work-order issue (261) OR a cost-centre
+    // issue (201) — the same movements "Last consumption" counts (APP-TRACE-FIRSTUSE,
+    // operator 2026-09-26; was 261 only, which left a chain "not yet consumed" when
+    // the part had in fact been issued to a cost centre).
     const cons261 = mb51ForMat
-      .filter(r => String(r.movementType || '').trim() === '261')
+      .filter(r => { const mt = String(r.movementType || '').trim(); return mt === '261' || mt === '201'; })
       .map(r => parseISO(r.postingDate))
       .filter(Boolean)
       .sort((a, b) => a - b);
+    // How many PRs of THIS material sit on each PO (a PO can combine several PRs).
+    const prsPerPo = new Map();
+    for (const r of prRows) { const po = String(r.purchaseOrder || '').trim(); if (po) prsPerPo.set(po, (prsPerPo.get(po) || 0) + 1); }
 
     return prRows.map(r => {
       const pr        = String(r.pr || '').trim();
@@ -107,10 +128,19 @@
       const prDate    = parseISO(r.prDate);
       const relDate   = parseISO(r.releaseDate);
       const poDate    = parseISO(r.poDate);
-      const gr3pl     = po ? (firstByPoMvt.get(po + '|107')?.date || null) : null;
-      const siteWH    = po ? (firstByPoMvt.get(po + '|109')?.date || null) : null;
-      const qtyAtWH   = po ? (firstByPoMvt.get(po + '|109')?.qty || 0)      : 0;
-      const c261      = siteWH ? cons261.find(d => d >= siteWH) || null : null;
+      const a107      = po ? (byPoMvt.get(po + '|107') || null) : null;
+      const a109      = po ? (byPoMvt.get(po + '|109') || null) : null;
+      const gr3pl     = a107 ? a107.date : null;                 // weighted arrival at 3PL
+      const siteWH    = a109 ? a109.date : null;                 // weighted receipt at site
+      // Consumed? — any use on/after the FIRST site receipt (a split delivery can be
+      // used before its weighted date). Shelf time E runs weighted receipt → that use;
+      // if the use came before the weighted date, E is 0 (days() floors negatives).
+      const c261      = a109 ? cons261.find(d => d >= a109.first) || null : null;
+      // Qty: total received at site on this PO. When several PRs of this material
+      // share the PO, the PO's total would repeat on each — show the PR's own
+      // requested qty instead (shared-PO handling of phases is pending, see RoC).
+      const sharedPo  = !!po && (prsPerPo.get(po) || 0) > 1;
+      const qtyAtWH   = (a109 && !sharedPo) ? a109.sumQ : 0;
 
       // APP-FIX-T-04c — cancellation = deletion flag AND processingStatus 'N'.
       const cancelled = String(r.deletionIndicator || '').toLowerCase() === 'true'
@@ -159,6 +189,10 @@
         releaseBad,
         qty:      qtyAtWH || numOr(r.qtyRequested, 0),
         qtySource: qtyAtWH ? 'MB51-109' : 'PR-requested',
+        // APP-TRACE-WEIGHTED — split-delivery transparency (n lines, first → last)
+        split107: a107 && a107.n > 1 ? { n: a107.n, first: fmtISO(a107.first), last: fmtISO(a107.last), qty: a107.sumQ } : null,
+        split109: a109 && a109.n > 1 ? { n: a109.n, first: fmtISO(a109.first), last: fmtISO(a109.last), qty: a109.sumQ } : null,
+        sharedPo,
         state:    state_,
         cancelled,
         adminCancelled,

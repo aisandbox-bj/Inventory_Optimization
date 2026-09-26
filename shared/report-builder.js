@@ -293,6 +293,9 @@
     P.y = doc.lastAutoTable.finalY + 5;
   }
 
+  // APP-TRACE-WEIGHTED — a date cell for a split delivery: the weighted date + ' xn'
+  function wd(date, split, blank){ return date ? (split ? date + ' x' + split.n : date) : blank; }
+
   // Lead time for the report/tile text — the figure, or "—" plus the short reason
   // when the material has PR History but no order linked to a site receipt (APP-LT-GAP).
   function leadTxt(m){
@@ -502,7 +505,7 @@
     const rows = (act || []).slice(0, N).map(c => [
       c.pr || '-',
       (c.creationIndicator === 'B') ? 'MRP' : 'Manual',
-      c.prDate || '-', c.po || '-', c.poDate || '-', c.gr3pl || '-', c.siteWH || '-', c.c261 || '-',
+      c.prDate || '-', c.po || '-', c.poDate || '-', wd(c.gr3pl, c.split107, '-'), wd(c.siteWH, c.split109, '-'), c.c261 || '-',
       c.A!=null?String(c.A):'-', c.B!=null?String(c.B):'-', c.C!=null?String(c.C):'-', c.D!=null?String(c.D):'-', c.E!=null?String(c.E):'-',
       c.total!=null?String(c.total):'-', c.qty!=null?String(c.qty):'-', (c.state||'-').replace(/_/g,' ')
     ].map(pdfSafe));
@@ -510,7 +513,7 @@
     P.ensure((rows.length + 1) * 4.9 + 6);   // reserve room for the whole table
     doc.autoTable({
       startY: P.y,
-      head: [['PR','Trig','PR date','PO','PO date','3PL GR','Site WH','1st 261','A','B','C','D','E','Tot','Qty','State']],
+      head: [['PR','Trig','PR date','PO','PO date','3PL GR','Site WH','1st use','A','B','C','D','E','Tot','Qty','State']],
       body: rows, theme:'grid', pageBreak:'avoid', rowPageBreak:'avoid',
       styles:{ fontSize:6.6, cellPadding:1, lineColor:[214,220,224], lineWidth:0.1, overflow:'ellipsize', halign:'center' },   // every column centred (operator 2026-09-25)
       headStyles:{ fillColor:[12,45,59], textColor:255, fontStyle:'bold', fontSize:6.6, halign:'center' },
@@ -559,7 +562,7 @@
     const mix = (a, b, u) => a.map((x, i) => Math.round(x + (b[i] - x) * u));
     return { rgb: t < 0.5 ? mix(G, Y, t * 2) : mix(Y, R, (t - 0.5) * 2), a: 0.55 };
   }
-  const HEAT_NOTE = 'Shading: phases B, C, D — slowest chain in red, fastest unshaded · To site — green (fastest) to red (slowest).';
+  const HEAT_NOTE = 'Shading: phases B, C, D — slowest chain in red, fastest unshaded · To site — green (fastest) to red (slowest). "x3" after a date = delivered in 3 lots; the date is the quantity-weighted date.';
 
   async function blockChains(P, host, opts, fit){
     const { doc, g, ctx } = P; const M = g.M; const CW = g.W - 2*M;
@@ -571,7 +574,7 @@
     const chains = (drawn || []).slice(0, N);
     if (!chains.length){ thinNote(P, 'No completed procurement chains for this material.'); return; }
     const rows = chains.map(c => [
-      c.pr||'-', c.po||'-', c.prDate||'-', c.siteWH||'-',
+      c.pr||'-', c.po||'-', c.prDate||'-', wd(c.siteWH, c.split109, '-'),
       c.A!=null?c.A+'d':'-', c.B!=null?c.B+'d':'-', c.C!=null?c.C+'d':'-', c.D!=null?c.D+'d':'-',
       (c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'-'), c.E!=null?c.E+'d':'-', c.qty!=null?String(c.qty):'-'
     ].map(pdfSafe));
@@ -1078,11 +1081,11 @@
       else {
         const dc = drawnChains(ctx);
         if (id==='rawpr'){
-          const rows=(dc.act||[]).slice(0,N).map(c=>[c.pr||'—',(c.creationIndicator==='B')?'MRP':'Manual',c.prDate||'—',c.po||'—',c.siteWH||'—',c.A!=null?String(c.A):'—',c.B!=null?String(c.B):'—',c.C!=null?String(c.C):'—',c.D!=null?String(c.D):'—',c.total!=null?String(c.total):'—',c.qty!=null?String(c.qty):'—',(c.state||'—').replace(/_/g,' ')]);
+          const rows=(dc.act||[]).slice(0,N).map(c=>[c.pr||'—',(c.creationIndicator==='B')?'MRP':'Manual',c.prDate||'—',c.po||'—',wd(c.siteWH,c.split109,'—'),c.A!=null?String(c.A):'—',c.B!=null?String(c.B):'—',c.C!=null?String(c.C):'—',c.D!=null?String(c.D):'—',c.total!=null?String(c.total):'—',c.qty!=null?String(c.qty):'—',(c.state||'—').replace(/_/g,' ')]);
           inner += rows.length?htmlTable(TH,['PR','Trig','PR date','PO','Site WH','A','B','C','D','Tot','Qty','State'],rows,{center:[0,1,2,3,4,5,6,7,8,9,10,11], strike:(r)=>/CANCELL/i.test(r[11])}):`<div style="color:${TH.sub};font-size:12px">No PRs.</div>`;
         } else {
           const sel=(dc.drawn||[]).slice(0,N);
-          const rows=sel.map(c=>[c.pr||'—',c.po||'—',c.prDate||'—',c.siteWH||'—',c.A!=null?c.A+'d':'—',c.B!=null?c.B+'d':'—',c.C!=null?c.C+'d':'—',c.D!=null?c.D+'d':'—',c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'—',c.qty!=null?String(c.qty):'—']);
+          const rows=sel.map(c=>[c.pr||'—',c.po||'—',c.prDate||'—',wd(c.siteWH,c.split109,'—'),c.A!=null?c.A+'d':'—',c.B!=null?c.B+'d':'—',c.C!=null?c.C+'d':'—',c.D!=null?c.D+'d':'—',c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'—',c.qty!=null?String(c.qty):'—']);
           const scales=heatScales(sel);   // APP-RB-CHAINHEAT — same shading as the Letter table
           const cellBg=(ri,ci)=>{ const h=CHAIN_HEAT[ci]; if(!h) return null; const f=heatFill(sel[ri][h.key], scales[ci]); return f?`rgba(${f.rgb.join(',')},${f.a.toFixed(3)})`:null; };
           inner += rows.length?htmlTable(TH,['PR','PO','PR date','Site WH','A','B','C','D','To site','Qty'],rows,{center:[0,1,2,3,4,5,6,7,8,9], cellBg})

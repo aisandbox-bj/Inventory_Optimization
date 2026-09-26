@@ -358,8 +358,8 @@
    *  1. p2Flag != OK or p2Rate == 0           → GREY   ("no recent consumption")
    *  2. mrpType == "NOT IN MASTER"             → GREY   ("excluded")
    *  3. recMin is null                         → GREY   ("not calculable")
-   *  4. PD AND stock-runway > 12 mo            → PURPLE ("likely Working Redundant")     ← v1.1.0
-   *  5. PD AND stock-runway > 6 mo             → PURPLE ("possible Working Redundant")   ← v1.1.0
+   *  4. PD AND stock-runway > wrHardMonths (default 9 mo) → PURPLE ("likely Working Redundant")
+   *  5. PD AND stock-runway > wrSoftMonths (default 6 mo) → PURPLE ("possible Working Redundant")
    *  6. mrp=PD AND total ≥ threshold           → RED    ("change to V1")
    *  7. mrp=V1 AND rec=current                 → GREEN  ("no action")
    *  8. mrp=V1 AND ALL rec < current           → BLUE   ("lower, safe")
@@ -371,16 +371,24 @@
    * outcome is upgraded to ORANGE with a "few events" rationale. RED, GREY,
    * and PURPLE keep their priority (they're already review-priority).
    */
-  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated){
+  // Rule-0 wording names the trigger that actually fired (count and/or duration).
+  function stockoutWhy(si){
+    const n = si && si.count || 0, pct = si && si.frac != null ? Math.round(si.frac * 100) : null;
+    const parts = [];
+    if (n > 1) parts.push(n + ' stockouts inside the P2 window');
+    if (pct != null && pct > 0 && (n <= 1 || pct >= 25)) parts.push((n <= 1 ? 'a stockout covering ' : 'stockouts covering ') + pct + '% of the P2 window');
+    return parts.length ? parts.join(' and ') : 'stockouts inside the P2 window';
+  }  function assess(mrpType, total, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated, stockoutInfo){
     // ── APP-E11 · STOCKOUT-DOMINATED gate (rule 0) ──────────────────────
-    // More than one stockout window inside the chosen P2 window — the P2
-    // rate (and therefore the rate-change verdict) is not trustworthy.
+    // More than one stockout window inside the chosen P2 window, OR stockout days
+    // covering at least p2StockoutDomFraction (default 25%) of it (APP-E11b) — the
+    // P2 rate (and therefore the rate-change verdict) is not trustworthy.
     // Forced GREY with a stockout-specific message; supply continuity
     // should be addressed before any Min/Max change.
     if (stockoutDominated) {
       return finalise({
         code:'GREY',
-        action:'Stockout-dominated recent-rate window — multiple stockouts inside the P2 window make the rate unreliable. Verify supply continuity before changing Min/Max.',
+        action:'Stockout-dominated recent-rate window — ' + stockoutWhy(stockoutInfo) + ' make the rate unreliable. Verify supply continuity before changing Min/Max.',
         recMin:null, recMax:null
       }, woCount);
     }
@@ -992,9 +1000,9 @@
         }
 
         // ── APP-E11 · Stockout-dominated detection ───────────────────────
-        // If MORE THAN ONE stockout window falls inside the chosen P2 window,
-        // P2 is too dominated by stockouts to produce a trustworthy
-        // demand-rate verdict. The traffic-light is forced GREY (handled
+        // If MORE THAN ONE stockout window falls inside the chosen P2 window, or the
+        // stockout days cover >= p2StockoutDomFraction of it (APP-E11b, below), P2 is
+        // too dominated by stockouts to produce a trustworthy demand-rate verdict. The traffic-light is forced GREY (handled
         // inside assess()), and rateDropFlag / rateRiseFlag / rateChange
         // are suppressed below.
         let p2StockoutCount = 0;
@@ -1038,7 +1046,7 @@
           : rminCalc;
 
         const woCount = countIssueWorkOrders(tx);
-        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated);
+        const tl = assess(mrpType, q.totalNet, threshold, p2r, p2f, cmin, cmax, rmin, rmax, stock, woCount, params, stockoutDominated, { count: p2StockoutCount, days: p2StockoutDays, frac: p2StockoutFrac });
         bucketSummary[tl.code] = (bucketSummary[tl.code] || 0) + 1;
         bucketSummary.total++;
         summary[tl.code]  = (summary[tl.code]  || 0) + 1;
@@ -1237,7 +1245,7 @@
     const d = (json && json.data) || {};
     const c = k => (Array.isArray(d[k]) ? d[k].length : 0);
     return [
-      'pc1',
+      'pc2',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording) so a tab can't keep a stale cached result
       m.assessmentName || m.name || '', m.uploadedAt || '', m.savedAt || '', m.createdAt || '',
       m.inventoryMasterDate || '',
       (json && json.SCHEMA_VERSION) || m.schemaVersion || '',

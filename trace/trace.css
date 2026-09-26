@@ -1168,3 +1168,9 @@
   border-left: 3px solid; padding-left: 8px;
 }
 .yoy-chev-year small{ font-weight: 400; font-size: 9px; color: var(--text-muted); }
+
+/* APP-TRACE-WEIGHTED (2026-09-26) — split-delivery marker in the Raw Data table */
+.chain-table .split-tag{ margin-left:5px; padding:0 5px; border-radius:8px; font-size:10px; font-weight:700;
+  color:#FBBF24; border:1px solid rgba(251,191,36,.5); }
+.chain-table .split-sub{ font-size:9.5px; color:var(--text-muted,#9BABA8); margin-top:2px; white-space:nowrap; }
+.raw-data-note{ margin:8px 2px 0; font-family:var(--font-body,'Barlow'),sans-serif; font-size:11.5px; line-height:1.45; color:var(--text-muted,#9BABA8); }
