@@ -814,6 +814,28 @@
 
         <h3>PDF export</h3>
         <p>Flag materials with the row checkbox, then <b>Export flagged</b> → one letter page per material (chart + key stats + MRP above a visual timeline chevron + named box plots). Built client-side (chart/box-plot SVG → JPEG + jsPDF); the PDF libraries load only on the first Export click.</p>
+
+        <h3 id="report-builder">Build report — a customisable report (v2.2.0)</h3>
+        <p><b>⤓ Build report (N)</b> works like Export flagged: it uses the materials you've <b>flagged</b> with the row checkbox and builds the whole set in one go — configure once, get a page-set per material. The first flagged material is the reference you see while arranging.</p>
+        <ol>
+          <li><b>Page size.</b> <b>US Letter</b> (portrait, stacked, report style) or <b>Widescreen 16:9</b> (landscape, for 1080p / 4K screens). Widescreen adds an appearance choice: <b>Light</b> (report style with discreet section breaks) or <b>Dark</b> (an exact grab of what you see on screen).</li>
+          <li><b>Blocks.</b> Tick the blocks you want and drag ⠿ to reorder: Trend graph + metrics · Trace average supply duration (optional box-and-whisker) · Trace annual progression (Year-on-Year, with each phase's days printed in its segment) · Trace last-X PRs (cancelled PRs in bold red strikethrough) · Trace last-X procurement chains · <b>MRP-run cadence</b> (both graphs — PR→PO vs cancelled, and the replenishment chart; weekly, same date range as the Trend chart) · Comment. Trace blocks need PR History.</li>
+          <li><b>Preview.</b> The report renders right inside the app — nothing is saved to Downloads until you click <b>⤓ Download PDF</b> (or <b>🖨 Print</b>). US Letter runs to as many full-size pages as it needs (reports are never crammed onto one page) and tables are never split across a page break.</li>
+        </ol>
+        <p><b>Widescreen layout canvas.</b> In Widescreen, each block becomes a card on a 16:9 page: drag to move, drag the corner to resize (cards keep their shape; the Comment card resizes freely), <b>✕</b> deletes a card and <b>＋ Add tile</b> brings one back. <b>Print set…</b> prints the same arranged layout for every flagged material you pick — one landscape page each.</p>
+
+        <h3 id="report-comments">Comments — write while you look, never lose them</h3>
+        <p>When the report is for a <b>single</b> material, the preview has a <b>✎ Comment</b> box docked above the page. Type while you read the report — it saves as you type — and click <b>↻ Update</b> to refresh the preview with it. (For a multi-material set the box is hidden, because one comment can only belong to one material.)</p>
+        <p>Each comment is kept <b>against the SAP material number</b>, in two places:</p>
+        <ul>
+          <li>as that material's <b>analyst note</b> for the current assessment — so it also shows in the Trend notes drawer and travels inside a downloaded JSON, and</li>
+          <li>in a separate <b>comment store in your browser</b>, independent of any uploaded data.</li>
+        </ul>
+        <p>So you can <b>delete the JSON</b>, load a fresh one later — even an assessment with a different name — and as soon as it contains that material, your last comment is waiting. When a comment has been brought forward from another assessment, the box says so: <em>"carried forward · &lt;date&gt; · from &lt;assessment&gt;"</em>.</p>
+        <p><b>Back them up.</b> The <b>💬 Comments (N)</b> button on the Screener toolbar shows how many materials have a saved comment and offers <b>Export backup file…</b> (a small <code>calibre-comments.json</code>) and <b>Import from file…</b>. Use it to keep your comments safe if the browser's data is cleared, or to move them to another machine. Importing <b>merges</b>: for any material, the newer edit wins, and an older copy never overwrites a newer one.</p>
+
+        <h3 id="report-workbench">The preview is a workbench</h3>
+        <p>Drag the preview's <b>top bar</b> to move it, drag the <b>cyan grip</b> in the bottom-right corner to resize it (making it bigger is the quickest way to zoom in on the report), or click <b>⤢ Maximize</b> for a near-full-screen look (<b>⤡ Restore</b> puts it back). The PDF viewer's own zoom controls also work inside the preview. <b>‹ Back</b> returns everything to normal.</p>
       </section>
 
       <!-- ───────────── 14 · Troubleshooting ───────────── -->
@@ -844,9 +866,13 @@
           <span class="lab">LLM review fails with "Failed to fetch"</span>
           Usually CORS from opening via <code>file://</code>. Serve over HTTP: from the app folder run <code>python -m http.server 8000</code> and open <code>http://localhost:8000</code>.
         </div>
+        <div class="um-note warn">
+          <span class="lab">My report comments are gone</span>
+          Comments live in this browser, keyed by material number — they survive deleting or replacing the JSON and Settings' "Wipe all local data", but not clearing the browser's site data, a private/incognito window, or a different browser/machine. Restore them with <b>💬 Comments → Import from file…</b> using your last <code>calibre-comments.json</code> backup. Export a fresh backup after a heavy commenting session.
+        </div>
         <div class="um-note">
           <span class="lab">Start clean</span>
-          Settings → About → <b>Wipe all local data</b> clears every saved intake, alias override, and LLM key (or DevTools → Application → Clear site data).
+          Settings → About → <b>Wipe all local data</b> clears every saved intake, alias override, and LLM key. It deliberately does <b>not</b> touch your saved report comments or analyst notes — they survive a wipe. Only clearing the browser's site data (DevTools → Application → Clear site data) removes those, so export a <code>calibre-comments.json</code> backup first if you go that route.
         </div>
       </section>
 

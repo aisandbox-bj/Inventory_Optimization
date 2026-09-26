@@ -2,7 +2,7 @@
 
 Paste this into a fresh Claude Code session to bring me up to speed on the project state. Don't edit — copy verbatim. Claude will read this, check the listed files, and confirm before doing anything.
 
-> **Note:** This file ships at the repo root (it mirrors `v2.1.5-dev/`). The richer, project-level session-start protocol lives in `CLAUDE.md` and `_Hand-over docs/` in the working folder — prefer those when the full project folder is available. This file is the orientation for a repo-only context.
+> **Note:** This file ships at the repo root (it mirrors `v2.2.0-dev/`). The richer, project-level session-start protocol lives in `CLAUDE.md` and `_Hand-over docs/` in the working folder — prefer those when the full project folder is available. This file is the orientation for a repo-only context.
 
 ---
 
@@ -18,27 +18,30 @@ I'm continuing work on **Calibre Tune** (the Inventory Optimization App) — a b
 
 **Project lives at:** `C:\Users\Test_Home\Documents\ClaudeCode\Projects\2026_05_12 - Inventory Optimization\`
 
-**Active working directory:** `4 - Build Output\Inventory Optimization App\v2.1.5-dev\` (current development). Frozen — do NOT edit: `archive\v1 (frozen)`, `archive\v1.0.0`, `archive\v1.1.0`. Immediate rollback snapshot (pre-v2.1.5 bump): `4 - Build Output\Inventory Optimization App\v2.1.4-dev\`. Rollback snapshot of the last released tag: `4 - Build Output\Inventory Optimization App\v2.1.1\`.
+**Active working directory:** `4 - Build Output\Inventory Optimization App\v2.2.0-dev\` (current development). Frozen — do NOT edit: `archive\v1 (frozen)`, `archive\v1.0.0`, `archive\v1.1.0`. Immediate rollback snapshot (pre-v2.2.0 bump): `4 - Build Output\Inventory Optimization App\v2.1.5-dev\`. Rollback snapshot of the last released tag: `4 - Build Output\Inventory Optimization App\v2.1.1\`.
 
-**GitHub repo:** [aisandbox-bj/Inventory_Optimization](https://github.com/aisandbox-bj/Inventory_Optimization) — repo root content mirrors `v2.1.5-dev/` (excludes `_rollback/`). Tags `v1.0.0` / `v1.1.0` preserve prior releases for rollback. `gh` CLI authenticated as `aisandbox-bj`.
+**GitHub repo:** [aisandbox-bj/Inventory_Optimization](https://github.com/aisandbox-bj/Inventory_Optimization) — repo root content mirrors `v2.2.0-dev/` (excludes `_rollback/`). Tags `v1.0.0` / `v1.1.0` preserve prior releases for rollback. `gh` CLI authenticated as `aisandbox-bj`.
 
-**Current version:** `v2.1.5-dev` (bumped from v2.1.4-dev on 2026-08-15; v2.1.4-dev frozen as the immediate rollback snapshot). **origin/main = the newest `record-of-change.html` entry** (2026-08-18 = the "template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks" pass, on top of `54cdee1` = code `cf5f31f` + doc follow-up; don't hard-pin — confirm against the RoC). *Phase-0 = `APP-PIPE-CACHE`: `AppPipeline.runPipelineCached` memoises the last pipeline result in sessionStorage (fingerprinted on assessment + row counts + json.parameters + runDate) so Trend↔Trace hops skip the recompute — ~24× on a hit, byte-identical, correct invalidation. Rollback refs `backup/pre-template-fleet-phase0`@`54cdee1`.* *(On top of `838a93f` came two same-day cadence passes: `275a54d` — dual-chart overhaul, one resizable tile + stock-status dot strip + new replenishment chart + day/month/year axis + always-ends-today ≥3mo span; then `cf5f31f` — pass 3: PR→PO/Cancelled bars, every-month stacked axis, blue-stock/green-PO/hatched-manual/red-cancelled-dots, click-triggered native helpers, empty-slot "Stock: 0" fix. Rollback refs `backup/pre-mrpfreq-graph2`@`f09b6ec`, `backup/pre-mrpfreq-graph3`@`275a54d`.)* *Earlier:* `1d83614` was the whole 2026-08-15 dev day pushed as three area-grouped commits on top of `57219eb` (Trace `0f342be` · Trend+shared `8d3f2ae` · Docs `74baea5`) plus a doc-accuracy follow-up `1d83614` (no SCHEMA_VERSION change). **The "16-Aug feedback pass" (2026-08-16) is pushed as `76b521f`** on top of `1d83614`, followed by the **"Total cost to Max" column** (`e3bbf5e`) and the **"16-Aug rev02 round-2" pass** (pushed on top of `88112ae` — MRP-cadence rebuild, analyst work → Screener report, pop-out fixed-content, hover ⓘ cleanup, notes free-drag, Excel notes block; sigma trim root-caused + parked). **Then, on top, through `838a93f`:** round-3 (`ccfd895` — cadence allocation reconcile · month axis · MRP/Manual hover table · analyst data-loss fix · Calibre rebrand · hover sweep), post-round-3 (`2f5e981` — Trace Raw Data MRP/Manual **Trigger** column · **robust median+MAD sigma trim** [the parked sigma now fixed] · global native-tooltip suppression `no-hovers.js`), and the graph pass (`838a93f` — Screener→Trend read-only detail alignment · Trend Min/SS threshold line · resizable MRP-cadence tile). Newest session handover: `_Hand-over docs\Session handover - 2026-08-17 - graphs WIP (start here next).md`. Earlier: `_Hand-over docs\Session handover - 2026-08-16 - rev02 round-2.md` and the earlier `…16-Aug feedback pass.md` (test procedures). **Status: pending operator off-repo validation.** Confirm the live tip against the **newest entry in `v2.1.5-dev\record-of-change.html`** — don't hard-pin a SHA in your head, it goes stale. Rollback for the 16-Aug pass: remote `backup/pre-feedback-0816` branch + `checkpoint/pre-feedback-0816` tag (both `1d83614`) + local `_rollback/FEEDBACK-0816-pre/`; `git revert 76b521f` undoes it. Last released tag: `v2.1.1`. Each chunk's pre-push tip also gets a remote `backup/pre-*` branch + annotated `checkpoint/pre-*` tag.
+**Current version:** `v2.2.0-dev` (bumped from v2.1.5-dev on 2026-09-25; v2.1.5-dev frozen as the immediate rollback snapshot; SCHEMA_VERSION unchanged at 1.0.0). **As of 2026-09-25, origin/main = `7d53223`** — confirm against the newest `record-of-change.html` entry, don't hard-pin. The v2.2.0-dev line, in order: `9f724c8` (bump + **Screener Report Builder** + APP-TREND-FILTERHOLD + APP-FIX-TRACE-NOHIST) → `da7cd0c` (flag-driven Build report + batch + APP-FIX-TRIM-BLOAT) → `3284034` (report polish) → `2896842` (**MRP-run cadence report block**, new `shared/mrp-cadence.js`) → `dbb654d` (cadence Weekly + Trend date range) → `be14928` (**live comment editor in the preview + durable per-material comments + export/import backup**, new `shared/comment-store.js`) → `7d53223` (**movable/resizable preview workbench**). Rollback tags: `checkpoint/pre-v2.2.0` @ `00ccee7`, `checkpoint/pre-cadence-span` @ `2896842`, `checkpoint/pre-livecomment` @ `dbb654d`, `checkpoint/pre-pvworkbench` @ `be14928`. **In progress (working folder only, not in this repo yet): #3 Duplicate-flag** — `shared/duplicate-list.js` parser built + verified; Intake + Trend UI slices next (plan in `Backlog.md`). **Status: pending operator off-repo validation.**
+
+**Older history (v2.1.5-dev and before):** **origin/main = the newest `record-of-change.html` entry** (2026-08-18 = the "template fleet columns + Part A intake gate + Phase-0 pipeline cache + 2 graph tweaks" pass, on top of `54cdee1` = code `cf5f31f` + doc follow-up; don't hard-pin — confirm against the RoC). *Phase-0 = `APP-PIPE-CACHE`: `AppPipeline.runPipelineCached` memoises the last pipeline result in sessionStorage (fingerprinted on assessment + row counts + json.parameters + runDate) so Trend↔Trace hops skip the recompute — ~24× on a hit, byte-identical, correct invalidation. Rollback refs `backup/pre-template-fleet-phase0`@`54cdee1`.* *(On top of `838a93f` came two same-day cadence passes: `275a54d` — dual-chart overhaul, one resizable tile + stock-status dot strip + new replenishment chart + day/month/year axis + always-ends-today ≥3mo span; then `cf5f31f` — pass 3: PR→PO/Cancelled bars, every-month stacked axis, blue-stock/green-PO/hatched-manual/red-cancelled-dots, click-triggered native helpers, empty-slot "Stock: 0" fix. Rollback refs `backup/pre-mrpfreq-graph2`@`f09b6ec`, `backup/pre-mrpfreq-graph3`@`275a54d`.)* *Earlier:* `1d83614` was the whole 2026-08-15 dev day pushed as three area-grouped commits on top of `57219eb` (Trace `0f342be` · Trend+shared `8d3f2ae` · Docs `74baea5`) plus a doc-accuracy follow-up `1d83614` (no SCHEMA_VERSION change). **The "16-Aug feedback pass" (2026-08-16) is pushed as `76b521f`** on top of `1d83614`, followed by the **"Total cost to Max" column** (`e3bbf5e`) and the **"16-Aug rev02 round-2" pass** (pushed on top of `88112ae` — MRP-cadence rebuild, analyst work → Screener report, pop-out fixed-content, hover ⓘ cleanup, notes free-drag, Excel notes block; sigma trim root-caused + parked). **Then, on top, through `838a93f`:** round-3 (`ccfd895` — cadence allocation reconcile · month axis · MRP/Manual hover table · analyst data-loss fix · Calibre rebrand · hover sweep), post-round-3 (`2f5e981` — Trace Raw Data MRP/Manual **Trigger** column · **robust median+MAD sigma trim** [the parked sigma now fixed] · global native-tooltip suppression `no-hovers.js`), and the graph pass (`838a93f` — Screener→Trend read-only detail alignment · Trend Min/SS threshold line · resizable MRP-cadence tile). Newest session handover: `_Hand-over docs\Session handover - 2026-08-17 - graphs WIP (start here next).md`. Earlier: `_Hand-over docs\Session handover - 2026-08-16 - rev02 round-2.md` and the earlier `…16-Aug feedback pass.md` (test procedures). **Status: pending operator off-repo validation.** Confirm the live tip against the **newest entry in `v2.1.5-dev\record-of-change.html`** — don't hard-pin a SHA in your head, it goes stale. Rollback for the 16-Aug pass: remote `backup/pre-feedback-0816` branch + `checkpoint/pre-feedback-0816` tag (both `1d83614`) + local `_rollback/FEEDBACK-0816-pre/`; `git revert 76b521f` undoes it. Last released tag: `v2.1.1`. Each chunk's pre-push tip also gets a remote `backup/pre-*` branch + annotated `checkpoint/pre-*` tag.
 
 ## Before doing anything
 
 1. Read these in order — they are the source of truth:
-   - `v2.1.5-dev\record-of-change.html` — full changelog with rollback steps (newest entry = current origin/main tip)
-   - `v2.1.5-dev\user-manual.html` — operator manual with the analytical methodology
-   - `v2.1.5-dev\PLAN_v2.1.0.md` ★ — the LLM-boundary plan: threat model + durable LLM data-security principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
-   - `v2.1.5-dev\shared\canonical-schema.js` — JSON contract + parameter defaults (SCHEMA_VERSION 1.0.0)
-   - `v2.1.5-dev\shared\pipeline.js` — the analytical engine (deterministic, no LLM)
+   - `v2.2.0-dev\record-of-change.html` — full changelog with rollback steps (newest entry = current origin/main tip)
+   - `v2.2.0-dev\Backlog.md` — what's shipped, what's in progress, what's queued (the operator's order)
+   - `v2.2.0-dev\user-manual.html` — operator manual with the analytical methodology
+   - `v2.2.0-dev\PLAN_v2.1.0.md` ★ — the LLM-boundary plan: threat model + durable LLM data-security principles. **Read §0 in full — it codifies why we made specific decisions about data-egress to the third-party LLM.**
+   - `v2.2.0-dev\shared\canonical-schema.js` — JSON contract + parameter defaults (SCHEMA_VERSION 1.0.0)
+   - `v2.2.0-dev\shared\pipeline.js` — the analytical engine (deterministic, no LLM)
 2. Project memory (if present on this machine) is at `C:\Users\Test_Home\.claude\projects\C--Users-Test-Home-Documents-ClaudeCode-Projects-2026-05-12---Inventory-Optimization\memory\MEMORY.md`. It records the GitHub push pattern, the "act, don't narrate" and "never hide issues" feedback rules, and "read source, don't rebuild from doc-comments". **Note: as of 2026-06-25 this memory store was not present at that path on the working machine — don't assume it loaded.**
 3. After reading the above, **summarise what you found in one short paragraph** and ask what I want to work on next — do not start editing files until I've confirmed direction.
 
 ## Architectural sketch (so you don't need to reverse-engineer)
 
 ```
-v2.1.5-dev/
+v2.2.0-dev/
 ├── index.html                  Dashboard (recent intakes + per-row delete, "Clear session data")
 ├── record-of-change.html       The RoC — every release entry, rollback steps
 ├── user-manual.html            Operator manual ★
@@ -58,6 +61,12 @@ v2.1.5-dev/
 │   ├── where-used.js           Consumption destinations by Fleet model × year + WO drill (APP-WU-01/02)
 │   ├── trace-phase.js          Procurement-chain engine (computeChains) + phase-distribution render — Trace/Screener/lamps
 │   ├── consumption-profile.js  Consumption histogram + profile helpers (Sandbox testbed)
+│   ├── report-builder.js/.css  Screener Report Builder — blocks, Letter/Widescreen, layout canvas, batch,
+│   │                           inline preview workbench, docked comment editor (APP-SCR-REPORT, v2.2.0)
+│   ├── mrp-cadence.js          Static port of the Trace MRP-run cadence (both graphs) for the report
+│   ├── comment-store.js        Durable per-material comments, own localStorage key, export/import (v2.2.0)
+│   ├── mrp-request.js          MRP Request Template Excel export
+│   ├── no-hovers.js            Temporary app-wide native-tooltip suppression (APP-HOVER-KILL)
 │   ├── llm.js                  Provider-agnostic review (Anthropic + OpenAI), editable template
 │   ├── mass-llm.js             Mass LLM orchestrator (sequential, cancel/pause/resume)
 │   ├── client-context.js       Operational Context library (fixed-pick + capped Custom slot)
@@ -65,11 +74,21 @@ v2.1.5-dev/
 ├── intake/   intake.html / .js / .css   (multi-step intake incl. PR History + multi-plant infra)
 ├── analysis/ analysis.html / .js / .css (pipeline runner, material table, detail panel, exports)
 ├── settings/ settings.html / .js / .css (params, LLM providers/keys, alias overrides, multi-plant toggle)
-└── trace/    trace.html / .js / .css    Calibre Trace as a sibling page (D1) — procurement chain,
-                                         phase distribution, procurement-flow funnel, volume cumulative
+├── trace/    trace.html / .js / .css    Calibre Trace as a sibling page (D1) — procurement chain,
+│                                        phase distribution, procurement-flow funnel, volume cumulative,
+│                                        YoY, MRP-run cadence
+├── screener/ screener.html / .js / .css Band filter + combined detail + Export flagged + Build report
+└── sandbox/  sandbox.html / .js / .css  Consumption-profile testbed
 ```
 
-## Headline features as of v2.1.5-dev
+## Headline features as of v2.2.0-dev
+
+- **Screener Report Builder** (APP-SCR-REPORT, v2.2.0-dev): "⤓ Build report (N)" builds the whole **flagged** set — pick **US Letter** (multi-page, tables never split, cancelled PRs in red strikethrough) or **Widescreen 16:9** (drag-and-drop layout canvas with ✕ delete / ＋ add tile, **Print set** batch; **Light** report style or **Dark** = an exact on-screen grab of the real components). Blocks: Trend graph+metrics · Trace average supply duration (±box plots) · Trace YoY (days printed in each segment) · last-X PRs · last-X chains · **MRP-run cadence** (both graphs, `shared/mrp-cadence.js`, weekly, same date range as the Trend chart) · Comment. Renders in-app; nothing downloads until you ask.
+- **Report comments that are never lost** (APP-RB-LIVECMT + APP-COMMENT-DURABLE, v2.2.0-dev): a docked ✎ Comment editor in the single-material preview (saves as you type, ↻ Update re-renders). Each comment is dual-written — the per-assessment analyst note (round-trips in the JSON, shows in Trend) **and** `shared/comment-store.js` (localStorage `calibre.comments.v1`, keyed by SAP material) — so it survives deleting the JSON and carries across differently-named assessments ("carried forward"). Screener **💬 Comments** = export/import a `calibre-comments.json` backup (merge, newer wins). Settings' "Wipe all local data" does not touch it.
+- **Preview workbench** (APP-RB-PVWORKBENCH, v2.2.0-dev): drag the preview bar to move, corner grip to resize/zoom, ⤢ Maximize.
+- **Trend filter-hold + Trace-it no-history + trim fix** (v2.2.0-dev): Trend search/traffic-light/★ filters survive the Trace round-trip; Trace-it on a part with no PR history says so instead of jumping; "Trim to materials in use" really shrinks the JSON (331-material set 33.6 → 3.7 MB).
+
+**Carried from v2.1.5-dev:**
 
 - **"Everything on one screen" — one-screen review layout** (Phase 3, v2.1.5-dev): a **★ Action filter** chip (ANDs with the traffic-light filter), a **"Lead (mo)"** list column (avg total-to-site procurement lead time via the Trace engine; "—" without PR History), an **expandable stat grid** (always-shown primary block + a blue-triangle "More stats" block, state sticky across Prev/Next), **"Unit cost (CAD)"** from the Inventory Master moving-average price (replaces Stock value), a **floating draggable/resizable graph pop-out** (APP-ACT-04), Trace views re-ordered (**Phase Distribution** default) + a **"← Back to Trend"** round-trip link, and the Trend lead-time figure now **honours the operator's Trace outlier suppression** (APP-FIX-TREND-LT-SUPPRESS — `TracePhase.activeChains`, Screener parity). Plus review-screen tweaks APP-FIX-ACTHDR-STAR / -NOTES-DOCK / APP-TREND-LISTCOLS.
 - **MRP Request Template + export/LLM split + Trace demand/cadence** ("no-test sprint", v2.1.5-dev): a **"⤓ MRP Request Template"** Excel (module `shared/mrp-request.js`) for ★ For-Action SAP materials — current / algorithmic-recommended / analyst MRP·Min·Max·Safety + SoH + unit cost + open reservations + where-used models + observed units + an **estimated unit population** (Manufacturer + base-model match over the Fleet register, carries a "verify against SAP" caveat) + Basis %; greys out with a plain reason unless Fleet Master + IW39 are loaded **and** ≥1 material is flagged (`pipeline.js` now carries `movingAvgPrice` + `totalReservation` per material). LLM-review tools split into their own collapsible panel above Exports; a **"Selected fleets ▾"** export scope (fleet picker with material + unit counts). Trace gains **open reservations** in the banner (APP-TRACE-DEMAND) + banner tidy (APP-FIX-TRACE-BANNER) + an **MRP-run cadence** view (APP-T-MRPFREQ). A **"See <7-digit>" jump** (APP-ACT-03) links in-pack material references. *Deferred (credibility): APP-MRP-REQ **Part A** (intake opt-in — the export-time grey already blocks the dead-end) and APP-ACT-02-CLEANUP (dead legacy-export-code deletion, left in place deliberately).*
@@ -87,7 +106,7 @@ v2.1.5-dev/
 ## Push protocol (DO NOT DEVIATE)
 
 - **NEVER** run `git init` in the working folder. It is a plain folder, not a repo.
-- Clone to `/tmp/push-Inventory_Optimization`, copy files from `v2.1.5-dev/`, commit with explicit identity flags, push:
+- Clone to `/tmp/push-Inventory_Optimization`, copy files from `v2.2.0-dev/`, commit with explicit identity flags, push (cut a `checkpoint/pre-*` tag at the current origin/main **before** each push — the operator wants rollback-before-push):
   ```
   git -C /tmp/push-Inventory_Optimization -c user.name='aisandbox-bj' -c user.email='aisandbox-bj@users.noreply.github.com' commit -am "..."
   ```
