@@ -331,7 +331,7 @@ main.shell { padding-top: 28px; }
     <a href="intake/intake.html">Intake</a>
     <a href="analysis/analysis.html">Trend</a>
     <a href="trace/trace.html">Trace</a>
-    <a href="screener/screener.html">Screener</a>
+    <a href="screener/screener.html">Canvas</a>
     <a href="settings/settings.html">Settings</a>
     <a href="record-of-change.html" class="active">RoC</a>
     <a href="user-manual.html">Manual</a>
@@ -380,6 +380,25 @@ git -C /tmp/peek push --force-with-lease origin main
   </section>
 
   <div class="roc-list">
+
+    <!-- v2.2.0-dev - Canvas phase A - 2026-09-26 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-CANVAS (phase A)</b>: the Screener becomes the <b>Canvas</b> — pick materials on a filterable checklist, then review them one widescreen page each on a master layout — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator request:</b> use the widescreen print layout as a review canvas; rename Screener → Canvas; open with the screening filters + a Trend-like material list you can tick; filters are only a view (select all / none / pick); ▶ Launch Canvas opens the widescreen template for every ticked material; a settings (Layout) tab to include / exclude / drag / resize tiles once for all pages; separate work and print themes; a SAP-style column picker for the list.</li>
+        <li><b>Picker</b> (<code>screener/</code>, address unchanged): screening filters inline on the left (live, AND), a checklist table on the right (fixed height, sticky header, sort by heading, search, ☑ select all shown / ☐ unselect shown / clear, "N selected (M hidden by filters)"), row click = Quick look over the page (the former combined detail, Prev/Next through the table). <b>⚙ Columns…</b> = SAP-style two-list layout dialog (drag between lists / reorder, double-click, ◀ ▶ ▲ ▼, restore default); 34 fields incl. new <b>Open PRs</b>, <b>Oldest open PR (d)</b>, <b>Open POs</b> counts and <b>Below Min</b>; default = the Trend list + Below Min + Open PRs + Open POs; saved in <code>settings.canvasColumns</code>.</li>
+        <li><b>Canvas</b> (<code>ReportBuilder.openCanvas</code>, replaces the Build-report widescreen flow): full-screen; one <b>master layout</b> for every page (stored in this browser, <code>calibre.canvasLayout.v1</code>; first run adopts the layout arranged in the old widescreen report); <b>Review</b> tab (tiles locked) / <b>Layout</b> tab (floating Tiles panel over the stage: include/exclude, tile options, auto-arrange; drag/resize/✕; new tiles land in empty space); <b>Work</b> Dark/Light and <b>Print</b> Light/Dark independent (a tile printed in the other theme is kept inside its arranged footprint); Prev/Next (+ ←/→), ✕ Remove from set / restore all, Preview PDF / Select pages…; session (set, removed, page) saved per assessment (<code>calibre.canvasSession.v1.*</code>); relaunch with the same ticks continues silently, different ticks → Continue / Start with current selection.</li>
+        <li><b>Letter report</b> is now US Letter only (widescreen moved to the Canvas); its old "widescreen report in progress" prompt is gone. Per-page layouts / Copy from previous / Apply to all are retired (operator chose one master layout).</li>
+        <li><b>Follow-up to APP-FIX-RAW-OPENSTEP:</b> the "then on shelf (E)" read-outs (Quick PDF, Letter avg-duration + YoY blocks, Canvas avg-duration tile, Trace YoY chevrons) printed <b>0.0d</b> when no delivered chain had been used yet — now "—". A genuine 0.0d (used the day it arrived) still shows.</li>
+        <li><b>Not in this phase (queued):</b> the floating note card with a "Previous notes" history (phase B — the docked comment box stays until then); the rule-check / AI review of the set (phase C, waiting on the operator's comments export + video).</li>
+        <li>Files: <code>screener/screener.{html,js,css}</code>, <code>shared/report-builder.{js,css}</code>, <code>shared/material-detail.js</code> (help text), <code>trace/trace.js</code>, nav label on all pages, <code>user-manual.html</code> §14. No SCHEMA_VERSION change. Rollback: local <code>_rollback/CANVAS-A-pre/</code> + <code>checkpoint/pre-canvas-a</code>.</li>
+      </ul>
+    </article>
 
     <!-- v2.2.0-dev - Raw Data unfinished steps blank - 2026-09-25 -->
     <article class="roc-entry dev">

@@ -1954,6 +1954,9 @@
     // relative to the largest year, so overall performance compares visually —
     // a shorter bar = a shorter total timeline.
     const sharedMaxFlow = Math.max(1, ...yrData.map(d => d.flowMean));
+    // APP-FIX-RAW-OPENSTEP — a year where no delivered chain has been used yet has no
+    // shelf time: show '—', not the 0.0d that meanPh() returns for an empty set.
+    const cc_hasE = (yr) => acAll.some(c => Number(getChainYear(c)) === yr && c.E != null);
     const yoyChevrons = yrData.map(({ yr, n, m, flowMean }) => {
       const widthPct = (flowMean / sharedMaxFlow * 100).toFixed(1);
       const segs = PK.filter(k => k !== 'E').map((ph, i) => {
@@ -1966,7 +1969,7 @@
         <span class="yoy-chev-year" style="border-color:${yrColor[yr]}; color:${yrColor[yr]};">${yr}<small>n=${n}</small></span>
         <div class="yoy-chev-track"><div class="pd-chevron-bar" style="width:${widthPct}%;">${segs}</div></div>
         <div class="pd-chev-total-site" title="Average total processing time to site (phases A–D) for ${yr}."><span class="lab">Total to site</span><span class="v">${flowMean.toFixed(1)}d</span></div>
-        <div class="pd-chev-shelf" style="border-color:${PC[4]}; background:${PC[4]}1f;" title="Average shelf time before first use (phase E) for ${yr}."><span class="pd-chev-shelf-lab">then on shelf</span><span class="pd-chev-shelf-name">E · ${PL.E}</span><span class="pd-chev-shelf-val" style="color:${PC[4]};">${m.E.toFixed(1)}d</span></div>
+        <div class="pd-chev-shelf" style="border-color:${PC[4]}; background:${PC[4]}1f;" title="Average shelf time before first use (phase E) for ${yr}."><span class="pd-chev-shelf-lab">then on shelf</span><span class="pd-chev-shelf-name">E · ${PL.E}</span><span class="pd-chev-shelf-val" style="color:${PC[4]};">${cc_hasE(yr) ? m.E.toFixed(1) + 'd' : '—'}</span></div>
       </div>`;
     }).join('');
     const chevronsHtml = `<div class="yoy-chevrons"><div class="yoy-chevrons-lab">Total timeline by year — phases A–D to site, plus shelf time (E)</div>${yoyChevrons}</div>`;

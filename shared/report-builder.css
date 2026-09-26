@@ -174,6 +174,55 @@ a.rb-pv-dl{ text-decoration:none; }
   font-family:'Barlow',sans-serif; }
 .rb-addmenu-item:hover{ background:rgba(31,206,216,.14); color:#fff; }
 
+/* ─── CANVAS workspace (APP-CANVAS) — full-screen, reuses the widescreen stage ─── */
+.rb-overlay.rb-cv-ov{ padding:0; overflow:hidden; }
+.rb-modal.rb-cv-modal{ width:100vw; height:100vh; border-radius:0; border:none; overflow:hidden; }
+.rb-cv, .rb-cv .rb-pv-bar{ border-radius:0; }
+.rb-cv .rb-preview, .rb-cv-modal .rb-preview{ border-radius:0; }
+.rb-cv-bar{ flex-wrap:nowrap; }
+.rb-cv-title{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+.rb-cv-assess{ font-family:'Barlow Condensed','Barlow',sans-serif; font-weight:700; font-size:17px; color:#fff;
+  letter-spacing:.4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:30vw; }
+.rb-cv-tabs{ display:inline-flex; border:1px solid rgba(155,176,182,.35); border-radius:7px; overflow:hidden; flex:none; }
+.rb-cv-tab{ background:transparent; border:none; color:#cfe3e6; font-family:'Rajdhani',sans-serif; font-weight:600;
+  font-size:14px; padding:6px 18px; cursor:pointer; }
+.rb-cv-tab + .rb-cv-tab{ border-left:1px solid rgba(155,176,182,.35); }
+.rb-cv-tab.on{ background:#1FCED8; color:#062028; }
+.rb-cv-seg{ display:inline-flex; align-items:center; gap:0; font-family:'JetBrains Mono',monospace; font-size:10px;
+  letter-spacing:.8px; text-transform:uppercase; color:#8aa6ac; }
+.rb-cv-seg button{ background:transparent; border:1px solid rgba(155,176,182,.35); color:#cfe3e6; font-family:'Rajdhani',sans-serif;
+  font-weight:600; font-size:12.5px; padding:4px 9px; cursor:pointer; text-transform:none; letter-spacing:0; }
+.rb-cv-seg button:first-of-type{ margin-left:6px; border-radius:5px 0 0 5px; }
+.rb-cv-seg button:last-of-type{ border-radius:0 5px 5px 0; border-left:none; }
+.rb-cv-seg button.on{ background:rgba(31,206,216,.18); border-color:#1FCED8; color:#fff; }
+.rb-cv-nav .rb-w-page{ flex:1 1 auto; max-width:none; }
+.rb-cv-nav .rb-w-saved{ margin-left:0; flex:none; min-width:150px; text-align:right; }
+.rb-cv-nav .rb-w-removed{ flex:none; }
+.rb-cv .rb-stage-wrap{ position:relative; }
+/* Review mode: tiles are locked (no grips, no ✕, no drag cursor) */
+.rb-cv:not(.rb-cv-edit) .rb-cardgrip, .rb-cv:not(.rb-cv-edit) .rb-carddel{ display:none; }
+.rb-cv:not(.rb-cv-edit) .rb-cardbox{ cursor:default; box-shadow:none; border-color:transparent; }
+.rb-cv:not(.rb-cv-edit) .rb-cardbox:hover{ outline:none; }
+.rb-cv.rb-cv-edit .rb-stage{ outline:2px dashed rgba(244,199,106,.55); outline-offset:3px; }
+/* Tiles panel — floats OVER the stage in Layout mode (moves by its header) */
+.rb-cv-tiles{ position:absolute; left:16px; top:16px; z-index:25; width:290px; max-height:calc(100% - 32px); overflow:auto;
+  background:rgba(8,30,43,.96); border:1px solid rgba(31,206,216,.45); border-radius:10px;
+  box-shadow:0 16px 40px rgba(0,0,0,.55); }
+.rb-cv-tiles[hidden]{ display:none; }
+.rb-cv-tiles-h{ padding:9px 12px; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:14px; color:#fff;
+  text-transform:uppercase; letter-spacing:.6px; border-bottom:1px solid rgba(31,206,216,.2); cursor:move; touch-action:none; user-select:none; }
+.rb-cv-tiles-h span{ font-family:'Barlow',sans-serif; font-weight:400; text-transform:none; letter-spacing:0; font-size:11.5px; color:#8aa6ac; margin-left:6px; }
+.rb-cv-tiles-list{ list-style:none; margin:0; padding:6px; display:flex; flex-direction:column; gap:4px; }
+.rb-cv-tiles-list li{ padding:6px 8px; border:1px solid rgba(155,176,182,.16); border-radius:7px; }
+.rb-cv-tiles-list li.on{ border-color:rgba(31,206,216,.4); background:rgba(31,206,216,.06); }
+.rb-cv-tiles-list li.na{ opacity:.5; }
+.rb-cv-tl{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:#dbe7e9; cursor:pointer; }
+.rb-cv-tl input{ accent-color:#1FCED8; width:15px; height:15px; }
+.rb-cv-tl em{ font-style:normal; font-size:10.5px; color:#9aa; }
+.rb-cv-to{ display:block; padding:4px 0 0 22px; }
+.rb-cv-tiles-note{ padding:4px 12px 8px; font-size:11px; color:#8aa6ac; line-height:1.4; }
+.rb-cv-tiles-f{ padding:0 12px 12px; }
+
 /* z-index: must sit ABOVE the widescreen layout panel (.rb-wide, z 5) — without it the
    "Select pages…" picker opened underneath the canvas and looked like a dead button. */
 .rb-choice{ position:absolute; inset:0; z-index:30; background:rgba(4,10,18,.6);

@@ -1,20 +1,25 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Screener page — UI wiring · APP-SCR-01 (2026-06-25)
+   Canvas page (was the Screener) — UI wiring · APP-SCR-01 (2026-06-25) →
+   APP-CANVAS (2026-09-26)
    ───────────────────────────────────────────────────────────────────────────
-   A post-analysis BAND FILTER. Reads the same canonical JSON as Analysis +
-   Trace, runs AppPipeline, lists the subset of analysed materials that fall
-   inside operator-defined bands (AND-combined set + range filters over the
-   per-material result fields), and on selection renders BOTH:
-     · the Analysis material-detail visual (shared MaterialDetail.render), and
-     · the Trace per-material phase distribution (shared TracePhase.render),
-   responsive: side-by-side when wide, stacked when narrow.
+   The PICKER for the Canvas review workspace. Reads the same canonical JSON as
+   Trend + Trace, runs AppPipeline, and shows:
+     · a screening-filter panel (AND-combined bands over the per-material result
+       fields — category, range and risk-flag bands), always visible on the left;
+     · a checklist table (Trend-style) whose columns the operator chooses and
+       arranges in a SAP-style field picker; filters only change what the table
+       SHOWS — ticks are kept;
+     · ▶ Launch Canvas → the ticked materials open in the widescreen Canvas
+       (ReportBuilder.openCanvas), one page per material, master layout.
+   Clicking a row opens a Quick look (the Trend material detail + the Trace phase
+   distribution) over the page.
 
    No SCHEMA_VERSION bump — consumes the existing pipeline result; bands persist
-   in settings.screenerBands (NOT the canonical JSON). LLM is OFF on the
-   Screener (math decides; the panel is an Analysis-page affordance).
+   in settings.screenerBands, the column set in settings.canvasColumns, ticks +
+   sort in screener.viewState (NOT the canonical JSON). LLM is OFF here.
 
    Depends on: AppStorage, AppPipeline, AppChart, AppLocale, MaterialDetail,
-   TracePhase.
+   TracePhase, ReportBuilder.
 ═══════════════════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -62,15 +67,87 @@
   const FLAG_LABELS = {};
   FLAG_CARDS.forEach(c => c.flags.forEach(fl => { FLAG_LABELS[fl.k] = fl.l; }));
 
+  /* ─── Table fields (APP-CANVAS field picker) ────────────────────────────────
+     Every column the table can show. `g` groups them in the picker; `num` right-
+     aligns + sorts numerically; `val(m)` is the sort value; `cell(m)` the HTML.
+     Material is locked (always shown). Defaults = the Trend list + Below Min +
+     Open PRs / Open POs (operator 2026-09-26). */
+  const TL_ORDER = { RED:0, ORANGE:1, PURPLE:2, BLUE:3, GREEN:4, GREY:5 };
+  const DASH = '<span class="muted">—</span>';
+  const numCell = (v, d) => (v == null || v === '' || !Number.isFinite(+v)) ? DASH : (+v).toLocaleString('en-CA', { maximumFractionDigits: d == null ? 1 : d });
+  const ynCell = (v) => v === 'Y' ? '<span class="yn y">Yes</span>' : v === 'N' ? '<span class="yn n">No</span>' : DASH;   // 'NA' = can't evaluate → —
+  const ynVal = (v) => v === 'Y' ? 2 : v === 'N' ? 1 : 0;
+  const rateCell = (r, f) => f === 'OK' ? r.toFixed(1) : `<span class="amber">${escapeHtml(f || '—')}</span>`;
+  const cad = (v) => (v == null || v === '') ? DASH : ((typeof AppLocale !== 'undefined' && AppLocale.fmtCAD) ? escapeHtml(AppLocale.fmtCAD(v)) : numCell(v, 2));
+  const FIELDS = [
+    // Identity
+    { k:'trafficLight', l:'TL', g:'Result', val:m => TL_ORDER[m.trafficLight] ?? 9,
+      cell:m => `<span class="tl-dot ${escapeAttr(m.trafficLight)}"></span><span class="tl-lab">${escapeHtml(m.trafficLight || '')}</span>` },
+    { k:'material', l:'Material', g:'Identity', lock:true, left:true, val:m => m.material,
+      cell:m => {
+        const a = state.analyst;
+        const act = a && a.isAction(m.material), note = a && a.hasNote(m.material);
+        return `<span class="mono">${escapeHtml(m.material)}</span>${act ? '<span class="scr-row-action" title="Flagged For Action">★</span>' : ''}${note ? '<span class="scr-row-note" title="Has a note">✎</span>' : ''}`;
+      } },
+    { k:'description', l:'Description', g:'Identity', left:true, wide:true, val:m => m.description || '',
+      cell:m => `<span class="desc" title="${escapeAttr(m.description || '')}">${escapeHtml(m.description || '')}</span>` },
+    { k:'manufacturer',  l:'Manufacturer',   g:'Identity', left:true, val:m => m.manufacturer || '', cell:m => escapeHtml(m.manufacturer || '') || DASH },
+    { k:'materialGroup', l:'Material group', g:'Identity', val:m => m.materialGroup || '', cell:m => escapeHtml(m.materialGroup || '') || DASH },
+    // Consumption
+    { k:'totalNet',   l:'Qty Iss.',   g:'Consumption', num:true, val:m => m.totalNet, cell:m => numCell(m.totalNet) },
+    { k:'p1Rate',     l:'P1/mo',      g:'Consumption', num:true, val:m => m.p1Flag === 'OK' ? m.p1Rate : null, cell:m => rateCell(m.p1Rate, m.p1Flag) },
+    { k:'p2Rate',     l:'P2/mo',      g:'Consumption', num:true, val:m => m.p2Flag === 'OK' ? m.p2Rate : null, cell:m => rateCell(m.p2Rate, m.p2Flag) },
+    { k:'rateChange', l:'P1→P2 %',    g:'Consumption', num:true, val:m => m.rateChange, cell:m => m.rateChange != null ? escapeHtml(m.rateChange + '%') : DASH },
+    { k:'pattern',    l:'Pattern',    g:'Consumption', val:m => m.pattern || '', cell:m => `<span class="${m.pattern === 'LUMPY' ? 'amber' : 'muted'}">${escapeHtml(m.pattern || '—')}</span>` },
+    { k:'lastConsumptionDate', l:'Last cons.', g:'Consumption', val:m => m.lastConsumptionDate || '', cell:m => escapeHtml(m.lastConsumptionDate || '') || DASH },
+    { k:'daysSinceLastIssue',  l:'Days since issue', g:'Consumption', num:true, val:m => m.daysSinceLastIssue, cell:m => numCell(m.daysSinceLastIssue, 0) },
+    // Stock & MRP
+    { k:'stock',          l:'SoH',          g:'Stock & MRP', num:true, val:m => m.stock, cell:m => numCell(m.stock) },
+    { k:'totValueOh',     l:'Stock value',  g:'Stock & MRP', num:true, val:m => m.totValueOh, cell:m => cad(m.totValueOh) },
+    { k:'movingAvgPrice', l:'Unit cost',    g:'Stock & MRP', num:true, val:m => m.movingAvgPrice, cell:m => cad(m.movingAvgPrice) },
+    { k:'runway',         l:'Runway (mo)',  g:'Stock & MRP', num:true, val:m => m.runway, cell:m => numCell(m.runway) },
+    { k:'mrpType',        l:'MRP',          g:'Stock & MRP', val:m => m.mrpType || '', cell:m => `<span class="muted">${escapeHtml(m.mrpType || '—')}</span>` },
+    { k:'cmin',           l:'Min (SAP)',    g:'Stock & MRP', num:true, val:m => m.cmin, cell:m => numCell(m.cmin) },
+    { k:'cmax',           l:'Max (SAP)',    g:'Stock & MRP', num:true, val:m => m.cmax, cell:m => numCell(m.cmax) },
+    { k:'safetyStock',    l:'Safety stock', g:'Stock & MRP', num:true, val:m => m.safetyStock, cell:m => numCell(m.safetyStock) },
+    { k:'recMrpType',     l:'Rec MRP',      g:'Stock & MRP', val:m => m.recMrpType || '', cell:m => escapeHtml(m.recMrpType || '') || DASH },
+    { k:'recMin', l:'Rec Min', g:'Stock & MRP', num:true, val:m => m.recMin,
+      cell:m => `${m.recMin ?? '—'}${m.cmin != null ? ` <span class="cur-brk" title="Current SAP Min">(${escapeHtml(String(m.cmin))})</span>` : ''}` },
+    { k:'recMax', l:'Rec Max', g:'Stock & MRP', num:true, val:m => m.recMax,
+      cell:m => `${m.recMax ?? '—'}${m.cmax != null ? ` <span class="cur-brk" title="Current SAP Max">(${escapeHtml(String(m.cmax))})</span>` : ''}` },
+    { k:'mrpRecFlag',       l:'Reclass',    g:'Stock & MRP', val:m => m.mrpRecFlag || '', cell:m => m.mrpRecFlag ? `<span class="scr-row-reclass">${escapeHtml(m.mrpRecFlag)}</span>` : DASH },
+    { k:'totalReservation', l:'Open resv.', g:'Stock & MRP', num:true, val:m => m.totalReservation, cell:m => numCell(m.totalReservation) },
+    // Procurement (need PR History)
+    { k:'leadDays', l:'Lead (d)', g:'Procurement', pr:true, num:true, val:m => m.leadDays,
+      cell:m => m.leadDays != null ? `<span class="lead-fig ${MaterialDetail.leadBandClass(m.leadDays)}">${m.leadDays.toFixed(1)}</span>` : DASH },
+    { k:'prOpenN',          l:'Open PRs',           g:'Procurement', pr:true, num:true, val:m => m.prOpenN, cell:m => m.prOpenN == null ? DASH : (m.prOpenN ? `<b class="amber">${m.prOpenN}</b>` : '<span class="muted">0</span>') },
+    { k:'oldestOpenPrDays', l:'Oldest open PR (d)', g:'Procurement', pr:true, num:true, val:m => m.oldestOpenPrDays, cell:m => numCell(m.oldestOpenPrDays, 0) },
+    { k:'poOpenN',          l:'Open POs',           g:'Procurement', pr:true, num:true, val:m => m.poOpenN, cell:m => m.poOpenN == null ? DASH : (m.poOpenN ? `<b>${m.poOpenN}</b>` : '<span class="muted">0</span>') },
+    // Risk flags
+    { k:'sohBelowMin', l:'Below Min',     g:'Risk flags', val:m => ynVal(m.sohBelowMin), cell:m => ynCell(m.sohBelowMin) },
+    { k:'sohBelowP2',  l:'SoH < 1 mo',    g:'Risk flags', val:m => ynVal(m.sohBelowP2),  cell:m => ynCell(m.sohBelowP2) },
+    { k:'minBelowLT',  l:'Min < LT cover', g:'Risk flags', pr:true, val:m => ynVal(m.minBelowLT), cell:m => ynCell(m.minBelowLT) },
+    // Analyst (from the Trend sidecar — read-only here)
+    { k:'anAction', l:'★ Action', g:'Analyst', val:m => (state.analyst && state.analyst.isAction(m.material)) ? 1 : 0,
+      cell:m => (state.analyst && state.analyst.isAction(m.material)) ? '<span class="scr-row-action">★</span>' : '' },
+    { k:'anMinMax', l:'Analyst Min / Max', g:'Analyst', val:m => { const r = state.analyst ? state.analyst.getRec(m.material) : {}; return (r && (r.min || r.max)) ? String(r.min || '') + '/' + String(r.max || '') : ''; },
+      cell:m => { const r = state.analyst ? state.analyst.getRec(m.material) : {}; return (r && (r.min || r.max)) ? `<span class="an-rec">${escapeHtml(r.min || '—')} / ${escapeHtml(r.max || '—')}</span>` : DASH; } }
+  ];
+  const FIELD = Object.fromEntries(FIELDS.map(f => [f.k, f]));
+  const DEFAULT_COLS = ['trafficLight','material','description','totalNet','p1Rate','p2Rate','mrpType','recMin','recMax','leadDays','mrpRecFlag','pattern','sohBelowMin','prOpenN','poOpenN'];
+
   const state = {
     json:             null,
     result:           null,
     materials:        [],     // [{ m, bucket }] — deduped across buckets
     bands:            {},      // colKey → {type:'set',values:[]} | {type:'range',min,max}
-    selectedMaterial: null,
+    selectedMaterial: null,    // the material open in the Quick look
     search:           '',
     hasPr:            false,
-    exportFlags:      new Set(), // material numbers flagged for PDF export
+    exportFlags:      new Set(), // the ticked materials — the Canvas set (also Quick PDF / Letter report)
+    columns:          DEFAULT_COLS.slice(),
+    sortKey:          'totalNet',
+    sortDir:          'desc',
     // APP-FIX-SCR-EXCL — Trace's per-material manual excludes + sigma setting,
     // loaded from trace.viewState so the Screener's avg lead time + embedded
     // Trace phase-distribution honour the SAME exclusions the operator set on
@@ -87,7 +164,7 @@
     state.json  = json;
     state.hasPr = !!(json.data && json.data.prHistory && json.data.prHistory.length);
     // R2-7 (2026-08-16) — bind the analyst sidecar (For-Action flags + Analyst Rec)
-    // so the Screener list, detail and PDF export can show the analyst's work.
+    // so the list, detail and PDF export can show the analyst's work.
     state.analyst = (typeof AnalystMarks !== 'undefined')
       ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
       : null;
@@ -117,29 +194,29 @@
       state.traceExcl.sigmaLimit  = (tvs && typeof tvs.sigmaLimit === 'number') ? tvs.sigmaLimit : null;
     } catch (e) { /* no Trace state saved → no exclusions */ }
 
-    // Derive per-material risk fields used by the new bands (SoH-vs-P2/Min,
-    // PO/PR open status, avg procurement lead time, Min-vs-lead-time cover).
+    // Derive per-material risk fields used by the bands + table columns.
     computeRiskFields();
 
-    // Load persisted bands + view state.
+    // Load persisted bands + columns + view state.
     try { state.bands = (await AppStorage.get('settings.screenerBands')) || {}; } catch { state.bands = {}; }
     if (sanitizeBands()) persistBands();
     try {
+      const cols = await AppStorage.get('settings.canvasColumns');
+      if (Array.isArray(cols) && cols.length) state.columns = sanitizeColumns(cols);
+    } catch { /* defaults */ }
+    try {
       const vs = await AppStorage.get('screener.viewState');
-      if (vs && vs.selectedMaterial && seen.has(vs.selectedMaterial)) state.selectedMaterial = vs.selectedMaterial;
-      if (vs && Array.isArray(vs.exportFlags)) {
-        state.exportFlags = new Set(vs.exportFlags.filter(m => seen.has(m)));
-      }
+      if (vs && Array.isArray(vs.exportFlags)) state.exportFlags = new Set(vs.exportFlags.filter(m => seen.has(m)));
+      if (vs && vs.sortKey && FIELD[vs.sortKey]) { state.sortKey = vs.sortKey; state.sortDir = vs.sortDir === 'asc' ? 'asc' : 'desc'; }
     } catch { /* ignore */ }
 
     renderBanner();
     $('#scrToolbar').hidden = false;
     $('#scrMain').hidden = false;
     bindToolbar();
-    renderActiveBands();
-    renderList();
-    updateExportButton();
-    if (state.selectedMaterial) renderDetail();
+    bindTableOnce();
+    buildBandsBody();
+    renderTable();
   }
 
   function renderEmpty(){
@@ -179,9 +256,9 @@
     const sum = state.result.summary;
     $('#banner').innerHTML = `
       <div>
-        <span class="lab">Screening from</span>
+        <span class="lab">Canvas · reviewing</span>
         <h2>${escapeHtml(j.metadata.assessmentName || '(unnamed assessment)')}</h2>
-        <div class="sub">${state.materials.length.toLocaleString()} materials in analysis · ${state.result.buckets.length} bucket${state.result.buckets.length === 1 ? '' : 's'}${state.hasPr ? '' : ' · no PR History (Trace panel disabled)'}</div>
+        <div class="sub">${state.materials.length.toLocaleString()} materials in analysis · ${state.result.buckets.length} bucket${state.result.buckets.length === 1 ? '' : 's'}${state.hasPr ? '' : ' · no PR History (Trace tiles unavailable)'}</div>
       </div>
       <div class="row">
         <span class="lab">Traffic lights</span>
@@ -199,14 +276,18 @@
      TOOLBAR
   ═════════════════════════════════════════════════════════════════════════ */
   function bindToolbar(){
-    $('#scrSearch').addEventListener('input', (e) => { state.search = e.target.value; renderList(); });
-    $('#btnBands').addEventListener('click', openBandsModal);
+    $('#scrSearch').addEventListener('input', (e) => { state.search = e.target.value; renderTable(); });
     $('#btnClearBands').addEventListener('click', async () => {
       state.bands = {};
       await persistBands();
-      renderActiveBands();
-      renderList();
+      buildBandsBody();
+      renderTable();
     });
+    $('#btnSelShown').addEventListener('click', () => { visibleRows().forEach(e => state.exportFlags.add(e.m.material)); afterSelectionChange(); });
+    $('#btnUnselShown').addEventListener('click', () => { visibleRows().forEach(e => state.exportFlags.delete(e.m.material)); afterSelectionChange(); });
+    $('#btnSelClear').addEventListener('click', () => { state.exportFlags.clear(); afterSelectionChange(); });
+    $('#btnColumns').addEventListener('click', openColumnPicker);
+    $('#btnLaunch').addEventListener('click', launchCanvas);
     $('#btnExport').addEventListener('click', buildExportPdf);
     const rb = $('#btnBuildReport');
     if (rb) rb.addEventListener('click', openReportBuilder);
@@ -223,9 +304,18 @@
       });
       e.target.value = '';   // allow re-importing the same file
     });
-    // Refresh the count when a comment is written from anywhere (e.g. the report editor).
+    // Refresh the count when a comment is written from anywhere (e.g. the Canvas).
     document.addEventListener('calibre:comments-changed', updateCommentsButton);
     updateCommentsButton();
+    // Filter panel — live: a change applies at once (number boxes after a short pause).
+    const body = $('#bandsBody');
+    let t = null;
+    body.addEventListener('change', () => { if (t) { clearTimeout(t); t = null; } applyBands(); });
+    body.addEventListener('input', (e) => {
+      if (e.target.type !== 'number') return;
+      if (t) clearTimeout(t);
+      t = setTimeout(() => { t = null; applyBands(); }, 450);
+    });
   }
 
   // APP-COMMENT-DURABLE — comments are kept per material in this browser (survive
@@ -262,18 +352,17 @@
     menu.querySelector('[data-act="import"]').addEventListener('click', () => { $('#commentsImport').click(); close(); });
   }
 
-  // APP-SCR-REPORT — the Build-report button works like "Export flagged": it keys
-  // off the flagged materials (the row checkboxes), and the builder operates on the
-  // whole flagged SET (configure once → generate all), not one selected material.
-  function updateReportButton(){
-    const btn = $('#btnBuildReport'); if (!btn) return;
-    const n = state.exportFlags.size;
-    btn.textContent = `⤓ Build report (${n})`;
-    btn.disabled = n === 0;
+  // The ticked materials in the table's current sort order (ALL ticks — including
+  // ticks the filters currently hide; the filters are only a view).
+  function selectedInOrder(){
+    return sortRows(state.materials.slice()).filter(e => state.exportFlags.has(e.m.material));
   }
+
+  // APP-SCR-REPORT — the Letter report keys off the ticked set (configure once →
+  // generate all), not one selected material.
   function openReportBuilder(){
-    const flagged = state.materials.filter(e => state.exportFlags.has(e.m.material));
-    if (!flagged.length) { toast('Flag at least one material (the checkbox in the list) first.', 'crit'); return; }
+    const flagged = selectedInOrder();
+    if (!flagged.length) { toast('Tick at least one material in the table first.', 'crit'); return; }
     if (typeof ReportBuilder === 'undefined') { toast('Report builder unavailable.', 'crit'); return; }
     const ref = flagged[0];   // reference material for arranging/previewing the layout
     ReportBuilder.open({
@@ -284,41 +373,57 @@
       analyst:        state.analyst,
       traceFilters:   traceFiltersFor(ref.m.material),
       assessmentName: (state.json.metadata && state.json.metadata.assessmentName) || '',
-      // The flagged set: configure the layout once, generate a page-set per material.
       batch: {
         list:          flagged.map(e => ({ m: e.m, bucket: e.bucket })),
-        traceFiltersFor: (mat) => traceFiltersFor(mat),
-        // find ANY analysed material by number — used to reopen a saved widescreen
-        // report ("Continue on current set") even if the flags have changed since
-        lookup: (mat) => { const e = state.materials.find(x => x.m.material === mat); return e ? { m: e.m, bucket: e.bucket } : null; }
+        traceFiltersFor: (mat) => traceFiltersFor(mat)
       }
     });
   }
 
-  function updateExportButton(){
-    const btn = $('#btnExport');
-    if (!btn) return;
-    const n = state.exportFlags.size;
-    btn.textContent = `⤓ Export flagged (${n})`;
-    btn.disabled = n === 0;
-    updateReportButton();   // APP-SCR-REPORT — Build-report tracks the same flag set
+  // APP-CANVAS — a canvas in progress (saved by ReportBuilder.openCanvas) can be
+  // continued even with nothing ticked.
+  function canvasInProgress(){
+    try {
+      const name = (state.json.metadata && state.json.metadata.assessmentName) || '';
+      const o = JSON.parse(localStorage.getItem('calibre.canvasSession.v1.' + name) || 'null');
+      return !!(o && Array.isArray(o.order) && o.order.length);
+    } catch (e) { return false; }
+  }
+  function launchCanvas(){
+    if (typeof ReportBuilder === 'undefined' || !ReportBuilder.openCanvas) { toast('Canvas unavailable.', 'crit'); return; }
+    const sel = selectedInOrder();
+    if (!sel.length && !canvasInProgress()) { toast('Tick at least one material in the table first.', 'crit'); return; }
+    ReportBuilder.openCanvas({
+      json:           state.json,
+      hasPr:          state.hasPr,
+      analyst:        state.analyst,
+      assessmentName: (state.json.metadata && state.json.metadata.assessmentName) || '',
+      list:           sel.map(e => ({ m: e.m, bucket: e.bucket })),
+      lookup:         (mat) => { const e = state.materials.find(x => x.m.material === mat); return e ? { m: e.m, bucket: e.bucket } : null; },
+      traceFiltersFor: (mat) => traceFiltersFor(mat),
+      onClose:        () => { renderTable(); updateCommentsButton(); }
+    });
   }
 
-  function renderActiveBands(){
-    const el = $('#scrActiveBands');
-    const keys = Object.keys(state.bands);
-    if (!keys.length) { el.innerHTML = `<span class="scr-band-none">no bands · all materials</span>`; return; }
-    el.innerHTML = keys.map(k => {
-      const f = state.bands[k];
-      let txt;
-      if (f.type === 'set') txt = `${bandLabel(k)}: ${f.values.join('/')}`;
-      else if (f.type === 'flag') {
-        const labs = (f.flags || []).map(flagLabel);
-        txt = labs.length > 1 ? `${bandLabel(k)}: ${labs.join(' / ')}` : bandLabel(k);
-      }
-      else txt = `${bandLabel(k)}: ${f.min != null ? f.min : '−∞'}…${f.max != null ? f.max : '∞'}`;
-      return `<span class="scr-band-chip" title="${escapeAttr(txt)}">${escapeHtml(txt)}</span>`;
-    }).join('');
+  function updateSelectionUi(){
+    const n = state.exportFlags.size;
+    const shownSel = visibleRows().filter(e => state.exportFlags.has(e.m.material)).length;
+    $('#scrSelCount').innerHTML = `<b>${n.toLocaleString()}</b> selected${n > shownSel ? ` <span class="muted">(${(n - shownSel).toLocaleString()} hidden by filters)</span>` : ''}`;
+    const exp = $('#btnExport');
+    exp.textContent = `⤓ Quick PDF (${n})`; exp.disabled = n === 0;
+    const rb = $('#btnBuildReport');
+    rb.textContent = `⤓ Letter report (${n})`; rb.disabled = n === 0;
+    const la = $('#btnLaunch');
+    const cont = !n && canvasInProgress();
+    la.textContent = cont ? '▶ Continue Canvas' : `▶ Launch Canvas (${n})`;
+    la.disabled = !n && !cont;
+  }
+  // kept for the export code below (it calls this after a run)
+  function updateExportButton(){ updateSelectionUi(); }
+
+  function afterSelectionChange(){
+    persistView();
+    renderTable();
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -328,17 +433,10 @@
 
   function activeSetFields(){ return state.hasPr ? SET_FIELDS.concat(PR_SET_FIELDS) : SET_FIELDS.slice(); }
   function activeFlagCards(){ return FLAG_CARDS.filter(c => c.need !== 'pr' || state.hasPr); }
-  function bandLabel(k){
-    const f = activeSetFields().find(x => x.k === k)
-           || RANGE_FIELDS.find(x => x.k === k)
-           || FLAG_CARDS.find(x => x.id === k);
-    return f ? f.l : k;
-  }
-  function flagLabel(k){ return FLAG_LABELS[k] || k; }
 
   // APP-FIX-SCR-EXCL — the same filter object Trace uses, for one material, so
   // completed-chain stats here match the Trace page. Year is always 'All' (the
-  // Screener is all-time by design); manual + sigma exclusions are honoured.
+  // Canvas is all-time by design); manual + sigma exclusions are honoured.
   function traceFiltersFor(material){
     return {
       yearFilter: 'All',
@@ -361,11 +459,19 @@
     return changed;
   }
 
-  // Derive the fields the new bands filter on. SoH-vs-P2/Min need no PR data;
-  // PO/PR open status, avg procurement lead time, and Min-vs-lead-time cover use
-  // the PR→PO→GR chains (TracePhase.computeChains), so chain work runs only for
-  // materials that actually have PR History rows. 'NA' = can't evaluate (missing
-  // inputs) — never silently treated as "not at risk".
+  // Keep only known fields, no duplicates, Material always present.
+  function sanitizeColumns(cols){
+    const out = [];
+    for (const k of cols) if (FIELD[k] && !out.includes(k)) out.push(k);
+    if (!out.includes('material')) out.splice(Math.min(1, out.length), 0, 'material');
+    return out;
+  }
+
+  // Derive the fields the bands + columns use. SoH-vs-P2/Min need no PR data;
+  // PO/PR open status + counts, avg procurement lead time, and Min-vs-lead-time
+  // cover use the PR→PO→GR chains (TracePhase.computeChains), so chain work runs
+  // only for materials that actually have PR History rows. 'NA' / null = can't
+  // evaluate (missing inputs) — never silently treated as "not at risk".
   function computeRiskFields(){
     const prMatHas = new Set();
     if (state.hasPr) {
@@ -374,6 +480,7 @@
         if (k) prMatHas.add(k);
       }
     }
+    const todayMs = Date.parse(AppLocale.localDateISO() + 'T00:00:00Z');
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
     let chainCalls = 0;
     for (const e of state.materials) {
@@ -387,7 +494,8 @@
       m.sohBelowMin = (stock != null && cmin != null) ? (stock < cmin ? 'Y' : 'N') : 'NA';
 
       // Chain-derived fields.
-      let avgLT = null, poOpen = false, prOpen = false;
+      let avgLT = null, poOpenN = null, prOpenN = null, oldestPr = null;
+      if (state.hasPr) { poOpenN = 0; prOpenN = 0; }
       if (state.hasPr && prMatHas.has(m.material)) {
         chainCalls++;
         const chains   = TracePhase.computeChains(state.json, m.material);
@@ -396,24 +504,31 @@
         const act      = TracePhase.activeChains(chains, traceFiltersFor(m.material));
         const complete = act.filter(c => !!c.siteWH);
         if (complete.length) {
-          // #22-tie (2026-08-16) — use the shared sum-of-phase-means helper so this
-          // avg lead time matches the corrected Trend figure and the Trace headline.
-          // The old mean of per-chain (A+B+C+D) folded a missing phase in as 0 and
-          // read low on materials with invalid-release (releaseBad) chains.
+          // #22-tie (2026-08-16) — shared sum-of-phase-means helper so this matches
+          // the Trend figure and the Trace headline.
           avgLT = TracePhase.totalToSiteMean(complete);  // days to site (post-suppression)
         }
-        poOpen = chains.some(c => c.state === 'IN_FLIGHT' && !c.adminCancelled); // PO placed, not yet received at site
-        prOpen = chains.some(c => c.state === 'PR_ONLY');                        // PR raised, no PO yet
+        for (const c of chains) {
+          if (c.state === 'IN_FLIGHT' && !c.adminCancelled) poOpenN++;   // PO placed, not yet received at site
+          if (c.state === 'PR_ONLY') {                                    // PR raised, no PO yet
+            prOpenN++;
+            const d = Date.parse(String(c.prDate || '') + 'T00:00:00Z');
+            if (Number.isFinite(d) && Number.isFinite(todayMs)) {
+              const age = Math.max(0, Math.round((todayMs - d) / 86400000));
+              if (oldestPr == null || age > oldestPr) oldestPr = age;
+            }
+          }
+        }
       }
       m.avgProcTimelineDays = avgLT;
       // APP-FIX-SCR-LEADCELL (2026-09-25) — the shared detail panel's "Lead time" stat
-      // reads m.leadDays, which only Trend's enrichLeadTimes() used to set, so on the
-      // Screener that cell showed "—" for EVERY material even when the lead-time graph
-      // rendered. Same calc as Trend (Trace exclusions → reached site → Σ phase means),
-      // same 1-dp rounding, so the two pages show the identical figure.
+      // reads m.leadDays; same calc + 1-dp rounding as Trend.
       m.leadDays = (avgLT != null) ? Math.round(avgLT * 10) / 10 : null;
-      m.poStatus = state.hasPr ? (poOpen ? 'Open' : 'None') : null;
-      m.prStatus = state.hasPr ? (prOpen ? 'Open' : 'None') : null;
+      m.poOpenN = poOpenN;
+      m.prOpenN = prOpenN;
+      m.oldestOpenPrDays = oldestPr;
+      m.poStatus = state.hasPr ? (poOpenN ? 'Open' : 'None') : null;
+      m.prStatus = state.hasPr ? (prOpenN ? 'Open' : 'None') : null;
 
       // Min below lead-time cover: current SAP Min < P2/mo × (avg lead-time in mo).
       if (cmin != null && p2 != null && avgLT != null) {
@@ -425,12 +540,12 @@
       }
     }
     if (t0 && typeof console !== 'undefined') {
-      console.log(`[screener] risk fields: ${state.materials.length} materials · ${chainCalls} chain computes · ${(performance.now() - t0).toFixed(0)}ms`);
+      console.log(`[canvas] risk fields: ${state.materials.length} materials · ${chainCalls} chain computes · ${(performance.now() - t0).toFixed(0)}ms`);
     }
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
-     BAND PREDICATE + LIST
+     BAND PREDICATE + TABLE
   ═════════════════════════════════════════════════════════════════════════ */
   function passesBands(m, bands){
     for (const [k, f] of Object.entries(bands)) {
@@ -457,80 +572,146 @@
     return true;
   }
 
-  function filteredMaterials(){
+  function sortRows(rows){
+    const f = FIELD[state.sortKey] || FIELD.totalNet;
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    const isNum = !!f.num || f.k === 'trafficLight' || f.k === 'anAction' || f.g === 'Risk flags';
+    return rows.sort((a, b) => {
+      let av = f.val(a.m), bv = f.val(b.m);
+      const an = av == null || av === '', bn = bv == null || bv === '';
+      if (an && bn) return String(a.m.material).localeCompare(String(b.m.material));
+      if (an) return 1;            // blanks always sink to the bottom
+      if (bn) return -1;
+      if (isNum) return (av - bv) * dir || String(a.m.material).localeCompare(String(b.m.material));
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  }
+
+  // The rows the table shows: filters + search, in the current sort.
+  function visibleRows(){
     let rows = state.materials.filter(e => passesBands(e.m, state.bands));
     if (state.search) {
       const q = state.search.toLowerCase();
       rows = rows.filter(e => (e.m.material || '').toLowerCase().includes(q) || (e.m.description || '').toLowerCase().includes(q));
     }
-    return rows;
+    return sortRows(rows);
+  }
+  // (name kept for the Quick-look Prev/Next below)
+  function filteredMaterials(){ return visibleRows(); }
+
+  function renderTable(){
+    const wrap = $('#scrTableWrap');
+    const keepTop = wrap.scrollTop, keepLeft = wrap.scrollLeft;   // re-draws never jump the table
+    const rows = visibleRows();
+    const cols = state.columns.map(k => FIELD[k]).filter(Boolean);
+    const allShownOn = rows.length > 0 && rows.every(e => state.exportFlags.has(e.m.material));
+    const someShownOn = !allShownOn && rows.some(e => state.exportFlags.has(e.m.material));
+    const head = `<th class="chk"><input type="checkbox" id="scrChkAll" ${allShownOn ? 'checked' : ''} title="Tick / untick every material shown"></th>` +
+      cols.map(f => {
+        const sorted = state.sortKey === f.k ? ` sorted ${state.sortDir}` : '';
+        const na = f.pr && !state.hasPr ? ' title="Needs PR History"' : '';
+        return `<th class="${f.left ? 'left' : ''}${sorted}" data-sort="${f.k}"${na}>${escapeHtml(f.l)}<span class="sort-ind">${state.sortKey === f.k ? (state.sortDir === 'asc' ? '▲' : '▼') : ''}</span></th>`;
+      }).join('');
+    const body = rows.map(e => {
+      const m = e.m, on = state.exportFlags.has(m.material);
+      const cls = [on ? 'on' : '', m.material === state.selectedMaterial ? 'open' : ''].filter(Boolean).join(' ');
+      return `<tr class="${cls}" data-mat="${escapeAttr(m.material)}"><td class="chk"><input type="checkbox" data-flag="${escapeAttr(m.material)}" ${on ? 'checked' : ''} aria-label="Select ${escapeAttr(m.material)}"></td>` +
+        cols.map(f => `<td class="${f.left ? 'left' : ''}${f.wide ? ' wide' : ''}">${f.cell(m)}</td>`).join('') + '</tr>';
+    }).join('');
+    wrap.innerHTML = rows.length
+      ? `<table class="scr-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`
+      : `<div class="scr-list-empty">no materials match the current filters</div>`;
+    wrap.scrollTop = keepTop; wrap.scrollLeft = keepLeft;
+    const all = $('#scrChkAll'); if (all) all.indeterminate = someShownOn;
+    $('#scrTableMeta').textContent = `${rows.length.toLocaleString()} of ${state.materials.length.toLocaleString()} materials shown · click a row for a quick look · click a heading to sort`;
+    updateSelectionUi();
   }
 
-  function renderList(){
-    const rows = filteredMaterials();
-    $('#scrCount').textContent = `${rows.length.toLocaleString()} of ${state.materials.length.toLocaleString()} in analysis`;
-    const host = $('#scrList');
-    if (!rows.length) {
-      host.innerHTML = `<div class="scr-list-empty">no materials match the current bands</div>`;
-      return;
-    }
-    host.innerHTML = rows.map(e => {
-      const m = e.m;
-      const sel = m.material === state.selectedMaterial ? 'selected' : '';
-      const flg = state.exportFlags.has(m.material) ? 'flagged' : '';
-      const p2  = m.p2Flag === 'OK' ? m.p2Rate.toFixed(1) : '—';
-      const rw  = m.runway != null ? m.runway + 'mo' : '—';
-      const reclass = m.mrpRecFlag ? `<span class="scr-row-reclass" title="${escapeAttr(m.mrpReclassNote || 'Reclass recommended')}">${escapeHtml(m.mrpRecFlag)}</span>` : '';
-      // R2-7 — For-Action ★ (analyst flag from Trend), read-only indicator here.
-      const isAction = !!(state.analyst && state.analyst.isAction(m.material));
-      const actionBadge = isAction ? `<span class="scr-row-action" title="Flagged For Action">★</span>` : '';
-      return `
-        <div class="scr-row ${sel} ${flg}" data-mat="${escapeAttr(m.material)}">
-          <input type="checkbox" class="scr-row-flag" data-flag="${escapeAttr(m.material)}" ${flg ? 'checked' : ''} title="Flag this material for PDF export" aria-label="Flag ${escapeAttr(m.material)} for export">
-          <span class="tl-dot ${m.trafficLight}"></span>
-          <div class="scr-row-main">
-            <div class="scr-row-id">${escapeHtml(m.material)}${actionBadge}${reclass}</div>
-            <div class="scr-row-desc" title="${escapeAttr(m.description)}">${escapeHtml(m.description || '')}</div>
-          </div>
-          <div class="scr-row-stats">
-            <span title="P2 rate / mo">${p2}</span>
-            <span class="muted" title="Runway @ P2">${rw}</span>
-          </div>
-        </div>`;
-    }).join('');
-    $$('#scrList .scr-row').forEach(r => {
-      r.addEventListener('click', () => {
-        state.selectedMaterial = r.dataset.mat;
-        persistView();
-        renderList();
-        renderDetail();
-      });
-    });
-    // Export-flag checkboxes — toggle without selecting the row.
-    $$('#scrList .scr-row-flag').forEach(cb => {
-      cb.addEventListener('click', (e) => e.stopPropagation());
-      cb.addEventListener('change', () => {
+  function bindTableOnce(){
+    const wrap = $('#scrTableWrap');
+    wrap.addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (th) {
+        const k = th.dataset.sort;
+        if (state.sortKey === k) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        else { state.sortKey = k; state.sortDir = (FIELD[k] && (FIELD[k].left || FIELD[k].k === 'mrpType' || FIELD[k].k === 'pattern')) ? 'asc' : 'desc'; }
+        persistView(); renderTable();
+        return;
+      }
+      if (e.target.matches('#scrChkAll')) {
+        const rows = visibleRows();
+        if (e.target.checked) rows.forEach(r => state.exportFlags.add(r.m.material));
+        else rows.forEach(r => state.exportFlags.delete(r.m.material));
+        afterSelectionChange();
+        return;
+      }
+      const cb = e.target.closest('input[data-flag]');
+      if (cb) {
         const mat = cb.dataset.flag;
         if (cb.checked) state.exportFlags.add(mat); else state.exportFlags.delete(mat);
-        const row = cb.closest('.scr-row');
-        if (row) row.classList.toggle('flagged', cb.checked);
+        cb.closest('tr').classList.toggle('on', cb.checked);
         persistView();
-        updateExportButton();
-      });
+        updateSelectionUi();
+        const all = $('#scrChkAll');
+        if (all) {
+          const rows = visibleRows();
+          const n = rows.filter(r => state.exportFlags.has(r.m.material)).length;
+          all.checked = rows.length > 0 && n === rows.length; all.indeterminate = n > 0 && n < rows.length;
+        }
+        return;
+      }
+      if (e.target.closest('td.chk')) return;
+      const tr = e.target.closest('tr[data-mat]');
+      if (tr) openQuickLook(tr.dataset.mat);
     });
-    updateExportButton();
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
-     COMBINED DETAIL (MaterialDetail + TracePhase) — responsive grid
+     QUICK LOOK — the combined detail (MaterialDetail + TracePhase), OVER the page
   ═════════════════════════════════════════════════════════════════════════ */
+  function openQuickLook(mat){
+    state.selectedMaterial = mat;
+    let ql = $('#scrQuickLook');
+    if (!ql) {
+      ql = document.createElement('div');
+      ql.id = 'scrQuickLook'; ql.className = 'scr-ql';
+      ql.innerHTML = `
+        <div class="scr-ql-back"></div>
+        <div class="scr-ql-card" role="dialog" aria-label="Quick look">
+          <div class="scr-ql-head">
+            <span class="scr-ql-title"></span>
+            <label class="scr-ql-sel"><input type="checkbox" id="scrQlSel"> Selected for the Canvas</label>
+            <button class="ghost scr-ql-x" title="Close (Esc)">✕</button>
+          </div>
+          <div class="scr-ql-body" id="scrDetail"></div>
+        </div>`;
+      document.body.appendChild(ql);
+      const close = () => closeQuickLook();
+      ql.querySelector('.scr-ql-back').addEventListener('click', close);
+      ql.querySelector('.scr-ql-x').addEventListener('click', close);
+      ql.querySelector('#scrQlSel').addEventListener('change', (e) => {
+        if (e.target.checked) state.exportFlags.add(state.selectedMaterial); else state.exportFlags.delete(state.selectedMaterial);
+        persistView(); renderTable();
+      });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#scrQuickLook')) closeQuickLook(); });
+    }
+    renderDetail();
+    renderTable();
+  }
+  function closeQuickLook(){
+    const ql = $('#scrQuickLook'); if (ql) ql.remove();
+    state.selectedMaterial = null;
+    renderTable();
+  }
+
   function renderDetail(){
     const host = $('#scrDetail');
+    if (!host) return;
     const entry = state.materials.find(e => e.m.material === state.selectedMaterial);
-    if (!entry) {
-      host.innerHTML = `<div class="scr-empty"><div class="scr-empty-big">Pick a material</div>Select a material on the left to load its combined detail.</div>`;
-      return;
-    }
+    if (!entry) { closeQuickLook(); return; }
+    const t = $('#scrQuickLook .scr-ql-title');
+    if (t) t.innerHTML = `Quick look · <b class="mono">${escapeHtml(entry.m.material)}</b> <span class="muted">${escapeHtml(entry.m.description || '')}</span>`;
+    const sel = $('#scrQlSel'); if (sel) sel.checked = state.exportFlags.has(entry.m.material);
     // R2-7 — For-Action ★ on the graph (detail cell): read-only badge from the sidecar.
     const detIsAction = !!(state.analyst && state.analyst.isAction(entry.m.material));
     const detActionBadge = detIsAction ? ` <span class="scr-cell-action" title="Flagged For Action on Trend">★ For Action</span>` : '';
@@ -546,18 +727,16 @@
         </div>
       </div>`;
 
-    // Analysis material-detail visual (LLM off on the Screener). Wide aspect
-    // (Analysis parity) since the tile now spans the full detail width.
+    // Trend material-detail visual (LLM off here). Wide aspect (Trend parity).
     MaterialDetail.render($('#scrCellDetail'), entry.m, {
       bucket:      entry.bucket,
       parameters:  state.json.parameters,
       enableLlm:   false,
       chartWidth:  936,
       chartHeight: 320,
-      // APP-SCR-ALIGN (2026-08-17) — align the Screener detail with Trend (the
-      // standard): show the same Analyst column + Notes, but the Screener is a
-      // VIEW — the analyst layer is read-only and notes open in a read-only card.
-      // Prev/Next step through the current band-filtered list.
+      // APP-SCR-ALIGN (2026-08-17) — same Analyst column + Notes as Trend, but
+      // read-only here; notes open in a read-only card. Prev/Next step through
+      // the rows the table shows, in its order.
       analyst: state.analyst ? {
         enabled:  true,
         readOnly: true,
@@ -600,19 +779,19 @@
     }
   }
 
-  /* APP-SCR-ALIGN — Prev/Next through the current band-filtered list. */
+  /* Quick-look Prev/Next through the rows the table shows. */
   function scrStep(dir){
     const list = filteredMaterials();
     const i = list.findIndex(e => e.m.material === state.selectedMaterial);
     const j = i + dir;
     if (i < 0 || j < 0 || j >= list.length) return;
     state.selectedMaterial = list[j].m.material;
-    persistView();
-    renderList();
+    const body = $('#scrQuickLook .scr-ql-body'); if (body) body.scrollTop = 0;
     renderDetail();
+    renderTable();
   }
 
-  /* APP-SCR-ALIGN — read-only notes viewer (Screener is a view; edit on Trend). */
+  /* APP-SCR-ALIGN — read-only notes viewer (edit on Trend or in the Canvas). */
   function showRoNoteCard(material){
     const existing = document.getElementById('scrNoteCard');
     if (existing) existing.remove();
@@ -626,7 +805,7 @@
       `<div class="scr-note-body">${(note && note.trim())
         ? escapeHtml(note)
         : '<span class="scr-note-empty">No note for this material.</span>'}</div>` +
-      `<div class="scr-note-foot">View only — add or edit notes on the Trend page.</div>`;
+      `<div class="scr-note-foot">View only — add or edit notes on the Trend page or in the Canvas.</div>`;
     document.body.appendChild(el);
     const close = () => { el.remove(); document.removeEventListener('keydown', onEsc); };
     function onEsc(ev){ if (ev.key === 'Escape') close(); }
@@ -640,29 +819,146 @@
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
-     BANDS MODAL
+     COLUMN PICKER (SAP-style "change layout") — APP-CANVAS
+     Two lists: the columns shown (in order) and the fields available. Drag an
+     item between the lists or up/down to reorder; double-click moves it across;
+     the arrow buttons do the same for the highlighted item.
+  ═════════════════════════════════════════════════════════════════════════ */
+  function openColumnPicker(){
+    let shownCols = state.columns.slice();
+    let hi = null;   // highlighted field key
+    const ov = document.createElement('div');
+    ov.className = 'scr-modal';
+    ov.innerHTML = `
+      <div class="scr-backdrop"></div>
+      <div class="scr-dialog scr-colpick" role="dialog" aria-label="Choose columns">
+        <div class="scr-modal-head">
+          <div class="scr-modal-title"><span class="lab">Table layout</span><h3>Choose &amp; arrange columns</h3></div>
+          <button class="ghost scr-close cp-x" title="Close">✕</button>
+        </div>
+        <div class="scr-modal-body">
+          <div class="cp-intro">Drag fields between the lists, or drag up and down to change the order. Double-click moves a field across. <b>Material</b> is always shown.</div>
+          <div class="cp-grid">
+            <div class="cp-col">
+              <div class="cp-lab">Shown columns <span class="cp-n cp-n-shown"></span></div>
+              <ul class="cp-list cp-shown" data-list="shown"></ul>
+            </div>
+            <div class="cp-mid">
+              <button class="ghost cp-btn" data-act="add" title="Show the highlighted field">◀ Show</button>
+              <button class="ghost cp-btn" data-act="rem" title="Hide the highlighted column">Hide ▶</button>
+              <button class="ghost cp-btn" data-act="up" title="Move the highlighted column up">▲ Up</button>
+              <button class="ghost cp-btn" data-act="dn" title="Move the highlighted column down">▼ Down</button>
+            </div>
+            <div class="cp-col">
+              <div class="cp-lab">Available fields <input type="text" class="cp-find" placeholder="find…" autocomplete="off"></div>
+              <ul class="cp-list cp-avail" data-list="avail"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="scr-modal-foot">
+          <button class="ghost cp-default">Restore default</button>
+          <span class="scr-spacer"></span>
+          <button class="ghost cp-cancel">Cancel</button>
+          <button class="primary cp-apply">Apply</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const ulShown = ov.querySelector('.cp-shown'), ulAvail = ov.querySelector('.cp-avail'), find = ov.querySelector('.cp-find');
+    const itemHtml = (f, where) => {
+      const na = f.pr && !state.hasPr;
+      return `<li class="cp-item${f.lock ? ' lock' : ''}${hi === f.k ? ' hi' : ''}${na ? ' na' : ''}" draggable="${f.lock ? 'false' : 'true'}" data-k="${f.k}">` +
+        `<span class="cp-grip">⠿</span><span class="cp-name">${escapeHtml(f.l)}</span>` +
+        `<span class="cp-grp">${escapeHtml(f.g)}${na ? ' · needs PR History' : ''}${f.lock ? ' · always shown' : ''}</span></li>`;
+    };
+    function draw(){
+      ulShown.innerHTML = shownCols.map(k => itemHtml(FIELD[k], 'shown')).join('');
+      const q = find.value.trim().toLowerCase();
+      ulAvail.innerHTML = FIELDS.filter(f => !shownCols.includes(f.k) && (!q || (f.l + ' ' + f.g).toLowerCase().includes(q)))
+        .map(f => itemHtml(f, 'avail')).join('') || '<li class="cp-empty">—</li>';
+      ov.querySelector('.cp-n-shown').textContent = `(${shownCols.length})`;
+    }
+    draw();
+    find.addEventListener('input', draw);
+    const moveTo = (k, list, beforeKey) => {
+      const f = FIELD[k]; if (!f || f.lock && list === 'avail') return;
+      shownCols = shownCols.filter(x => x !== k);
+      if (list === 'shown') {
+        const i = beforeKey ? shownCols.indexOf(beforeKey) : -1;
+        if (i >= 0) shownCols.splice(i, 0, k); else shownCols.push(k);
+      }
+      hi = k; draw();
+    };
+    // highlight / double-click
+    ov.addEventListener('click', (e) => {
+      const li = e.target.closest('.cp-item'); if (li) { hi = li.dataset.k; draw(); }
+    });
+    ov.addEventListener('dblclick', (e) => {
+      const li = e.target.closest('.cp-item'); if (!li) return;
+      const inShown = shownCols.includes(li.dataset.k);
+      moveTo(li.dataset.k, inShown ? 'avail' : 'shown');
+    });
+    // drag & drop
+    let dragK = null;
+    ov.addEventListener('dragstart', (e) => { const li = e.target.closest('.cp-item'); if (!li) return; dragK = li.dataset.k; li.classList.add('drag'); try { e.dataTransfer.setData('text/plain', dragK); e.dataTransfer.effectAllowed = 'move'; } catch (_) {} });
+    ov.addEventListener('dragend', () => { dragK = null; ov.querySelectorAll('.cp-drop').forEach(n => n.classList.remove('cp-drop')); draw(); });
+    [ulShown, ulAvail].forEach(ul => {
+      ul.addEventListener('dragover', (e) => {
+        if (!dragK) return; e.preventDefault();
+        ov.querySelectorAll('.cp-drop').forEach(n => n.classList.remove('cp-drop'));
+        const li = e.target.closest('.cp-item'); (li || ul).classList.add('cp-drop');
+      });
+      ul.addEventListener('drop', (e) => {
+        e.preventDefault(); if (!dragK) return;
+        const list = ul.dataset.list;
+        let before = null;
+        const li = e.target.closest('.cp-item');
+        if (li && list === 'shown' && li.dataset.k !== dragK) {
+          const r = li.getBoundingClientRect();
+          const after = (e.clientY - r.top) > r.height / 2;
+          const idx = shownCols.indexOf(li.dataset.k);
+          const rest = shownCols.filter(x => x !== dragK);
+          const j = rest.indexOf(li.dataset.k) + (after ? 1 : 0);
+          before = rest[j] || null;
+          if (idx < 0) before = null;
+        }
+        moveTo(dragK, list, before);
+      });
+    });
+    // buttons
+    ov.querySelectorAll('.cp-btn').forEach(b => b.addEventListener('click', () => {
+      if (!hi) return;
+      const act = b.dataset.act, i = shownCols.indexOf(hi);
+      if (act === 'add' && i < 0) moveTo(hi, 'shown');
+      if (act === 'rem' && i >= 0) moveTo(hi, 'avail');
+      if ((act === 'up' || act === 'dn') && i >= 0) {
+        const j = act === 'up' ? i - 1 : i + 1;
+        if (j >= 0 && j < shownCols.length) { shownCols.splice(i, 1); shownCols.splice(j, 0, hi); draw(); }
+      }
+    }));
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onEsc); };
+    function onEsc(e){ if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onEsc);
+    ov.querySelector('.scr-backdrop').addEventListener('click', close);
+    ov.querySelector('.cp-x').addEventListener('click', close);
+    ov.querySelector('.cp-cancel').addEventListener('click', close);
+    ov.querySelector('.cp-default').addEventListener('click', () => { shownCols = DEFAULT_COLS.slice(); hi = null; draw(); });
+    ov.querySelector('.cp-apply').addEventListener('click', async () => {
+      state.columns = sanitizeColumns(shownCols);
+      if (!state.columns.includes(state.sortKey)) { state.sortKey = 'material'; state.sortDir = 'asc'; }
+      try { await AppStorage.set('settings.canvasColumns', state.columns); } catch (e) { /* swallow */ }
+      persistView();
+      close();
+      renderTable();
+    });
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════════
+     FILTER PANEL (inline, live) — the former "Screener bands" modal body
   ═════════════════════════════════════════════════════════════════════════ */
   function distinctValues(key){
     const s = new Set();
     for (const e of state.materials) { const v = e.m[key]; s.add(String(v == null ? '' : v)); }
     return [...s].sort();
-  }
-
-  function openBandsModal(){
-    buildBandsBody();
-    buildBandsFoot();
-    const modal = $('#bandsModal');
-    modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
-    const closeBtn = $('#bandsClose');
-    if (closeBtn && !closeBtn._wired) { closeBtn.addEventListener('click', closeBandsModal); closeBtn._wired = true; }
-    const backdrop = $('#bandsBackdrop');
-    if (backdrop && !backdrop._wired) { backdrop.addEventListener('click', closeBandsModal); backdrop._wired = true; }
-  }
-  function closeBandsModal(){
-    const modal = $('#bandsModal');
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
   }
 
   function buildBandsBody(){
@@ -672,7 +968,7 @@
       const checkedSet = (band && band.type === 'set') ? new Set(band.values) : null;
       return `
         <div class="band-field">
-          <div class="band-field-lab">${escapeHtml(f.l)} <span class="band-field-key">${f.k}</span></div>
+          <div class="band-field-lab">${escapeHtml(f.l)}</div>
           <div class="band-checks">
             ${vals.map(v => {
               const checked = checkedSet ? (checkedSet.has(v) ? 'checked' : '') : '';
@@ -689,7 +985,7 @@
       const mx = (band && band.type === 'range' && band.max != null) ? band.max : '';
       return `
         <div class="band-field band-range">
-          <div class="band-field-lab">${escapeHtml(f.l)} <span class="band-field-key">${f.k}</span></div>
+          <div class="band-field-lab">${escapeHtml(f.l)}</div>
           <div class="band-range-row">
             <input type="number" data-range-min="${escapeAttr(f.k)}" placeholder="min" value="${mn}">
             <span class="band-dash">–</span>
@@ -713,30 +1009,14 @@
           </div>
         </div>`;
     }).join('');
-    const flagGroup = flagCards.length ? `
-      <div class="band-group-lab">Risk flags</div>
-      <div class="band-intro">Each card flags an at-risk condition; checks within a card combine with <b>OR</b> (match if any checked condition is true). Min comparisons use the <b>current SAP Min</b>. Cards that need the procurement lead time only appear when PR History is loaded.</div>
-      <div class="band-grid">${flagHtml}</div>` : '';
 
     $('#bandsBody').innerHTML = `
-      <div class="band-intro">Bands <b>AND</b> together — a material must satisfy every constraint you set. For a category band, leave it fully unchecked (or fully checked) to ignore it. For a range, leave both inputs blank to ignore it.</div>
-      <div class="band-group-lab">Category bands</div>
+      ${flagCards.length ? `<div class="band-group-lab">Risk flags</div><div class="band-grid">${flagHtml}</div>` : ''}
+      <div class="band-group-lab">Categories</div>
       <div class="band-grid">${setHtml}</div>
-      <div class="band-group-lab">Numeric range bands</div>
+      <div class="band-group-lab">Ranges</div>
       <div class="band-grid">${rangeHtml}</div>
-      ${flagGroup}`;
-  }
-
-  function buildBandsFoot(){
-    $('#bandsFoot').innerHTML = `
-      <button id="bandsClearAll" class="ghost">Clear all</button>
-      <span class="scr-spacer"></span>
-      <button id="bandsApply" class="primary">Apply bands</button>`;
-    $('#bandsApply').addEventListener('click', applyBands);
-    $('#bandsClearAll').addEventListener('click', () => {
-      $$('#bandsBody input[type=checkbox]').forEach(c => c.checked = false);
-      $$('#bandsBody input[type=number]').forEach(i => i.value = '');
-    });
+      <div class="band-intro">Filters combine with <b>AND</b>. In a category, tick the values to keep (none ticked = no filter). In a risk card, any ticked condition matches. Min comparisons use the <b>current SAP Min</b>.</div>`;
   }
 
   function applyBands(){
@@ -764,9 +1044,7 @@
     }
     state.bands = bands;
     persistBands();
-    closeBandsModal();
-    renderActiveBands();
-    renderList();
+    renderTable();
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -778,8 +1056,9 @@
   async function persistView(){
     try {
       await AppStorage.set('screener.viewState', {
-        selectedMaterial: state.selectedMaterial,
-        exportFlags: [...state.exportFlags]
+        exportFlags: [...state.exportFlags],
+        sortKey: state.sortKey,
+        sortDir: state.sortDir
       });
     } catch (e) { /* swallow */ }
   }
@@ -1068,7 +1347,8 @@
     y += barH + 3.5;
     // Shelf E note (E also appears as its own titled box plot below).
     doc.setTextColor(120, 95, 175); doc.setFontSize(7.5);
-    doc.text(`then on shelf · E · Time to First Use: ${eMean.toFixed(1)}d`, M, y); y += 5;
+    // APP-FIX-RAW-OPENSTEP — no used-after-delivery chain yet → '—', not a fake 0.0d
+    doc.text(`then on shelf · E · Time to First Use: ${(ePh && ePh.s) ? eMean.toFixed(1) + 'd' : '-'}`, M, y); y += 5;
 
     // Box plots (each SVG → PNG), 5 across
     host.innerHTML = '<div id="expTp"></div>';

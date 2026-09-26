@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════
-     Inventory Optimization App · Screener · v2.2.0-dev · APP-SCR-01
+     Inventory Optimization App · Canvas (was Screener) · v2.2.0-dev · APP-SCR-01 → APP-CANVAS
+     The file keeps its screener/ path so existing links keep working.
      Repo : https://github.com/aisandbox-bj/Inventory_Optimization
      RoC  : ../record-of-change.html
      A post-analysis band filter. Reads the same canonical JSON as Analysis +
@@ -12,7 +13,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Inventory Optimization · Screener</title>
+<title>Inventory Optimization · Canvas</title>
 <meta name="app-version" content="2.2.0-dev" />
 <link rel="stylesheet" href="../shared/brand-tokens.css" />
 <script src="../shared/no-hovers.js"></script><!-- APP-HOVER-KILL (temp) — strips all native title tooltips; remove this line to restore -->
@@ -27,14 +28,14 @@
   <div class="brand">
     <span class="brand-mark"><svg viewBox="0 0 100 100" fill="none" role="img" aria-label="Calibre"><rect x="3" y="3" width="94" height="94" rx="24" fill="#0B111B" stroke="currentColor" stroke-opacity=".42" stroke-width="2"/><g stroke="currentColor" stroke-opacity=".55" stroke-width="2.4" stroke-linecap="round"><path d="M16 16 H26 M16 16 V26"/><path d="M84 16 H74 M84 16 V26"/><path d="M16 84 H26 M16 84 V74"/><path d="M84 84 H74 M84 84 V74"/></g><g stroke="currentColor" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M34 34 V66"/><path d="M66 34 V66"/><path d="M34 50 H66"/><path d="M34 50 L41 45 M34 50 L41 55"/><path d="M66 50 L59 45 M66 50 L59 55"/></g></svg></span>
     Calibre
-    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.2.0-dev · Screener</a>
+    <a class="sub" href="../record-of-change.html" title="Click for Record of Change — version history, what changed, rollback steps">v2.2.0-dev · Canvas</a>
   </div>
   <div class="links">
     <a href="../index.html">Dashboard</a>
     <a href="../intake/intake.html">Intake</a>
     <a href="../analysis/analysis.html">Trend</a>
     <a href="../trace/trace.html">Trace</a>
-    <a href="screener.html" class="active">Screener</a>
+    <a href="screener.html" class="active">Canvas</a>
     <a href="../sandbox/sandbox.html">⚗ Sandbox</a>
     <a href="../settings/settings.html">Settings</a>
     <a href="../record-of-change.html">RoC</a>
@@ -55,52 +56,41 @@
       <div class="row"></div>
     </section>
 
+    <!-- APP-CANVAS (2026-09-26) — the picker: filters (left) · checklist table (right) → ▶ Launch Canvas -->
     <div class="scr-toolbar" id="scrToolbar" hidden>
-      <div class="scr-count" id="scrCount">— of — in analysis</div>
+      <div class="scr-selcount" id="scrSelCount">0 selected</div>
       <div class="scr-toolbar-spacer"></div>
-      <div class="scr-active-bands" id="scrActiveBands"></div>
-      <button id="btnBands" class="primary" title="Set the bands (filters) that decide which analysed materials appear in the Screener">⚙ Screener bands…</button>
-      <button id="btnClearBands" class="ghost" title="Clear all bands — show every analysed material">Clear bands</button>
-      <button id="btnExport" class="primary" title="Export one letter-size PDF page per flagged material — both tiles side by side. Flag materials with the checkbox in the list.">⤓ Export flagged (0)</button>
-      <button id="btnBuildReport" class="primary" title="Build a customisable report for every flagged material — flag materials with the checkbox in the list, then pick page size and choose &amp; reorder blocks." disabled>⤓ Build report…</button>
       <button id="btnComments" class="ghost" title="Back up or restore your saved comments. Comments are kept against each material in this browser and survive deleting the JSON — export a small file to keep them across browsers or machines.">💬 Comments</button>
+      <button id="btnExport" class="ghost" title="One quick letter-size PDF page per selected material (chart, stats, MRP and phase distribution).">⤓ Quick PDF (0)</button>
+      <button id="btnBuildReport" class="ghost" title="A customisable US Letter report for every selected material — choose and reorder the blocks." disabled>⤓ Letter report (0)</button>
+      <button id="btnLaunch" class="primary scr-launch" title="Open the selected materials in the Canvas — one widescreen page per material, all using your master layout." disabled>▶ Launch Canvas (0)</button>
       <input type="file" id="commentsImport" accept="application/json,.json" hidden />
     </div>
 
     <div class="scr-main" id="scrMain" hidden>
-      <aside class="scr-list-wrap">
-        <div class="scr-list-toolbar">
-          <input type="text" id="scrSearch" class="scr-search" placeholder="Search material or description…" autocomplete="off" />
+      <aside class="scr-filter">
+        <div class="scr-filter-h">
+          <span>Screening filters</span>
+          <button id="btnClearBands" class="ghost scr-mini" title="Clear every filter — show all analysed materials">Clear all</button>
         </div>
-        <div id="scrList" class="scr-list">
-          <div class="scr-list-empty">no materials in band</div>
-        </div>
+        <div class="scr-filter-note">Filters only change what the table shows — your ticks are kept.</div>
+        <div id="bandsBody" class="scr-filter-body"></div>
       </aside>
 
-      <section class="scr-detail" id="scrDetail">
-        <div class="scr-empty">
-          <div class="scr-empty-big">Pick a material</div>
-          Select a material on the left to load its consumption detail (chart + stats + MRP recommendation) alongside its procurement phase distribution.
+      <section class="scr-tablepane">
+        <div class="scr-table-tools">
+          <input type="text" id="scrSearch" class="scr-search" placeholder="Search material or description…" autocomplete="off" />
+          <button id="btnSelShown" class="ghost scr-mini" title="Tick every material the table shows now">☑ Select all shown</button>
+          <button id="btnUnselShown" class="ghost scr-mini" title="Untick every material the table shows now">☐ Unselect shown</button>
+          <button id="btnSelClear" class="ghost scr-mini" title="Untick everything, including ticks hidden by the filters">Clear selection</button>
+          <span class="scr-spacer"></span>
+          <button id="btnColumns" class="ghost scr-mini" title="Choose, add and arrange the table columns">⚙ Columns…</button>
         </div>
+        <div class="scr-table-wrap" id="scrTableWrap"></div>
+        <div class="scr-table-meta" id="scrTableMeta"></div>
       </section>
     </div>
 
-  </div>
-
-  <!-- ─── Screener bands modal ─── -->
-  <div id="bandsModal" class="scr-modal hidden" aria-hidden="true">
-    <div class="scr-backdrop" id="bandsBackdrop"></div>
-    <div class="scr-dialog">
-      <div class="scr-modal-head">
-        <div class="scr-modal-title">
-          <span class="lab">Screener bands</span>
-          <h3>Filter the analysed materials</h3>
-        </div>
-        <button id="bandsClose" class="scr-close" title="Close">✕</button>
-      </div>
-      <div class="scr-modal-body" id="bandsBody"></div>
-      <div class="scr-modal-foot" id="bandsFoot"></div>
-    </div>
   </div>
 
 </main>

@@ -20,8 +20,10 @@
    Depends on (all already loaded on the Screener page): jsPDF + autoTable (lazy),
    AppChart, TracePhase, AppLocale (optional).
 
-   Public API:  ReportBuilder.open(ctx)
+   Public API:  ReportBuilder.open(ctx)        — US Letter report builder
+                ReportBuilder.openCanvas(ctx)  — widescreen Canvas workspace (APP-CANVAS)
    ctx = { json, m, bucket, hasPr, analyst, traceFilters, assessmentName }
+   (openCanvas ctx: see the CANVAS section below)
 ═══════════════════════════════════════════════════════════════════════════ */
 (function (global) {
   'use strict';
@@ -397,7 +399,7 @@
     doc.setTextColor(28,44,64); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(flowMean.toFixed(1)+'d', totX, P.y+11);
     doc.setFont('helvetica','normal'); P.y += barH + 3.5;
     doc.setTextColor(120,95,175); doc.setFontSize(7.5);
-    doc.text(pdfSafe(`then on shelf - E - Time to First Use: ${eMean.toFixed(1)}d`), M, P.y); P.y += 5;
+    doc.text(pdfSafe(`then on shelf - E - Time to First Use: ${(ePh && ePh.s) ? eMean.toFixed(1) + 'd' : '-'}`), M, P.y); P.y += 5;   // no used-after-delivery chain → '-' (APP-FIX-RAW-OPENSTEP)
     // optional box & whisker (suppressed under force-fit to save the page)
     if (opts && opts.box && !(fit && fit.noBox)){
       host.innerHTML = '<div id="rbTp"></div>';
@@ -436,7 +438,8 @@
       const cs = byYear.get(yr);
       const means = PK.map(ph => { const s = TracePhase.boxStats(cs.map(c => c[ph])); return s ? s.mean : 0; });
       const toSite = means[0]+means[1]+means[2]+means[3];
-      return { yr, n:cs.length, means, toSite, shelf:means[4] };
+      const sE = TracePhase.boxStats(cs.map(c => c.E));
+      return { yr, n:cs.length, means, toSite, shelf: sE ? sE.mean : null };   // null = no chain used yet that year
     });
     const maxToSite = Math.max(1, ...yearStats.map(s => s.toSite));
     doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(95,95,105);
@@ -471,7 +474,7 @@
       doc.setFont('helvetica','normal');
       // shelf E
       doc.setTextColor(120,95,175); doc.setFontSize(6.5);
-      doc.text(pdfSafe('shelf E ' + ys.shelf.toFixed(1) + 'd'), tX + 22, P.y+10);
+      doc.text(pdfSafe('shelf E ' + (ys.shelf != null ? ys.shelf.toFixed(1) + 'd' : '-')), tX + 22, P.y+10);
       P.y += rowH + gap;
     });
     // legend
@@ -752,14 +755,8 @@
             <div class="rb-sec-h">1 · Page size</div>
             <div class="rb-size">
               <label class="rb-size-opt active"><input type="radio" name="rbsize" value="letter" checked><span class="rb-size-name">US Letter</span><span class="rb-size-d">Portrait · stacked report</span></label>
-              <label class="rb-size-opt"><input type="radio" name="rbsize" value="wide"><span class="rb-size-name">Widescreen 16:9</span><span class="rb-size-d">Landscape · for 1080p / 4K screens</span></label>
             </div>
-            <div class="rb-wide-note" hidden>Widescreen exports a landscape PDF. The drag-and-drop 2D layout tool is a later pass.</div>
-            <div class="rb-theme" hidden>
-              <span class="rb-theme-lab">Widescreen appearance</span>
-              <label class="rb-theme-opt active"><input type="radio" name="rbtheme" value="light" checked> Light — report style</label>
-              <label class="rb-theme-opt"><input type="radio" name="rbtheme" value="dark"> Dark — on-screen look</label>
-            </div>
+            <div class="rb-wide-note">Widescreen 16:9 pages now live in the <b>Canvas</b> — tick materials and press ▶ Launch Canvas.</div>
           </div>
 
           <div class="rb-sec">
@@ -825,19 +822,8 @@
       }));
     }
 
-    // page size
-    let pageSize = 'letter';
-    ov.querySelectorAll('input[name="rbsize"]').forEach(r => r.addEventListener('change', () => {
-      pageSize = ov.querySelector('input[name="rbsize"]:checked').value;
-      ov.querySelectorAll('.rb-size-opt').forEach(o => o.classList.toggle('active', o.querySelector('input').checked));
-      ov.querySelector('.rb-wide-note').hidden = pageSize !== 'wide';
-      ov.querySelector('.rb-theme').hidden = pageSize !== 'wide';
-      ov.querySelector('.rb-gen').textContent = pageSize === 'wide' ? 'Arrange →' : 'Preview →';
-      refreshWarn();
-    }));
-    ov.querySelectorAll('input[name="rbtheme"]').forEach(r => r.addEventListener('change', () => {
-      ov.querySelectorAll('.rb-theme-opt').forEach(o => o.classList.toggle('active', o.querySelector('input').checked));
-    }));
+    // page size — US Letter only (APP-CANVAS: widescreen moved to the Canvas)
+    const pageSize = 'letter';
 
     // overflow estimate
     const warnEl = ov.querySelector('.rb-warn');
@@ -857,7 +843,6 @@
 
     function close(){
       pickerSaver.flush();
-      if (ov._rbTeardown) ov._rbTeardown();   // keep any widescreen layout work (saved session)
       ov.remove(); document.removeEventListener('keydown', onKey);
     }
     function onKey(e){ if (e.key === 'Escape') close(); }
@@ -899,17 +884,12 @@
       if (!blocks.length){ warnEl.hidden = false; warnEl.className='rb-warn'; warnEl.innerHTML = '⚠ Pick at least one block to include.'; return; }
       refreshWarn();   // clear any earlier "Report failed" so it can't linger over a successful build
       const gen = ov.querySelector('.rb-gen'); const orig = gen.textContent;
-      gen.disabled = true; gen.textContent = pageSize === 'wide' ? 'Building cards…' : 'Rendering…';
+      gen.disabled = true; gen.textContent = 'Rendering…';
       try {
-        if (pageSize === 'wide'){
-          const theme = (ov.querySelector('input[name="rbtheme"]:checked') || {}).value || 'light';
-          await openWideCanvas(ov, close, ctx, blocks, theme);
-        } else {
-          const res = await build(ctx, pageSize, blocks, 'multi', 'preview', (k, n) => { if (n > 1) gen.textContent = `Rendering ${k}/${n}…`; });
-          // Live comment editor only when the set is a single material (one comment ↔ one note).
-          const regen = nMat > 1 ? null : (() => build(ctx, pageSize, blocks, 'multi', 'preview'));
-          showPreview(res, regen);
-        }
+        const res = await build(ctx, pageSize, blocks, 'multi', 'preview', (k, n) => { if (n > 1) gen.textContent = `Rendering ${k}/${n}…`; });
+        // Live comment editor only when the set is a single material (one comment ↔ one note).
+        const regen = nMat > 1 ? null : (() => build(ctx, pageSize, blocks, 'multi', 'preview'));
+        showPreview(res, regen);
         gen.disabled = false; gen.textContent = orig;
       } catch (e){
         console.error(e);
@@ -917,36 +897,6 @@
         gen.disabled = false; gen.textContent = orig;
       }
     });
-
-    // APP-RB-WIDESESSION — a widescreen report in progress? Offer to continue it.
-    const saved = loadSession(ctx);
-    if (saved){
-      const nInc = saved.order.filter(m => !(saved.excluded || []).includes(m)).length;
-      const nRem = saved.order.length - nInc;
-      let when = '';
-      try { when = new Date(saved.savedAt).toLocaleString('en-CA', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch (e) {}
-      const ch = document.createElement('div'); ch.className = 'rb-choice';
-      ch.innerHTML = `
-        <div class="rb-choice-card">
-          <div class="rb-choice-h">You have a widescreen report in progress</div>
-          <div class="rb-choice-b">${nInc} material${nInc===1?'':'s'}${nRem ? ` (${nRem} removed)` : ''} · ${saved.theme === 'dark' ? 'Dark' : 'Light'}${when ? ` · last saved ${esc(when)}` : ''}<br>Continue where you left off — same set, same page layouts — or start a new report from the materials flagged now (${nMat}).</div>
-          <div class="rb-choice-a">
-            <button class="rb-btn ghost rb-ch-fresh">Start afresh</button>
-            <button class="rb-btn primary rb-ch-cont">Continue on current set →</button>
-          </div>
-        </div>`;
-      ov.querySelector('.rb-modal').appendChild(ch);
-      ch.querySelector('.rb-ch-fresh').addEventListener('click', () => ch.remove());
-      ch.querySelector('.rb-ch-cont').addEventListener('click', async (ev) => {
-        const b = ev.currentTarget; b.disabled = true; b.textContent = 'Opening…';
-        try { await openWideCanvas(ov, close, ctx, null, saved.theme || 'light', saved); ch.remove(); }
-        catch (e){
-          console.error(e);
-          ch.querySelector('.rb-choice-b').innerHTML = '⚠ Couldn’t reopen the saved report: ' + esc(e.message || String(e)) + '. Start afresh instead.';
-          b.remove();
-        }
-      });
-    }
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -1088,7 +1038,7 @@
           const flow = ps.filter(x=>x.key!=='E');
           const bar = flow.map((p,i)=>{ const frac=flowMean>0?((p.s?p.s.mean:0)/flowMean):0; return `<div style="flex:${Math.max(frac,0.02)};background:${CO[i]};color:#0f1620;font-size:9px;font-weight:700;padding:6px 3px;text-align:center;overflow:hidden">${p.label.split(' ')[0]}<br>${p.s?p.s.mean.toFixed(1):'—'}d</div>`; }).join('');
           inner += `<div style="display:flex;gap:1px;border-radius:4px;overflow:hidden;margin-bottom:6px">${bar}</div>`
-            + `<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${TH.text}">Total to site <b style="color:${TH.accent}">${flowMean.toFixed(1)}d</b> · then shelf E ${(ps.find(x=>x.key==='E')?.s?.mean||0).toFixed(1)}d</div>`;
+            + `<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${TH.text}">Total to site <b style="color:${TH.accent}">${flowMean.toFixed(1)}d</b> · then shelf E ${(()=>{ const s=ps.find(x=>x.key==='E')?.s; return s ? s.mean.toFixed(1)+'d' : '—'; })()}</div>`;
           if (opts && opts.box){
             const imgs = await boxPlotDataUrls(ctx);
             if (imgs.length) inner += `<div style="display:flex;gap:3px;margin-top:8px">${imgs.map(d=>`<img src="${d}" style="flex:1;min-width:0;border:1px solid ${TH.border};border-radius:3px"/>`).join('')}</div>`;
@@ -1155,135 +1105,236 @@
     return el;
   }
 
-  // ─── Saved widescreen session (APP-RB-WIDESESSION) ───
-  // The layout work is saved as you go (per assessment, in this browser) so leaving
-  // the builder doesn't lose it; reopening offers "Continue on current set".
-  function sessionKey(ctx){ return 'calibre.reportSession.v1.' + (ctx.assessmentName || ''); }
-  function loadSession(ctx){
-    try { const o = JSON.parse(localStorage.getItem(sessionKey(ctx)) || 'null'); return (o && o.v === 1 && Array.isArray(o.order) && o.base) ? o : null; }
-    catch (e) { return null; }
-  }
-  function saveSession(ctx, o){ try { localStorage.setItem(sessionKey(ctx), JSON.stringify(o)); } catch (e) {} }
-  function clearSession(ctx){ try { localStorage.removeItem(sessionKey(ctx)); } catch (e) {} }
+  /* ═════════════════════════════════════════════════════════════════════════
+     CANVAS (APP-CANVAS, 2026-09-26) — the widescreen review workspace.
 
-  // ─── WIDESCREEN layout canvas — one page per material (APP-RB-WIDEPAGES) ───
-  // Layouts are keyed by MATERIAL. A page FOLLOWS the page before it (among the
-  // materials still in the report) until you change it — then it keeps its own.
-  // The base ("starting") layout is what the first page follows.
+     Replaces the Build-report widescreen flow. One MASTER layout (a setting,
+     kept in this browser) applies to every page; each selected material is one
+     16:9 page. Two modes:
+       Review — read + comment; tiles are locked in place.
+       Layout — include / exclude tiles, tile options, drag to move, corner-drag
+                to resize. Changes apply to every page.
+     The on-screen WORK theme and the PDF PRINT theme are independent.
+
+     Storage (this browser, never the canonical JSON):
+       calibre.canvasLayout.v1               master layout + work/print theme
+       calibre.canvasSession.v1.<assessment> the set, removed materials, current page
+  ═════════════════════════════════════════════════════════════════════════ */
   function imgsLoaded(el){
     const imgs = [...el.querySelectorAll('img')];
     return Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r => { im.onload = im.onerror = r; })));
   }
   function cloneLayout(lay){ return lay.map(c => ({ ...c, opts: { ...(c.opts || {}) } })); }
 
-  async function openWideCanvas(ov, close, ctx, blocks, theme, resume){
-    await ensureH2C();
-    const hasBatch = !!(ctx.batch && ctx.batch.list && ctx.batch.list.length);
-    // entries by material — from the saved session (Continue) or the flagged set
-    const entryByMat = new Map();
-    let order = [], missing = 0;
-    if (resume){
-      for (const mat of resume.order){
-        const e = (ctx.batch && ctx.batch.lookup) ? ctx.batch.lookup(mat)
-          : (ctx.batch && ctx.batch.list || []).find(x => x.m.material === mat);
-        if (e){ entryByMat.set(mat, e); order.push(mat); } else missing++;
+  const LAYOUT_KEY = 'calibre.canvasLayout.v1';
+  function canvasKey(name){ return 'calibre.canvasSession.v1.' + (name || ''); }
+  function loadCanvasSession(name){
+    try { const o = JSON.parse(localStorage.getItem(canvasKey(name)) || 'null'); return (o && o.v === 1 && Array.isArray(o.order) && o.order.length) ? o : null; }
+    catch (e) { return null; }
+  }
+  function saveCanvasSession(name, o){ try { localStorage.setItem(canvasKey(name), JSON.stringify(o)); } catch (e) {} }
+  function loadMaster(){
+    try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null'); if (o && o.v === 1 && Array.isArray(o.layout)) return o; } catch (e) {}
+    // First run: adopt the newest layout arranged in the old Build-report widescreen
+    // flow (APP-RB-WIDESESSION, calibre.reportSession.v1.*) so that work carries over.
+    let best = null;
+    try {
+      for (let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        if (!k || k.indexOf('calibre.reportSession.v1.') !== 0) continue;
+        const s = JSON.parse(localStorage.getItem(k) || 'null');
+        if (s && Array.isArray(s.base) && s.base.length && (!best || String(s.savedAt || '') > String(best.savedAt || ''))) best = s;
       }
-      theme = resume.theme || theme;
-    } else {
-      const list = hasBatch ? ctx.batch.list : [{ m: ctx.m, bucket: ctx.bucket }];
-      list.forEach(e => { entryByMat.set(e.m.material, e); order.push(e.m.material); });
+    } catch (e) {}
+    return best ? { v:1, layout: best.base, workTheme: best.theme === 'light' ? 'light' : 'dark', printTheme: best.theme === 'dark' ? 'dark' : 'light' } : null;
+  }
+  function saveMaster(o){ try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+
+  // "Continue the canvas in progress, or start one from today's selection?"
+  function askResume(modal, saved, nSel){
+    return new Promise(res => {
+      const nInc = saved.order.filter(m => !(saved.excluded || []).includes(m)).length;
+      const nRem = saved.order.length - nInc;
+      let when = '';
+      try { when = new Date(saved.savedAt).toLocaleString('en-CA', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch (e) {}
+      const ch = document.createElement('div'); ch.className = 'rb-choice';
+      ch.innerHTML = `
+        <div class="rb-choice-card">
+          <div class="rb-choice-h">You have a canvas in progress</div>
+          <div class="rb-choice-b">${nInc} material${nInc===1?'':'s'}${nRem ? ` (${nRem} removed)` : ''}${when ? ` · last saved ${esc(when)}` : ''}<br>Continue where you left off, or start a new canvas with the ${nSel} material${nSel===1?'':'s'} selected now. Comments are kept either way.</div>
+          <div class="rb-choice-a">
+            <button class="rb-btn ghost rb-ch-fresh">Start with current selection</button>
+            <button class="rb-btn primary rb-ch-cont">Continue current canvas →</button>
+          </div>
+        </div>`;
+      modal.appendChild(ch);
+      ch.querySelector('.rb-ch-fresh').addEventListener('click', () => { ch.remove(); res(null); });
+      ch.querySelector('.rb-ch-cont').addEventListener('click', () => { ch.remove(); res(saved); });
+    });
+  }
+
+  // ctx = { json, hasPr, analyst, assessmentName,
+  //         list:[{m,bucket}]  (the selected materials, in table order),
+  //         lookup(mat) → {m,bucket}|null  (any analysed material — to reopen a saved set),
+  //         traceFiltersFor(mat), onClose() }
+  async function openCanvas(ctx){
+    const name = ctx.assessmentName || '';
+    const ov = document.createElement('div'); ov.className = 'rb-overlay rb-cv-ov';
+    ov.innerHTML = '<div class="rb-modal rb-cv-modal" role="dialog" aria-label="Canvas"></div>';
+    document.body.appendChild(ov);
+    const modal = ov.querySelector('.rb-modal');
+    const closeAll = () => { ov.remove(); if (ctx.onClose) ctx.onClose(); };
+    const sel = (ctx.list || []).map(e => e.m.material);
+    const saved = loadCanvasSession(name);
+    let resume = null;
+    if (saved){
+      const a = new Set(sel), b = new Set(saved.order);
+      const sameSet = a.size === b.size && [...a].every(m => b.has(m));
+      resume = (sameSet || !sel.length) ? saved : await askResume(modal, saved, sel.length);
     }
-    if (!order.length){ throw new Error('none of the saved materials are in this assessment any more'); }
-    const pctx = (mat) => hasBatch || resume ? ctxForEntry(ctx, entryByMat.get(mat)) : ctx;
+    if (!resume && !sel.length){ closeAll(); return; }
+    try { await buildCanvas(ov, modal, ctx, resume, closeAll); }
+    catch (e){
+      console.error(e);
+      modal.innerHTML = `<div class="rb-choice"><div class="rb-choice-card"><div class="rb-choice-h">Couldn’t open the canvas</div><div class="rb-choice-b">${esc(e.message || String(e))}</div><div class="rb-choice-a"><button class="rb-btn ghost rb-cv-x">Close</button></div></div></div>`;
+      modal.querySelector('.rb-cv-x').addEventListener('click', closeAll);
+    }
+  }
+
+  async function buildCanvas(ov, modal, ctx, resume, closeAll){
+    await ensureH2C();
+    const name = ctx.assessmentName || '';
+
+    // ── the set ──
+    const listByMat = new Map((ctx.list || []).map(e => [e.m.material, e]));
+    const entryByMat = new Map(); const order = []; let missing = 0;
+    const src = resume ? resume.order : (ctx.list || []).map(e => e.m.material);
+    for (const mat of src){
+      if (entryByMat.has(mat)) continue;
+      const e = listByMat.get(mat) || (ctx.lookup ? ctx.lookup(mat) : null);
+      if (e){ entryByMat.set(mat, e); order.push(mat); } else missing++;
+    }
+    if (!order.length) throw new Error('none of the saved materials are in this assessment any more');
+    const pctx = (mat) => {
+      const e = entryByMat.get(mat);
+      return { json: ctx.json, m: e.m, bucket: e.bucket, hasPr: ctx.hasPr, analyst: ctx.analyst,
+               traceFilters: ctx.traceFiltersFor ? ctx.traceFiltersFor(mat) : {}, assessmentName: name };
+    };
     const excluded = new Set(resume ? (resume.excluded || []).filter(m => entryByMat.has(m)) : []);
     const included = () => order.filter(m => !excluded.has(m));
+    if (!included().length) excluded.clear();
 
-    const stage_host = document.createElement('div'); stage_host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(stage_host);
-    const domCache = new Map();   // mat|key → { el, ar }
-    async function cardFor(mat, c, cache){
-      const k = mat + '|' + c.key;
-      if (domCache.has(k)) return domCache.get(k);
+    // ── master layout ──
+    // Tiles needing PR History stay in the saved layout but aren't drawn when the
+    // assessment has none (so switching assessments never loses them).
+    const avail = (id) => { const b = BLOCKS.find(x => x.id === id); return !!b && !b.soon && (b.needs !== 'pr' || ctx.hasPr); };
+    const master = loadMaster() || {};
+    let workTheme  = master.workTheme  === 'light' ? 'light' : 'dark';
+    let printTheme = master.printTheme === 'dark'  ? 'dark'  : 'light';
+    let layout = Array.isArray(master.layout) ? cloneLayout(master.layout).filter(c => BLOCKS.some(b => b.id === c.id)) : [];
+    let keySeq = 1 + layout.reduce((n, c) => Math.max(n, parseInt(String(c.key || '').replace(/\D/g, ''), 10) || 0), 0);
+    layout.forEach(c => { c.key = c.key || ('k' + (keySeq++)); c.freeAspect = c.id === 'comment'; });
+    const needAuto = !layout.some(c => avail(c.id));
+    if (needAuto){
+      layout = BLOCKS.filter(b => (b.on || b.id === 'comment') && avail(b.id))
+        .map(b => ({ key: 'k' + (keySeq++), id: b.id, opts: { box: b.id === 'avgDur', lastN: b.lastN || 8 }, freeAspect: b.id === 'comment' }));
+    }
+    const shown = () => layout.filter(c => avail(c.id));
+
+    // ── card cache (offscreen render → measured aspect) ──
+    const stageHost = document.createElement('div');
+    stageHost.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;';
+    document.body.appendChild(stageHost);
+    const cache = new Map();
+    const sig = (c) => (c.opts && c.opts.box ? 'b' : '') + '|' + ((c.opts && c.opts.lastN) || '');
+    async function cardFor(mat, c, theme){
+      const k = mat + '|' + c.id + '|' + theme + '|' + sig(c);
+      if (cache.has(k)) return cache.get(k);
       const el = await buildCardDom(c.id, pctx(mat), c.opts || {}, theme);
-      stage_host.appendChild(el);
+      stageHost.appendChild(el);
       await imgsLoaded(el);
       const rec = { el, ar: (el.offsetHeight / el.offsetWidth) || 1 };
-      if (cache !== false) domCache.set(k, rec); else stage_host.removeChild(el);
+      cache.set(k, rec);
+      if (cache.size > 120){   // keep memory bounded on big sets — drop other materials' cards
+        for (const kk of [...cache.keys()]){
+          if (kk.indexOf(mat + '|') === 0) continue;
+          const r = cache.get(kk); cache.delete(kk);
+          if (r && r.el.parentNode === stageHost) r.el.remove();
+          if (cache.size <= 80) break;
+        }
+      }
       return rec;
     }
-
-    let keySeq = resume ? (resume.keySeq || 1000) : 0;
-    async function autoLayout(mat, lay){
-      const cols = Math.min(3, Math.max(1, Math.round(Math.sqrt(lay.length || 1))));
+    async function autoLayout(mat){
+      const tiles = shown();
+      const cols = Math.min(3, Math.max(1, Math.round(Math.sqrt(tiles.length || 1))));
       const gap = 0.015, colW = (1 - gap * (cols + 1)) / cols;
       const colY = new Array(cols).fill(gap);
-      for (const c of lay){
-        const rec = await cardFor(mat, c);
+      for (const c of tiles){
+        const rec = await cardFor(mat, c, workTheme);
         const col = colY.indexOf(Math.min(...colY));
         c.w = colW; c.x = gap + col * (colW + gap); c.y = colY[col];
         c.h = c.w * 1.7778 * rec.ar;
         colY[col] += c.h + gap;
       }
     }
-    let base;
-    const own = new Map();   // mat → its own layout
-    if (resume){
-      base = cloneLayout(resume.base);
-      Object.entries(resume.layouts || {}).forEach(([m, lay]) => { if (entryByMat.has(m)) own.set(m, cloneLayout(lay)); });
-    } else {
-      base = blocks.map(b => ({ key: 'k' + (keySeq++), id: b.id, opts: { ...(b.opts || {}) }, freeAspect: b.id === 'comment' }));
-      await autoLayout(order[0], base);
-    }
-    // effective layout for a material = its own, else the nearest earlier included page's own, else the base
-    function effective(mat){
-      const inc = included(); let i = inc.indexOf(mat);
-      for (; i >= 0; i--){ const m = inc[i]; if (own.has(m)) return { lay: own.get(m), from: m }; }
-      return { lay: base, from: null };
-    }
 
     // ── UI ──
-    const modal = ov.querySelector('.rb-modal');
-    modal.classList.add('rb-has-preview');
-    modal.style.width = 'min(1180px,100%)'; modal.style.height = 'min(90vh,960px)';
-    const multi = order.length > 1;
+    modal.innerHTML = '';
     const pane = document.createElement('div');
-    pane.className = 'rb-wide';
+    pane.className = 'rb-wide rb-cv';
     pane.innerHTML = `
-      <div class="rb-pv-bar">
-        <span class="rb-pv-meta">Widescreen 16:9 · ${theme==='dark'?'Dark':'Light'} · drag tiles to place, drag a corner to resize</span>
+      <div class="rb-pv-bar rb-cv-bar">
+        <span class="rb-cv-title"><span class="rb-eyebrow">Calibre · Canvas</span><span class="rb-cv-assess">${esc(name)}</span></span>
+        <span class="rb-cv-tabs" role="tablist">
+          <button class="rb-cv-tab on" data-tab="review" role="tab">Review</button>
+          <button class="rb-cv-tab" data-tab="layout" role="tab">Layout</button>
+        </span>
         <span class="rb-pv-actions">
-          <button class="rb-btn ghost rb-w-back">‹ Back</button>
-          <button class="rb-btn ghost rb-w-add">+ Add tile</button>
-          <button class="rb-btn ghost rb-w-reset">Reset layout</button>
-          ${multi ? '<button class="rb-btn ghost rb-w-batch">Select pages…</button>' : ''}
+          <span class="rb-cv-seg" title="How the canvas looks while you work">Work<button data-wt="dark">Dark</button><button data-wt="light">Light</button></span>
+          <span class="rb-cv-seg" title="How the pages print (PDF)">Print<button data-pt="light">Light</button><button data-pt="dark">Dark</button></span>
+          <button class="rb-btn ghost rb-w-batch">Select pages…</button>
           <button class="rb-btn primary rb-w-render">Preview PDF →</button>
+          <button class="rb-btn ghost rb-cv-close" title="Close the canvas — your place, layout and comments are kept">✕ Close</button>
         </span>
       </div>
-      <div class="rb-w-nav">
-        ${multi ? '<span class="rb-w-navbtns"><button class="rb-btn ghost rb-w-prev">‹ Prev</button><button class="rb-btn ghost rb-w-next">Next ›</button></span>' : ''}
+      <div class="rb-w-nav rb-cv-nav">
+        <span class="rb-w-navbtns"><button class="rb-btn ghost rb-w-prev">‹ Prev</button><button class="rb-btn ghost rb-w-next">Next ›</button></span>
+        <button class="rb-btn ghost rb-w-remove" title="Take this material out of the set and move to the next one">✕ Remove from set</button>
         <span class="rb-w-page"></span>
-        ${multi ? '<button class="rb-btn ghost rb-w-remove" title="Take this material out of the report">✕ Remove from report</button><span class="rb-w-removed"></span>' : ''}
-        ${multi ? '<span class="rb-w-lay"></span>' : ''}
-      </div>
-      ${multi ? `<div class="rb-w-nav rb-w-nav2">
-        <button class="rb-btn ghost rb-w-copyprev">⧉ Copy layout from previous page</button>
-        <button class="rb-btn ghost rb-w-applyall">Apply this layout to all pages</button>
+        <span class="rb-w-removed"></span>
         <span class="rb-w-saved"></span>
-      </div>` : ''}
+      </div>
       <div class="rb-cmt-editor rb-w-cmt">
         <span class="rb-cmt-lab">✎ Comment<span class="rb-cmt-carry rb-w-cmt-mat"></span></span>
-        <textarea class="rb-cmt-ta" rows="2" placeholder="Comment for this page's material — kept against the material and reloaded next time. Shows in the page's Comment tile."></textarea>
+        <textarea class="rb-cmt-ta" rows="2" placeholder="Comment for this material — kept against the material and reloaded next time. Shows in the page's Comment tile."></textarea>
       </div>
-      <div class="rb-stage-wrap"><div class="rb-stage"><div class="rb-w-tnc"></div></div></div>`;
+      <div class="rb-stage-wrap">
+        <div class="rb-stage"><div class="rb-w-tnc"></div></div>
+        <div class="rb-cv-tiles" hidden>
+          <div class="rb-cv-tiles-h" title="Drag to move this panel">Tiles <span>on every page</span></div>
+          <ul class="rb-cv-tiles-list"></ul>
+          <div class="rb-cv-tiles-note">Drag a tile to move it · drag its corner to resize · ✕ removes it. Changes apply to every page.</div>
+          <div class="rb-cv-tiles-f"><button class="rb-btn ghost rb-cv-auto">Auto-arrange</button></div>
+        </div>
+      </div>`;
     modal.appendChild(pane);
-    const restoreModal = makePreviewInteractive(modal, pane);
     const stage = pane.querySelector('.rb-stage');
     const wrap  = pane.querySelector('.rb-stage-wrap');
     const tncEl = pane.querySelector('.rb-w-tnc');
-    stage.style.background = theme === 'dark' ? '#0c2d3b' : '#ffffff';
+    const tilesEl = pane.querySelector('.rb-cv-tiles');
     tncEl.innerHTML = tncLines().map(esc).join('<br>');
-    if (theme === 'dark') tncEl.classList.add('dark');
+    let editing = false;
 
-    // true 16:9 stage that fills the panel; the T&C scales with the page (5.8pt on 338.7mm)
+    function applyTheme(){
+      stage.style.background = workTheme === 'dark' ? '#0c2d3b' : '#ffffff';
+      tncEl.classList.toggle('dark', workTheme === 'dark');
+      pane.querySelectorAll('[data-wt]').forEach(b => b.classList.toggle('on', b.dataset.wt === workTheme));
+      pane.querySelectorAll('[data-pt]').forEach(b => b.classList.toggle('on', b.dataset.pt === printTheme));
+    }
+    applyTheme();
+
+    // true 16:9 stage that fills the panel; the T&C scales with the page
     function fitStage(){
       const cs = getComputedStyle(wrap);
       const aw = wrap.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -1297,29 +1348,25 @@
     }
     const roWrap = new ResizeObserver(fitStage); roWrap.observe(wrap); fitStage();
 
-    let mat = included()[0], cur = [], curOwn = true, boxes = [], showTok = 0, busy = false;
+    let mat = included()[0], boxes = [], showTok = 0, busy = false;
     if (resume && resume.pageMat && entryByMat.has(resume.pageMat) && !excluded.has(resume.pageMat)) mat = resume.pageMat;
 
-    // ── autosave ──
+    // ── autosave (master layout + session) ──
     const savedEl = pane.querySelector('.rb-w-saved');
     const missingNote = missing ? `${missing} saved material${missing===1?'':'s'} not in this assessment — skipped · ` : '';
     let saveT = null;
-    function snapshot(){
-      const layouts = {}; own.forEach((lay, m) => { layouts[m] = lay; });
-      return { v:1, theme, savedAt: new Date().toISOString(), order, excluded:[...excluded], base, layouts, pageMat: mat, keySeq };
+    function persist(){
+      saveMaster({ v:1, layout, workTheme, printTheme, savedAt: new Date().toISOString() });
+      saveCanvasSession(name, { v:1, savedAt: new Date().toISOString(), order, excluded:[...excluded], pageMat: mat });
     }
     function scheduleSave(){
       if (saveT) clearTimeout(saveT);
-      saveT = setTimeout(() => { saveT = null; saveSession(ctx, snapshot()); if (savedEl) savedEl.textContent = missingNote + 'layout saved ✓'; }, 400);
-      if (savedEl) savedEl.textContent = missingNote + 'saving…';
+      saveT = setTimeout(() => { saveT = null; persist(); savedEl.textContent = missingNote + 'saved ✓'; }, 400);
+      savedEl.textContent = missingNote + 'saving…';
     }
-    function flushSave(){ if (saveT){ clearTimeout(saveT); saveT = null; } saveSession(ctx, snapshot()); }
+    function flushSave(){ if (saveT){ clearTimeout(saveT); saveT = null; } persist(); }
 
-    function makeOwn(){
-      if (!curOwn){ own.set(mat, cur); curOwn = true; renderNav(); }
-      scheduleSave();
-    }
-
+    // ── tiles on the stage ──
     function place(b){
       const { c, rec, box } = b;
       const sw = stage.clientWidth, sh = stage.clientHeight;
@@ -1333,6 +1380,7 @@
         rec.el.style.width = CARD_W + 'px'; rec.el.style.height = (s > 0 ? hpx / s : hpx) + 'px';
       } else {
         box.style.height = (wpx * rec.ar) + 'px';
+        if (sh > 0) c.h = (wpx * rec.ar) / sh;   // footprint in the work theme — the print fit uses it
       }
     }
     function makeBox(c, rec){
@@ -1341,22 +1389,23 @@
       const scaler = document.createElement('div'); scaler.className = 'rb-cardscale';
       scaler.appendChild(rec.el); box.appendChild(scaler);
       const grip = document.createElement('div'); grip.className = 'rb-cardgrip'; grip.title = 'Drag to resize'; box.appendChild(grip);
-      const del = document.createElement('div'); del.className = 'rb-carddel'; del.title = 'Remove this tile'; del.textContent = '✕'; box.appendChild(del);
+      const del = document.createElement('div'); del.className = 'rb-carddel'; del.title = 'Remove this tile from every page'; del.textContent = '✕'; box.appendChild(del);
       del.addEventListener('pointerdown', e => e.stopPropagation());
       del.addEventListener('click', e => {
-        e.stopPropagation(); makeOwn();
-        const i = cur.indexOf(c); if (i >= 0) cur.splice(i, 1);
-        boxes = boxes.filter(x => x !== b); box.remove(); scheduleSave();
+        e.stopPropagation(); if (!editing) return;
+        layout = layout.filter(x => x !== c);
+        boxes = boxes.filter(x => x !== b); box.remove(); renderTiles(); scheduleSave();
       });
       stage.insertBefore(box, tncEl); boxes.push(b); place(b);
       box.addEventListener('pointerdown', (e) => {
         if (e.target === grip) return;
+        if (!editing){ if (c.id === 'comment') cmtTa.focus(); return; }   // Review: tiles are locked
         e.preventDefault(); box.setPointerCapture(e.pointerId); box.classList.add('drag');
         const r = stage.getBoundingClientRect(); const sx = e.clientX, sy = e.clientY, ox = c.x, oy = c.y;
         let moved = false;
         const mv = (ev) => {
           if (!moved && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 3) return;
-          if (!moved){ moved = true; makeOwn(); }
+          moved = true;
           c.x = Math.max(0, Math.min(1 - c.w, ox + (ev.clientX - sx) / r.width));
           c.y = Math.max(0, Math.min(1, oy + (ev.clientY - sy) / r.height));
           c.x = Math.round(c.x / 0.005) * 0.005; c.y = Math.round(c.y / 0.005) * 0.005; place(b);
@@ -1365,16 +1414,16 @@
           box.classList.remove('drag'); try { box.releasePointerCapture(e.pointerId); } catch (_) {}
           box.removeEventListener('pointermove', mv); box.removeEventListener('pointerup', up);
           if (moved) scheduleSave();
-          else if (c.id === 'comment') cmtTa.focus();
         };
         box.addEventListener('pointermove', mv); box.addEventListener('pointerup', up);
       });
       grip.addEventListener('pointerdown', (e) => {
+        if (!editing) return;
         e.preventDefault(); e.stopPropagation(); grip.setPointerCapture(e.pointerId);
         const r = stage.getBoundingClientRect(); const sx = e.clientX, sy = e.clientY, ow = c.w, oh = (c.h || c.w * 1.7778 * rec.ar);
         let started = false;
         const mv = (ev) => {
-          if (!started){ started = true; makeOwn(); }
+          started = true;
           c.w = Math.max(0.12, Math.min(1 - c.x, ow + (ev.clientX - sx) / r.width));
           if (c.freeAspect) c.h = Math.max(0.06, oh + (ev.clientY - sy) / r.height);
           place(b);
@@ -1385,30 +1434,105 @@
     }
     const ro = new ResizeObserver(() => boxes.forEach(place)); ro.observe(stage);
 
+    // First free spot for a new tile (scan down each third of the page); if the page
+    // is full, shrink it once and try again, else fall back to the top-left corner.
+    function freeSpot(c){
+      const tiles = shown();
+      const hits = (x, y, w, h) => tiles.some(o => x < o.x + o.w && x + w > o.x && y < o.y + (o.h || 0.2) && y + h > o.y);
+      for (let pass = 0; pass < 2; pass++){
+        for (const x of [0.015, 0.345, 0.675]){
+          for (let y = 0.02; y + c.h <= 0.97; y += 0.02){
+            if (!hits(x, y, c.w, c.h)){ c.x = x; c.y = Math.round(y * 1000) / 1000; return; }
+          }
+        }
+        c.h *= 0.6; c.w *= 0.6;   // try smaller
+      }
+      c.x = 0.03; c.y = 0.03;
+    }
+
+    // ── Layout tab: the tiles panel (floats OVER the stage — nothing else moves) ──
+    function renderTiles(){
+      const ul = tilesEl.querySelector('.rb-cv-tiles-list');
+      ul.innerHTML = BLOCKS.filter(b => !b.soon).map(b => {
+        const c = layout.find(x => x.id === b.id);
+        const ok = avail(b.id);
+        let opt = '';
+        if (b.opt === 'box') opt = `<label class="rb-optb"><input type="checkbox" data-opt-box ${c && c.opts && c.opts.box ? 'checked' : ''} ${c && ok ? '' : 'disabled'}> box &amp; whisker</label>`;
+        if (b.opt === 'lastN') opt = `<label class="rb-optb">last <input type="number" min="1" max="50" data-opt-n="${b.id}" value="${(c && c.opts && c.opts.lastN) || b.lastN || 8}" ${c && ok ? '' : 'disabled'}></label>`;
+        return `<li class="${c ? 'on' : ''}${ok ? '' : ' na'}"><label class="rb-cv-tl"><input type="checkbox" data-tile="${b.id}" ${c ? 'checked' : ''} ${ok ? '' : 'disabled'}> ${esc(b.label)}${ok ? '' : ' <em>needs PR History</em>'}</label>${opt ? `<span class="rb-cv-to">${opt}</span>` : ''}</li>`;
+      }).join('');
+    }
+    renderTiles();
+    tilesEl.addEventListener('change', async (e) => {
+      const t = e.target;
+      if (busy) { renderTiles(); return; }
+      if (t.matches('[data-tile]')){
+        const id = t.dataset.tile;
+        if (t.checked && !layout.some(c => c.id === id)){
+          const bdef = BLOCKS.find(b => b.id === id) || {};
+          const c = { key: 'k' + (keySeq++), id, opts: { box: id === 'avgDur', lastN: bdef.lastN || 8 }, x: 0.03, y: 0.03, w: 0.3, freeAspect: id === 'comment' };
+          const rec = await cardFor(mat, c, workTheme);
+          c.h = c.w * 1.7778 * rec.ar;
+          freeSpot(c);   // land in empty space, not on top of another tile
+          layout.push(c); makeBox(c, rec);
+        } else if (!t.checked){
+          layout = layout.filter(c => c.id !== id);
+          boxes.filter(b => b.c.id === id).forEach(b => b.box.remove());
+          boxes = boxes.filter(b => b.c.id !== id);
+        }
+        renderTiles(); scheduleSave();
+      } else if (t.matches('[data-opt-box]')){
+        const c = layout.find(x => x.id === 'avgDur'); if (!c) return;
+        c.opts.box = t.checked; scheduleSave(); await showMat(mat);
+      } else if (t.matches('[data-opt-n]')){
+        const c = layout.find(x => x.id === t.dataset.optN); if (!c) return;
+        c.opts.lastN = Math.max(1, Math.min(50, parseInt(t.value || '1', 10) || 1)); t.value = c.opts.lastN;
+        scheduleSave(); await showMat(mat);
+      }
+    });
+    tilesEl.querySelector('.rb-cv-auto').addEventListener('click', async () => {
+      if (busy) return;
+      await autoLayout(mat); boxes.forEach(place); scheduleSave();
+    });
+    // move the tiles panel by its header (it floats over the stage)
+    (function(){
+      const h = tilesEl.querySelector('.rb-cv-tiles-h');
+      h.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); try { h.setPointerCapture(e.pointerId); } catch (_) {}
+        const wr = wrap.getBoundingClientRect(), pr = tilesEl.getBoundingClientRect();
+        const ox = pr.left - wr.left, oy = pr.top - wr.top, sx = e.clientX, sy = e.clientY;
+        const mv = (ev) => {
+          const x = Math.max(0, Math.min(wr.width - pr.width, ox + ev.clientX - sx));
+          const y = Math.max(0, Math.min(wr.height - 40, oy + ev.clientY - sy));
+          tilesEl.style.left = x + 'px'; tilesEl.style.top = y + 'px';
+        };
+        const up = () => { try { h.releasePointerCapture(e.pointerId); } catch (_) {} h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); };
+        h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
+      });
+    })();
+
+    function setTab(tab){
+      editing = tab === 'layout';
+      pane.classList.toggle('rb-cv-edit', editing);
+      tilesEl.hidden = !editing;
+      pane.querySelectorAll('.rb-cv-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+    }
+    pane.querySelectorAll('.rb-cv-tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
     // ── nav ──
     const pageEl = pane.querySelector('.rb-w-page');
-    const layEl  = pane.querySelector('.rb-w-lay');
     const remEl  = pane.querySelector('.rb-w-removed');
     function renderNav(){
       const inc = included(), idx = inc.indexOf(mat), m = entryByMat.get(mat).m;
-      pageEl.innerHTML = `${multi ? `Page <b>${idx + 1}</b> of ${inc.length} · ` : ''}<b class="rb-w-mat">${esc(m.material)}</b> <span class="rb-w-desc">${esc(m.description || '')}</span>${busy ? ' <em class="rb-w-busy">building…</em>' : ''}`;
-      if (layEl){
-        const eff = effective(mat);
-        layEl.textContent = curOwn ? 'Layout: this page’s own'
-          : (eff.from ? `Layout: same as page ${inc.indexOf(eff.from) + 1}` : 'Layout: the starting layout');
-      }
-      if (remEl){
-        remEl.innerHTML = excluded.size ? `${excluded.size} removed · <a href="#" class="rb-w-restore">restore all</a>` : '';
-        remEl.querySelector('.rb-w-restore')?.addEventListener('click', (e) => { e.preventDefault(); excluded.clear(); scheduleSave(); renderNav(); });
-      }
-      const prev = pane.querySelector('.rb-w-prev'), next = pane.querySelector('.rb-w-next');
-      if (prev) prev.disabled = busy || idx <= 0;
-      if (next) next.disabled = busy || idx >= inc.length - 1;
-      const cp = pane.querySelector('.rb-w-copyprev'); if (cp) cp.disabled = busy || idx <= 0;
-      const rm = pane.querySelector('.rb-w-remove'); if (rm) rm.disabled = busy || inc.length <= 1;
+      pageEl.innerHTML = `Page <b>${idx + 1}</b> of ${inc.length} · <b class="rb-w-mat">${esc(m.material)}</b> <span class="rb-w-desc">${esc(m.description || '')}</span>${busy ? ' <em class="rb-w-busy">building…</em>' : ''}`;
+      remEl.innerHTML = excluded.size ? `${excluded.size} removed · <a href="#" class="rb-w-restore">restore all</a>` : '';
+      remEl.querySelector('.rb-w-restore')?.addEventListener('click', (e) => { e.preventDefault(); excluded.clear(); scheduleSave(); renderNav(); });
+      pane.querySelector('.rb-w-prev').disabled = busy || idx <= 0;
+      pane.querySelector('.rb-w-next').disabled = busy || idx >= inc.length - 1;
+      pane.querySelector('.rb-w-remove').disabled = busy || inc.length <= 1;
     }
 
-    // ── docked comment box ──
+    // ── docked comment box (Phase B replaces this with a floating note card) ──
     const cmtTa  = pane.querySelector('.rb-w-cmt .rb-cmt-ta');
     const cmtMat = pane.querySelector('.rb-w-cmt-mat');
     let saver = null;
@@ -1433,67 +1557,73 @@
       const tok = ++showTok;
       if (saver) saver.flush();
       mat = m;
-      curOwn = own.has(m);
-      cur = curOwn ? own.get(m) : cloneLayout(effective(m).lay);
       [...stage.querySelectorAll('.rb-cardbox')].forEach(n => n.remove()); boxes = [];
       loadCommentEditor();
       busy = true; renderNav();
-      for (const c of cur){
-        const rec = await cardFor(m, c);
-        if (tok !== showTok) return;
-        makeBox(c, rec);
+      try {
+        for (const c of shown()){
+          const rec = await cardFor(m, c, workTheme);
+          if (tok !== showTok) return;
+          makeBox(c, rec);
+        }
+      } finally {
+        if (tok === showTok){ busy = false; renderNav(); scheduleSave(); }
       }
-      busy = false; renderNav(); scheduleSave();
     }
 
     const go = (d) => { if (busy) return; const inc = included(); const n = inc.indexOf(mat) + d; if (n >= 0 && n < inc.length) showMat(inc[n]); };
-    pane.querySelector('.rb-w-prev')?.addEventListener('click', () => go(-1));
-    pane.querySelector('.rb-w-next')?.addEventListener('click', () => go(+1));
-    // ✕ Remove from report — exclude this material and move on to the next one
-    pane.querySelector('.rb-w-remove')?.addEventListener('click', () => {
+    pane.querySelector('.rb-w-prev').addEventListener('click', () => go(-1));
+    pane.querySelector('.rb-w-next').addEventListener('click', () => go(+1));
+    function onKey(e){
+      if (!document.body.contains(ov)) return;
+      const t = e.target; if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
+      if (modal.querySelector('.rb-preview, .rb-choice')) return;
+      if (e.key === 'ArrowLeft'){ e.preventDefault(); go(-1); }
+      if (e.key === 'ArrowRight'){ e.preventDefault(); go(+1); }
+    }
+    document.addEventListener('keydown', onKey);
+    pane.querySelector('.rb-w-remove').addEventListener('click', () => {
       if (busy) return;
       const inc = included(); if (inc.length <= 1) return;
       const idx = inc.indexOf(mat);
       const nextMat = inc[idx + 1] || inc[idx - 1];
-      // a following page that inherited from this one keeps the same layout: hand it over
-      if (curOwn && inc[idx + 1] && !own.has(inc[idx + 1])) own.set(inc[idx + 1], cloneLayout(cur));
       excluded.add(mat);
       showMat(nextMat);
     });
-    pane.querySelector('.rb-w-copyprev')?.addEventListener('click', () => {
-      if (busy) return;
-      const inc = included(), idx = inc.indexOf(mat); if (idx <= 0) return;
-      own.set(mat, cloneLayout(effective(inc[idx - 1]).lay));
-      showMat(mat);
-    });
-    const applyBtn = pane.querySelector('.rb-w-applyall');
-    let applyArmed = null;
-    applyBtn?.addEventListener('click', () => {
-      if (busy) return;
-      if (!applyArmed){
-        applyBtn.textContent = `Click again to apply to all ${included().length} pages`; applyBtn.classList.add('armed');
-        applyArmed = setTimeout(() => { applyArmed = null; applyBtn.textContent = 'Apply this layout to all pages'; applyBtn.classList.remove('armed'); }, 4000);
-        return;
-      }
-      clearTimeout(applyArmed); applyArmed = null; applyBtn.textContent = 'Apply this layout to all pages'; applyBtn.classList.remove('armed');
-      base = cloneLayout(cur); own.clear();
-      showMat(mat);
-    });
+
+    // ── themes ──
+    pane.querySelectorAll('[data-wt]').forEach(b => b.addEventListener('click', async () => {
+      if (busy || b.dataset.wt === workTheme) return;
+      workTheme = b.dataset.wt; applyTheme(); scheduleSave(); await showMat(mat);
+    }));
+    pane.querySelectorAll('[data-pt]').forEach(b => b.addEventListener('click', () => {
+      printTheme = b.dataset.pt; applyTheme(); scheduleSave();
+    }));
 
     function teardown(){
       if (saver) saver.flush();
       flushSave();
-      ro.disconnect(); roWrap.disconnect(); stage_host.remove(); pane.remove();
-      restoreModal(); modal.classList.remove('rb-has-preview'); modal.style.width = ''; modal.style.height = '';
+      document.removeEventListener('keydown', onKey);
+      ro.disconnect(); roWrap.disconnect(); stageHost.remove();
+      closeAll();
     }
-    ov._rbTeardown = () => { if (saver) saver.flush(); flushSave(); };   // closing the builder keeps the session
-    pane.querySelector('.rb-w-back').addEventListener('click', teardown);
-    pane.querySelector('.rb-w-reset').addEventListener('click', async () => {
-      if (busy) return;
-      makeOwn(); await autoLayout(mat, cur); boxes.forEach(place); scheduleSave();
-    });
+    pane.querySelector('.rb-cv-close').addEventListener('click', teardown);
 
-    // Render the given materials' pages, each with its own layout, to one PDF.
+    // Room below a tile before the next tile beneath it (or the page foot) — used to
+    // keep a tile inside its arranged footprint when it prints in the other theme
+    // (Dark tiles are exact screen grabs, Light tiles are report-styled, so their
+    // heights differ).
+    function roomBelow(c, tiles){
+      let room = 1 - c.y;
+      for (const o of tiles){
+        if (o === c) continue;
+        const overlapX = o.x < c.x + c.w - 0.002 && o.x + o.w > c.x + 0.002;
+        if (overlapX && o.y > c.y + 0.002) room = Math.min(room, o.y - c.y - 0.004);
+      }
+      return Math.max(0.05, room);
+    }
+
+    // Render the given materials' pages (master layout, PRINT theme) to one PDF.
     async function renderPages(mats, onProg){
       if (saver) saver.flush();
       await ensureLibs();
@@ -1501,35 +1631,40 @@
       const g = geomFor('wide');
       const doc = new jsPDFCtor({ orientation:'landscape', unit:'mm', format:g.format, compress:true });
       const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(host);
+      const tiles = shown();
       try {
         for (let k = 0; k < mats.length; k++){
           const m = mats[k];
           if (onProg) onProg(k + 1, mats.length);
           if (k > 0) doc.addPage(g.format, 'landscape');
-          if (theme === 'dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
-          const lay = (m === mat) ? cur : effective(m).lay;
+          if (printTheme === 'dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
           const p = pctx(m);
-          for (const c of lay){
+          for (const c of tiles){
             const bx = c.x * g.W, by = c.y * g.H, bw = c.w * g.W;
             if (c.id === 'comment'){
-              drawCommentBox(doc, bx, by, bw, (c.h || c.w * 1.7778 * 0.2) * g.H, noteFor(p, c.opts), theme);
+              drawCommentBox(doc, bx, by, bw, (c.h || c.w * 1.7778 * 0.2) * g.H, noteFor(p, c.opts), printTheme);
               continue;
             }
-            const rec = await cardFor(m, c, domCache.has(m + '|' + c.key));
+            const rec = await cardFor(m, c, printTheme);
             const el = rec.el.cloneNode(true);
             el.style.transform = 'none'; el.style.width = CARD_W + 'px'; el.style.height = '';
             host.appendChild(el); await imgsLoaded(el);
-            const canvas = await global.html2canvas(el, { scale:2, backgroundColor: theme === 'dark' ? '#0c2d3b' : '#ffffff', logging:false });
-            doc.addImage(canvas.toDataURL('image/jpeg', 0.86), 'JPEG', bx, by, bw, bw * rec.ar);
+            const canvas = await global.html2canvas(el, { scale:2, backgroundColor: printTheme === 'dark' ? '#0c2d3b' : '#ffffff', logging:false });
+            let dw = bw, dh = bw * rec.ar;
+            if (printTheme !== workTheme){
+              const room = roomBelow(c, tiles) * g.H;
+              if (dh > room){ dh = room; dw = dh / rec.ar; }
+            }
+            doc.addImage(canvas.toDataURL('image/jpeg', 0.86), 'JPEG', bx, by, dw, dh);
             host.removeChild(el);
             if (k % 3 === 2) await new Promise(r => setTimeout(r, 0));
           }
-          drawTnc(doc, g, theme === 'dark');   // T&C block, bottom-right of every page
+          drawTnc(doc, g, printTheme === 'dark');   // T&C block, bottom-right of every page
         }
-        const safe = (ctx.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
+        const safe = (name || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
         const filename = mats.length === 1
-          ? `Screener_Report_${mats[0]}_${safe}_wide.pdf`
-          : `Screener_Report_SET_${mats.length}_${safe}_wide.pdf`;
+          ? `Canvas_${mats[0]}_${safe}.pdf`
+          : `Canvas_SET_${mats.length}_${safe}.pdf`;
         return { url: URL.createObjectURL(doc.output('blob')), filename, pages: mats.length };
       } finally { host.remove(); }
     }
@@ -1539,41 +1674,20 @@
       try {
         const mats = included();
         const res = await renderPages(mats, (k, n) => { btn.textContent = n > 1 ? `Rendering page ${k}/${n}…` : 'Rendering…'; });
-        const single = mats.length === 1;
-        const sctx = single ? pctx(mats[0]) : null;
-        showWidePreview(modal, res, sctx, single ? (() => renderPages(mats)) : null);
+        showWidePreview(modal, res);
       } catch (e){ console.error(e); btn.textContent = 'Failed'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500); return; }
       btn.disabled = false; btn.textContent = orig;
     });
-    pane.querySelector('.rb-w-batch')?.addEventListener('click', () => {
+    pane.querySelector('.rb-w-batch').addEventListener('click', () => {
       if (busy) return;
       const inc = included();
       openBatchPicker(modal, inc.map(m => entryByMat.get(m)), (idxs, onProg) => renderPages(idxs.map(i => inc[i]), onProg));
     });
 
-    async function addCard(blockId){
-      makeOwn();
-      const bdef = BLOCKS.find(b => b.id === blockId) || {};
-      const c = { key: 'k' + (keySeq++), id: blockId, opts: { box: blockId === 'avgDur', lastN: bdef.lastN || 8 }, x: 0.03, y: 0.03, w: 0.3, freeAspect: blockId === 'comment' };
-      const rec = await cardFor(mat, c);
-      c.h = c.w * 1.7778 * rec.ar;
-      cur.push(c); makeBox(c, rec); scheduleSave();
-    }
-    pane.querySelector('.rb-w-add').addEventListener('click', (e) => {
-      document.querySelector('.rb-addmenu')?.remove();
-      const menu = document.createElement('div'); menu.className = 'rb-addmenu';
-      const avail = BLOCKS.filter(b => !b.soon && (b.needs !== 'pr' || ctx.hasPr));
-      menu.innerHTML = avail.map(b => `<div class="rb-addmenu-item" data-id="${b.id}">${esc(b.label)}</div>`).join('');
-      const r = e.currentTarget.getBoundingClientRect();
-      menu.style.left = Math.max(8, r.left) + 'px'; menu.style.top = (r.bottom + 4) + 'px';
-      document.body.appendChild(menu);
-      const closeMenu = () => { menu.remove(); document.removeEventListener('click', off, true); };
-      const off = (ev) => { if (!menu.contains(ev.target) && ev.target !== e.currentTarget) closeMenu(); };
-      setTimeout(() => document.addEventListener('click', off, true), 0);
-      menu.querySelectorAll('.rb-addmenu-item').forEach(it => it.addEventListener('click', async () => { const id = it.dataset.id; closeMenu(); await addCard(id); }));
-    });
-
+    setTab('review');
+    if (needAuto){ await autoLayout(mat); }
     await showMat(mat);
+    if (needAuto) scheduleSave();
   }
 
   // ctx for one material in a batch (same shape open() passes for a single one)
@@ -1759,6 +1873,6 @@
     pv.querySelector('.rb-pv-print').addEventListener('click', ()=>{ try { pv.querySelector('.rb-pv-frame').contentWindow.print(); } catch(e){ window.open(res.url, '_blank'); } });
   }
 
-  global.ReportBuilder = { open };
+  global.ReportBuilder = { open, openCanvas };
 
 })(window);
