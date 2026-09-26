@@ -2857,7 +2857,7 @@
           <td class="num mono">${cellNum(c.C)}</td>
           <td class="num mono">${cellNum(c.D)}</td>
           <td class="num mono">${cellNum(c.E)}</td>
-          <td class="num mono"><b>${c.total || '—'}</b></td>
+          <td class="num mono"><b>${cellNum(c.total)}</b></td>
           <td class="num mono">${c.qty != null ? c.qty.toLocaleString() : '—'}</td>
           <td class="state state-${c.state.toLowerCase()}">${stateLabel}${c.adminCancelled ? ' <span class="state-admin-cancel" title="PR deletion-flagged after PO raised — admin meaning only; does not affect classification">(admin cancel)</span>' : ''}</td>
         </tr>
@@ -2875,7 +2875,9 @@
     const n = parseFloat(v);
     return isNaN(n) ? null : n;
   }
-  function cellNum(n){ if (n == null || n === 0) return '—'; return n.toString(); }
+  // APP-FIX-RAW-OPENSTEP — blank ONLY a step that hasn't happened (null); a real
+  // same-day step is a genuine 0 and now shows as 0 (it was hidden as '—').
+  function cellNum(n){ if (n == null) return '—'; return n.toString(); }
   function uniq(arr){ const s = new Set(); const out = []; for (const x of arr) { if (!s.has(x)) { s.add(x); out.push(x); } } return out; }
 
   function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }

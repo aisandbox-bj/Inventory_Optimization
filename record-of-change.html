@@ -381,6 +381,24 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Raw Data unfinished steps blank - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-FIX-RAW-OPENSTEP</b>: a procurement step that hasn't happened yet now shows an empty cell, not "0 days" — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator-reported:</b> in the Raw Data PR table, steps of an unfinished chain showed a 0-day duration; they should be empty.</li>
+        <li><b>Root cause:</b> the shared step-duration helper in <code>computeChains</code> returned <b>0</b> whenever a step's start or end date was missing (e.g. no Site WH receipt yet, no first 261 yet). So an unfinished step was stored as a real "0 days". The Trace page's Raw Data happened to blank zeros (which also hid genuine same-day steps), but the report's raw-PR and chains tables printed "0".</li>
+        <li><b>Fix (at the source):</b> a step with a missing start or end date is now <i>no value</i> (blank) everywhere — Trace Raw Data, the report tables, the box plots and stats. A step that genuinely took 0 days (e.g. a PR approved the same day, or used the day it arrived) now shows <b>0</b> instead of being blanked. Total is blank only when no step has happened.</li>
+        <li><b>Effect on numbers (checked on the June assessment, 275 materials / 2,351 chains):</b> lead time to site (A–D) is <b>unchanged for all 275</b>. Time to First Use (E, shelf time) changed for <b>52 materials</b> — delivered-but-not-yet-used orders (67 chains) had been averaged in as 0 days, understating shelf time (e.g. 1000414 14.7 → 17.6 d). Where every delivered order is still unused, E now shows "—" instead of 0.0.</li>
+        <li><b>Not changed (noted):</b> an out-of-sequence pair of dates (end before start) still shows 0 rather than being flagged; Total on an unfinished chain is the sum of the steps done so far.</li>
+        <li>Files: <code>shared/trace-phase.js</code>, <code>trace/trace.js</code>. Rollback: local <code>_rollback/RAWDATA-BLANK-pre/</code> + <code>checkpoint/pre-rawblank</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Screener lead-time cell fix - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">

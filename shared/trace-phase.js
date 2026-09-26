@@ -53,8 +53,12 @@
     return isNaN(d.getTime()) ? null : d;
   }
   function fmtISO(d){ if (!d) return null; return d.toISOString().slice(0, 10); }
+  // APP-FIX-RAW-OPENSTEP (2026-09-25) — a step whose end (or start) hasn't
+  // happened yet has NO duration: null, not 0. Returning 0 showed "0 days" for
+  // unfinished steps in Raw Data / the report tables, and fed fake zeros into the
+  // phase stats (e.g. delivered-but-unused chains counted as 0d Time to First Use).
   function days(a, b){
-    if (!a || !b) return 0;
+    if (!a || !b) return null;
     const ms = b - a;
     if (ms < 0) return 0;
     return Math.round(ms / 86400000);
@@ -124,7 +128,9 @@
       const C = days(poDate, gr3pl);
       const D = days(gr3pl, siteWH);
       const E = days(siteWH, c261);
-      const total = [A, B, C, D, E].reduce((s, x) => s + (x || 0), 0);
+      // Total = sum of the steps that have happened; null when none has (blank, not 0).
+      const total = [A, B, C, D, E].some(x => x != null)
+        ? [A, B, C, D, E].reduce((s, x) => s + (x || 0), 0) : null;
       // APP-FIX-SIGMA-PROC (2026-06-27) — processing timeline only (phases A–D,
       // "total to site"); excludes phase E (Time to First Use / shelf time).
       // Sigma outlier-trim keys off this: trim on procurement time, not on how
@@ -439,7 +445,7 @@
                 <div class="pd-chev-inner">
                   <span class="pd-chev-code">${p.key}</span>
                   <span class="pd-chev-name">${p.label}</span>
-                  <span class="pd-chev-val">${p.stats ? p.stats.mean.toFixed(1) : '—'}d</span>
+                  <span class="pd-chev-val">${p.stats ? p.stats.mean.toFixed(1) + 'd' : '—'}</span>
                 </div>
               </div>
             `).join('')}
@@ -452,7 +458,7 @@
           <div class="pd-chev-shelf" style="border-color:${ePhase.color}; background:${ePhase.color}1f;" title="Average time the material sits on the shelf after arriving at site, before its first consumption (phase E). Not part of the lead-time-to-availability total.">
             <span class="pd-chev-shelf-lab">then on shelf</span>
             <span class="pd-chev-shelf-name">${ePhase.key} · ${ePhase.label}</span>
-            <span class="pd-chev-shelf-val" style="color:${ePhase.color};">${ePhase.stats ? eMean.toFixed(1) : '—'}d</span>
+            <span class="pd-chev-shelf-val" style="color:${ePhase.color};">${ePhase.stats ? eMean.toFixed(1) + 'd' : '—'}</span>
           </div>` : ''}
         </div>
       </div>
