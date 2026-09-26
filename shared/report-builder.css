@@ -204,6 +204,18 @@ a.rb-pv-dl{ text-decoration:none; }
 .rb-cv:not(.rb-cv-edit) .rb-cardbox{ cursor:default; box-shadow:none; border-color:transparent; }
 .rb-cv:not(.rb-cv-edit) .rb-cardbox:hover{ outline:none; }
 .rb-cv.rb-cv-edit .rb-stage{ outline:2px dashed rgba(244,199,106,.55); outline-offset:3px; }
+/* 💡 on each tile (Review mode) → that tile's full detail in Trace / Trend. The label
+   slides out on hover (native tooltips are switched off app-wide). */
+.rb-cardbulb{ position:absolute; top:5px; right:5px; z-index:23; display:flex; align-items:center; gap:0; height:24px;
+  min-width:24px; padding:0 5px; border-radius:12px; border:1px solid rgba(244,199,106,.7); background:rgba(8,30,43,.88);
+  color:#f4c76a; font-size:13px; line-height:1; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.35); overflow:hidden; white-space:nowrap; }
+.rb-cardbulb::after{ content:attr(data-label); font-family:'Rajdhani',sans-serif; font-weight:600; font-size:0; max-width:0;
+  transition:max-width .15s ease, font-size .15s ease, margin .15s ease; }
+.rb-cardbulb:hover{ background:#0c2d3b; border-color:#f4c76a; }
+.rb-cardbulb:hover::after{ font-size:12px; max-width:220px; margin-left:5px; }
+.rb-cv.rb-cv-edit .rb-cardbulb{ display:none; }
+.rb-cv-trend{ border-color:rgba(31,206,216,.55) !important; }
+
 /* Tiles panel — floats OVER the stage in Layout mode (moves by its header) */
 .rb-cv-tiles{ position:absolute; left:16px; top:16px; z-index:25; width:290px; max-height:calc(100% - 32px); overflow:auto;
   background:rgba(8,30,43,.96); border:1px solid rgba(31,206,216,.45); border-radius:10px;

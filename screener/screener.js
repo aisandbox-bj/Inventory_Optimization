@@ -217,6 +217,41 @@
     bindTableOnce();
     buildBandsBody();
     renderTable();
+
+    // APP-CANVAS-NAV — arriving to open the Canvas straight away:
+    //   #canvas=<mat> + a handoff from Trend's "Canvas it!" (the Trend list), or
+    //   #canvas=<mat> back from Trace's "← Back to Canvas" (reopens the saved canvas).
+    const hc = /(?:^|&)canvas(?:=([^&]*))?/.exec((location.hash || '').replace(/^#/, ''));
+    if (hc) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      let mat = null; try { mat = hc[1] ? decodeURIComponent(hc[1]) : null; } catch (e) { mat = hc[1] || null; }
+      let handoff = null;
+      try { handoff = JSON.parse(sessionStorage.getItem('calibre.canvasHandoff') || 'null'); sessionStorage.removeItem('calibre.canvasHandoff'); } catch (e) {}
+      if (handoff && handoff.from === 'trend') { try { sessionStorage.setItem('calibre.canvasOrigin', 'trend'); } catch (e) {} }
+      openCanvasFor(mat, handoff);
+    }
+  }
+
+  function canvasOrigin(){ try { return sessionStorage.getItem('calibre.canvasOrigin'); } catch (e) { return null; } }
+  function openCanvasFor(mat, handoff){
+    if (typeof ReportBuilder === 'undefined' || !ReportBuilder.openCanvas) { toast('Canvas unavailable.', 'crit'); return; }
+    const byMat = new Map(state.materials.map(e => [e.m.material, e]));
+    if (mat && !byMat.has(mat)) { toast(`${mat} isn't in this analysis — nothing to open in the Canvas.`, 'crit'); mat = null; }
+    const keys = (handoff && Array.isArray(handoff.list) && handoff.list.length) ? handoff.list : (mat ? [mat] : []);
+    const list = keys.map(k => byMat.get(k)).filter(Boolean).map(e => ({ m: e.m, bucket: e.bucket }));
+    ReportBuilder.openCanvas({
+      json:           state.json,
+      hasPr:          state.hasPr,
+      analyst:        state.analyst,
+      assessmentName: (state.json.metadata && state.json.metadata.assessmentName) || '',
+      list,
+      startMat:       mat,
+      listLabel:      handoff ? 'the Trend list' : 'this material',
+      backToTrend:    canvasOrigin() === 'trend',
+      lookup:         (k) => { const e = byMat.get(k); return e ? { m: e.m, bucket: e.bucket } : null; },
+      traceFiltersFor: (k) => traceFiltersFor(k),
+      onClose:        () => { renderTable(); updateCommentsButton(); }
+    });
   }
 
   function renderEmpty(){
@@ -393,6 +428,7 @@
     if (typeof ReportBuilder === 'undefined' || !ReportBuilder.openCanvas) { toast('Canvas unavailable.', 'crit'); return; }
     const sel = selectedInOrder();
     if (!sel.length && !canvasInProgress()) { toast('Tick at least one material in the table first.', 'crit'); return; }
+    try { sessionStorage.removeItem('calibre.canvasOrigin'); } catch (e) {}   // launched here, not from Trend
     ReportBuilder.openCanvas({
       json:           state.json,
       hasPr:          state.hasPr,
@@ -494,7 +530,7 @@
       m.sohBelowMin = (stock != null && cmin != null) ? (stock < cmin ? 'Y' : 'N') : 'NA';
 
       // Chain-derived fields.
-      let avgLT = null, poOpenN = null, prOpenN = null, oldestPr = null;
+      let avgLT = null, poOpenN = null, prOpenN = null, oldestPr = null, lastChains = null;
       if (state.hasPr) { poOpenN = 0; prOpenN = 0; }
       if (state.hasPr && prMatHas.has(m.material)) {
         chainCalls++;
@@ -502,6 +538,7 @@
         // Apply Trace's manual + sigma exclusions before averaging, so the avg
         // lead time reconciles with the Trace view (APP-FIX-SCR-EXCL).
         const act      = TracePhase.activeChains(chains, traceFiltersFor(m.material));
+        lastChains = { chains, act };
         const complete = act.filter(c => !!c.siteWH);
         if (complete.length) {
           // #22-tie (2026-08-16) — shared sum-of-phase-means helper so this matches
@@ -524,6 +561,8 @@
       // APP-FIX-SCR-LEADCELL (2026-09-25) — the shared detail panel's "Lead time" stat
       // reads m.leadDays; same calc + 1-dp rounding as Trend.
       m.leadDays = (avgLT != null) ? Math.round(avgLT * 10) / 10 : null;
+      // APP-LT-GAP — when there's PR History but no lead time, carry the reason
+      m.leadGap = (avgLT == null && lastChains && TracePhase.leadTimeGap) ? TracePhase.leadTimeGap(state.json, m.material, lastChains.chains, lastChains.act) : null;
       m.poOpenN = poOpenN;
       m.prOpenN = prOpenN;
       m.oldestOpenPrDays = oldestPr;
@@ -1252,7 +1291,8 @@
       ['Runway @ P2', m.runway != null ? m.runway + ' mo' : '—', 'P1 -> P2 change', rcDisp],
       ['Pattern', m.pattern || '—', 'Adj P2 (HCE excl)', adjDisp],
       ['Total (window)', String(m.totalNet ?? '—'), 'Last consumption', m.lastConsumptionDate || '—'],
-      ['Stockouts in window', swCount ? String(swCount) : 'none', 'Drop cause', m.rateDropCause === 'STOCKOUT_DRIVEN' ? 'Stockout-driven' : (m.rateDropCause ? 'Genuine drop' : '—')]
+      ['Stockouts in window', swCount ? String(swCount) : 'none', 'Drop cause', m.rateDropCause === 'STOCKOUT_DRIVEN' ? 'Stockout-driven' : (m.rateDropCause ? 'Genuine drop' : '—')],
+      ['Lead time (to site)', m.leadDays != null ? m.leadDays.toFixed(1) + ' d' : (m.leadGap ? '— (' + m.leadGap.short + ')' : '—'), 'Open PRs / POs', m.prOpenN != null ? `${m.prOpenN} / ${m.poOpenN}` : '—']
     ];
     ensure(34);
     doc.autoTable({

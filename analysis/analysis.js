@@ -151,6 +151,21 @@
     if (!m) return null;
     try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
   }
+  // APP-CANVAS-NAV — "Canvas it!": hand the Canvas this material plus the list the
+  // Trend table shows now (same filters + order), so a NEW canvas can step through
+  // what you were reviewing. If a canvas is already in progress the Canvas page
+  // decides (continue it / add this material / start new). Filters are saved first
+  // so "← Back to Trend" returns to the same view.
+  function canvasIt(mat){
+    try { persistFilters(); } catch (e) {}
+    const list = computeVisibleRows().map(m => m.material);
+    if (!list.includes(mat)) list.unshift(mat);
+    try {
+      sessionStorage.setItem('calibre.canvasHandoff', JSON.stringify({ mat, list, from:'trend', ts: Date.now() }));
+    } catch (e) {}
+    window.location.href = '../screener/screener.html#canvas=' + encodeURIComponent(mat);
+  }
+
   // APP-ACT-03 / APP-TRACE-BACK — select a material by number (find its bucket,
   // render, scroll into view). Returns true if it was in the pack.
   function jumpToMaterial(mat){
@@ -318,8 +333,8 @@
       const tx = state.traceExcl || { manualByMat:{}, sigmaLimit:null };
       const cache = new Map();
       for (const m of allMats){
-        if (cache.has(m.material)) { m.leadDays = cache.get(m.material); continue; }
-        let lm = null;
+        if (cache.has(m.material)) { const cv = cache.get(m.material); m.leadDays = cv.lm; m.leadGap = cv.gap; continue; }
+        let lm = null, gap = null;
         if (prMats.has(m.material)){
           const chains = TracePhase.computeChains(state.json, m.material);
           // Apply Trace's manual + sigma exclusions before averaging (APP-FIX-SCR-EXCL
@@ -342,10 +357,13 @@
           const drawn = active.filter(c => !!c.siteWH);
           if (drawn.length && typeof TracePhase.totalToSiteMean === 'function'){
             lm = Math.round(TracePhase.totalToSiteMean(drawn) * 10) / 10;
+          } else if (typeof TracePhase.leadTimeGap === 'function'){
+            gap = TracePhase.leadTimeGap(state.json, m.material, chains, active);   // APP-LT-GAP — say WHY it's blank
           }
         }
         m.leadDays = lm;
-        cache.set(m.material, lm);
+        m.leadGap = gap;
+        cache.set(m.material, { lm, gap });
       }
     } catch(e){ console.warn('enrichLeadTimes:', e); }
   }
@@ -1095,7 +1113,9 @@
         onPrev: () => stepMaterial(-1),
         onNext: () => stepMaterial(1)
       },
-      enableTraceLink: true,  // APP-T-07 — "Trace it!" handoff to the Trace page
+      // APP-CANVAS-NAV (2026-09-26) — "Canvas it!" replaces "Trace it!": opens this
+      // material in the Canvas; Trace is reached from the Canvas tiles' 💡.
+      canvasLinkFn: (m) => canvasIt(m.material),
       // APP-ACT-03 — linkify "See <7-digit>" references present in the pack.
       materialJump: {
         has: (m) => !!(state.packMatSet && state.packMatSet.has(String(m))),

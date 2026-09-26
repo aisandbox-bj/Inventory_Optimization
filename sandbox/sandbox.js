@@ -325,6 +325,8 @@
         }
         poOpen = chains.some(c => c.state === 'IN_FLIGHT' && !c.adminCancelled); // PO placed, not yet received at site
         prOpen = chains.some(c => c.state === 'PR_ONLY');                        // PR raised, no PO yet
+        // APP-LT-GAP — when there's PR History but no lead time, carry the reason
+        m.leadGap = (avgLT == null && TracePhase.leadTimeGap) ? TracePhase.leadTimeGap(state.json, m.material, chains, act) : null;
       }
       m.avgProcTimelineDays = avgLT;
       // APP-FIX-SCR-LEADCELL — publish the same figure Trend shows, for the shared detail's Lead time stat

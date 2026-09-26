@@ -381,6 +381,32 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Canvas navigation + lead-time blank reason - 2026-09-26 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-26</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-CANVAS-NAV</b> (Trend → Canvas → Trace → Canvas → Trend) + <b>APP-LT-GAP</b> (say why a lead time is blank) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>"Canvas it!"</b> replaces "Trace it!" on the Trend detail. It hands the Canvas the material and the rows Trend shows now. If the canvas in progress already has it, the canvas opens there. If not, you choose "Add to current canvas" (after the page you were on) or "New canvas from the Trend list". With no canvas in progress, a new one is made from the Trend list, opening on that material.</li>
+        <li><b>💡 on every Canvas tile</b> (Review mode; the label slides out on hover). Trace tiles go to the matching Trace view (<code>trace.html#mat=…&amp;view=…&amp;from=canvas</code>): phase distribution, year-on-year, raw data, procurement chain, MRP-run cadence. The Trend tile goes to Trend. The comment and canvas place are saved before leaving.</li>
+        <li><b>Trace</b> honours <code>view=</code> and, when entered from the Canvas, its banner reads <b>← Back to Canvas</b>, which reopens the canvas on the same page. This holds across view switches and page reloads. A plain visit or any other link reverts to ← Back to Trend.</li>
+        <li><b>← Back to Trend</b> on the Canvas bar when the canvas was entered via Canvas it! (kept across the Trace round trip; not shown when launched from the picker) → Trend on the current page's material, Trend filters held.</li>
+        <li><b>Lead time blank — investigated (operator: "completed POs with timelines but no lead time").</b>
+          <ul>
+            <li><b>Not a calculation fault:</b> on the June assessment, all 158 materials with an order linked to a site receipt show a lead time on Trend (list and stat cell) and in the Canvas.</li>
+            <li><b>The cause is linkage.</b> Lead time needs an order that is in PR History <i>and</i> received at site (MB51 109) under the <i>same PO number</i>.</li>
+            <li><b>Example, 1001890:</b> 4 site receipts under POs 9600006472 and 9600000633, which have no PR in the PR History extract. The PR's own PO, 9600002325, never appears in MB51.</li>
+            <li><b>Scale:</b> 102 of 1,353 site receipts file-wide are under POs PR History doesn't have for that material. 26 PR-History POs older than 60 days sit "in flight" (20 not in MB51 at all, 6 at the 3PL only).</li>
+            <li><b>Fix — explain, don't guess:</b> a new shared <code>TracePhase.leadTimeGap</code> gives the reason. It shows under the "—" with a clickable <b>why?</b> card (hover tooltips are off app-wide), and in the Canvas Light Trend tile, Letter report and Quick PDF (which now also carry Lead time).</li>
+            <li><b>Deliberately NOT done:</b> matching unlinked receipts to PRs by date or quantity — it could attribute a delivery to the wrong order.</li>
+          </ul></li>
+        <li>Files: <code>shared/trace-phase.js</code>, <code>shared/material-detail.{js,css}</code>, <code>shared/report-builder.{js,css}</code>, <code>analysis/analysis.js</code>, <code>screener/screener.js</code>, <code>sandbox/sandbox.js</code>, <code>trace/trace.js</code>, <code>user-manual.html</code>. No SCHEMA_VERSION change. Rollback: local <code>_rollback/CANVAS-NAV-pre/</code> + <code>checkpoint/pre-canvas-nav</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Canvas phase A - 2026-09-26 -->
     <article class="roc-entry dev">
       <div class="head">

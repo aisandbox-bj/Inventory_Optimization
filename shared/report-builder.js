@@ -262,7 +262,8 @@
       ['P1 rate', m.p1Flag==='OK' ? m.p1Rate.toFixed(2)+' /mo' : '-', 'P2 rate', m.p2Flag==='OK' ? m.p2Rate.toFixed(2)+' /mo' : '-'],
       ['Runway @ P2', m.runway!=null ? m.runway+' mo' : '-', 'P1 -> P2 change', rc],
       ['Total (window)', String(m.totalNet ?? '-'), 'Last consumption', m.lastConsumptionDate || '-'],
-      ['Pattern', m.pattern || '-', 'Traffic light', m.trafficLight || '-']
+      ['Pattern', m.pattern || '-', 'Traffic light', m.trafficLight || '-'],
+      ['Lead time (to site)', leadTxt(m), 'Unit cost', (m.movingAvgPrice != null && typeof AppLocale !== 'undefined' && AppLocale.fmtCAD) ? AppLocale.fmtCAD(m.movingAvgPrice) : '-']
     ];
     P.ensure((rows.length + 1) * 5.2 + 4);
     doc.autoTable({
@@ -290,6 +291,13 @@
       didParseCell:(d)=>{ if (d.row.section==='body' && d.column.index>=1 && d.row.index<3){ const cur=mrp[d.row.index][1], rec=mrp[d.row.index][2]; if (cur!=='-' && rec!=='-' && cur!==rec) d.cell.styles.fillColor=[255,243,205]; } }
     });
     P.y = doc.lastAutoTable.finalY + 5;
+  }
+
+  // Lead time for the report/tile text — the figure, or "—" plus the short reason
+  // when the material has PR History but no order linked to a site receipt (APP-LT-GAP).
+  function leadTxt(m){
+    if (m.leadDays != null) return m.leadDays.toFixed(1) + ' d';
+    return m.leadGap && m.leadGap.short ? '— (' + m.leadGap.short + ')' : '—';
   }
 
   // shared: compute the drawn/complete chain set for this material (post-suppression)
@@ -1016,7 +1024,8 @@
         + keyGrid(TH, [
             ['Stock on hand', String(m.stock??'—')], ['Stock value', cad],
             ['P1 rate', m.p1Flag==='OK'?m.p1Rate.toFixed(2)+' /mo':'—'], ['P2 rate', m.p2Flag==='OK'?m.p2Rate.toFixed(2)+' /mo':'—'],
-            ['Runway @ P2', m.runway!=null?m.runway+' mo':'—'], ['Last cons.', m.lastConsumptionDate||'—']
+            ['Runway @ P2', m.runway!=null?m.runway+' mo':'—'], ['Last cons.', m.lastConsumptionDate||'—'],
+            ['Lead time', leadTxt(m)], ['Unit cost', m.movingAvgPrice!=null&&typeof AppLocale!=='undefined'&&AppLocale.fmtCAD?AppLocale.fmtCAD(m.movingAvgPrice):'—']
           ])
         + `<div style="height:6px"></div>`
         + htmlTable(TH, ['MRP','Current','Recommended','Analyst'], [
@@ -1126,6 +1135,19 @@
   }
   function cloneLayout(lay){ return lay.map(c => ({ ...c, opts: { ...(c.opts || {}) } })); }
 
+  // APP-CANVAS-NAV — where each tile's 💡 goes for its full detail. Trace views open
+  // with from=canvas so Trace shows "← Back to Canvas"; the Trend tile goes to Trend,
+  // whose "Canvas it!" brings you straight back to this page.
+  const traceUrl = (view) => (mat) => '../trace/trace.html#mat=' + encodeURIComponent(mat) + '&view=' + view + '&from=canvas';
+  const TILE_DEST = {
+    trend:   { label: 'Open in Trend',            url: (mat) => '../analysis/analysis.html#mat=' + encodeURIComponent(mat) },
+    avgDur:  { label: 'Trace · phase distribution', url: traceUrl('phase-distribution') },
+    yoy:     { label: 'Trace · year-on-year',     url: traceUrl('year-on-year') },
+    rawpr:   { label: 'Trace · raw data',         url: traceUrl('raw-data') },
+    chains:  { label: 'Trace · procurement chain', url: traceUrl('procurement-chain') },
+    cadence: { label: 'Trace · MRP-run cadence',  url: traceUrl('mrp-cadence') }
+  };
+
   const LAYOUT_KEY = 'calibre.canvasLayout.v1';
   function canvasKey(name){ return 'calibre.canvasSession.v1.' + (name || ''); }
   function loadCanvasSession(name){
@@ -1173,10 +1195,33 @@
     });
   }
 
+  // Arriving for one material that isn't in the canvas in progress (APP-CANVAS-NAV).
+  function askAddOrNew(modal, saved, mat, nList, listLabel){
+    return new Promise(res => {
+      const nInc = saved.order.filter(m => !(saved.excluded || []).includes(m)).length;
+      const ch = document.createElement('div'); ch.className = 'rb-choice';
+      ch.innerHTML = `
+        <div class="rb-choice-card">
+          <div class="rb-choice-h">${esc(mat)} isn’t in your canvas in progress</div>
+          <div class="rb-choice-b">Your canvas in progress has ${nInc} material${nInc===1?'':'s'}. Add ${esc(mat)} to it (right after the page you were on), or start a new canvas from ${esc(listLabel || 'the list')} (${nList} material${nList===1?'':'s'}, opening on ${esc(mat)}). Comments are kept either way.</div>
+          <div class="rb-choice-a">
+            <button class="rb-btn ghost rb-ch-new">New canvas from ${esc(listLabel || 'the list')}</button>
+            <button class="rb-btn primary rb-ch-add">Add to current canvas →</button>
+          </div>
+        </div>`;
+      modal.appendChild(ch);
+      ch.querySelector('.rb-ch-new').addEventListener('click', () => { ch.remove(); res('new'); });
+      ch.querySelector('.rb-ch-add').addEventListener('click', () => { ch.remove(); res('add'); });
+    });
+  }
+
   // ctx = { json, hasPr, analyst, assessmentName,
   //         list:[{m,bucket}]  (the selected materials, in table order),
   //         lookup(mat) → {m,bucket}|null  (any analysed material — to reopen a saved set),
-  //         traceFiltersFor(mat), onClose() }
+  //         traceFiltersFor(mat), onClose(),
+  //         startMat   — open on this material (APP-CANVAS-NAV: "Canvas it" / back from Trace),
+  //         listLabel  — how to name ctx.list in the add-or-new prompt ("the Trend list"),
+  //         backToTrend — true → a "← Back to Trend" button (the canvas was entered from Trend) }
   async function openCanvas(ctx){
     const name = ctx.assessmentName || '';
     const ov = document.createElement('div'); ov.className = 'rb-overlay rb-cv-ov';
@@ -1187,7 +1232,25 @@
     const sel = (ctx.list || []).map(e => e.m.material);
     const saved = loadCanvasSession(name);
     let resume = null;
-    if (saved){
+    const start = ctx.startMat || null;
+    if (start){
+      // APP-CANVAS-NAV — arriving for ONE material ("Canvas it" from Trend, or back
+      // from Trace). Keep any canvas in progress: if the material is in it, open it
+      // there; if not, ask whether to add it or start a new canvas from the list.
+      if (saved){
+        const inSaved = saved.order.includes(start);
+        const removed = (saved.excluded || []).includes(start);
+        if (inSaved && !removed) resume = Object.assign({}, saved, { pageMat: start });
+        else {
+          const pick = sel.length ? await askAddOrNew(modal, saved, start, sel.length, ctx.listLabel) : 'add';
+          if (pick === 'add'){
+            const order = saved.order.slice();
+            if (!inSaved){ const i = order.indexOf(saved.pageMat); order.splice(i >= 0 ? i + 1 : order.length, 0, start); }
+            resume = Object.assign({}, saved, { order, excluded: (saved.excluded || []).filter(m => m !== start), pageMat: start });
+          }
+        }
+      }
+    } else if (saved){
       const a = new Set(sel), b = new Set(saved.order);
       const sameSet = a.size === b.size && [...a].every(m => b.has(m));
       resume = (sameSet || !sel.length) ? saved : await askResume(modal, saved, sel.length);
@@ -1295,6 +1358,7 @@
           <span class="rb-cv-seg" title="How the pages print (PDF)">Print<button data-pt="light">Light</button><button data-pt="dark">Dark</button></span>
           <button class="rb-btn ghost rb-w-batch">Select pages…</button>
           <button class="rb-btn primary rb-w-render">Preview PDF →</button>
+          ${ctx.backToTrend ? '<button class="rb-btn ghost rb-cv-trend" title="Back to this material on the Trend page — your canvas place is kept">← Back to Trend</button>' : ''}
           <button class="rb-btn ghost rb-cv-close" title="Close the canvas — your place, layout and comments are kept">✕ Close</button>
         </span>
       </div>
@@ -1350,6 +1414,7 @@
 
     let mat = included()[0], boxes = [], showTok = 0, busy = false;
     if (resume && resume.pageMat && entryByMat.has(resume.pageMat) && !excluded.has(resume.pageMat)) mat = resume.pageMat;
+    else if (ctx.startMat && entryByMat.has(ctx.startMat) && !excluded.has(ctx.startMat)) mat = ctx.startMat;
 
     // ── autosave (master layout + session) ──
     const savedEl = pane.querySelector('.rb-w-saved');
@@ -1390,6 +1455,17 @@
       scaler.appendChild(rec.el); box.appendChild(scaler);
       const grip = document.createElement('div'); grip.className = 'rb-cardgrip'; grip.title = 'Drag to resize'; box.appendChild(grip);
       const del = document.createElement('div'); del.className = 'rb-carddel'; del.title = 'Remove this tile from every page'; del.textContent = '✕'; box.appendChild(del);
+      // APP-CANVAS-NAV — 💡 open this tile's full detail (Trace view / Trend) for the
+      // current material; the Trace page offers "← Back to Canvas". Review mode only.
+      const dest = TILE_DEST[c.id];
+      if (dest){
+        const bulb = document.createElement('button'); bulb.type = 'button'; bulb.className = 'rb-cardbulb';
+        bulb.setAttribute('aria-label', dest.label); bulb.dataset.label = dest.label;
+        bulb.innerHTML = '💡';
+        bulb.addEventListener('pointerdown', e => e.stopPropagation());
+        bulb.addEventListener('click', (e) => { e.stopPropagation(); if (!editing) leaveTo(dest.url(mat)); });
+        box.appendChild(bulb);
+      }
       del.addEventListener('pointerdown', e => e.stopPropagation());
       del.addEventListener('click', e => {
         e.stopPropagation(); if (!editing) return;
@@ -1608,6 +1684,15 @@
       closeAll();
     }
     pane.querySelector('.rb-cv-close').addEventListener('click', teardown);
+    // Leave the page (💡 / Back to Trend): save the comment + place first, so coming
+    // back reopens the canvas on this same page.
+    function leaveTo(url){
+      if (busy) return;
+      if (saver) saver.flush();
+      flushSave();
+      window.location.href = url;
+    }
+    pane.querySelector('.rb-cv-trend')?.addEventListener('click', () => leaveTo('../analysis/analysis.html#mat=' + encodeURIComponent(mat)));
 
     // Room below a tile before the next tile beneath it (or the page foot) — used to
     // keep a tile inside its arranged footprint when it prints in the other theme

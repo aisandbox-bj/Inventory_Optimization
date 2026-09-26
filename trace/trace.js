@@ -92,6 +92,17 @@
     if (!m) return null;
     try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
   }
+  const VIEW_IDS = ['phase-distribution', 'procurement-chain', 'raw-data', 'volume', 'year-on-year', 'mrp-cadence'];
+  // APP-CANVAS-NAV — the banner's back link: "← Back to Canvas" when this Trace
+  // visit came from a Canvas tile's 💡, otherwise "← Back to Trend".
+  function backLinkHtml(mat){
+    let to = null; try { to = sessionStorage.getItem('calibre.trace.backTo'); } catch (e) {}
+    if (to && to.indexOf('canvas:') === 0){
+      const cm = to.slice(7) || mat;
+      return `<a class="banner-back" href="../screener/screener.html#canvas=${encodeURIComponent(cm)}" title="Return to the Canvas, on the page you came from">&larr; Back to Canvas</a>`;
+    }
+    return `<a class="banner-back" href="../analysis/analysis.html#mat=${encodeURIComponent(mat)}" title="Return to this material on the Trend page">&larr; Back to Trend</a>`;
+  }
   function clearHash(){
     try { history.replaceState(null, '', window.location.pathname + window.location.search); }
     catch (e) { try { window.location.hash = ''; } catch (e2) { /* ignore */ } }
@@ -138,6 +149,17 @@
     // assessment, persists it as the new selection, then consumes the hash so a
     // later reload respects the normal last-picked selection.
     const hashMat = readHashMaterial();
+    // APP-CANVAS-NAV — a Canvas tile's 💡 lands here as #mat=<n>&view=<view>&from=canvas:
+    // open that view, and point the banner's back link at the Canvas (kept for this
+    // tab across reloads; any other deep link or a fresh visit points it at Trend).
+    const hashRaw = (window.location.hash || '').replace(/^#/, '');
+    const hashView = (/(?:^|&)view=([^&]+)/.exec(hashRaw) || [])[1] || null;
+    const navType = (() => { try { return performance.getEntriesByType('navigation')[0].type; } catch (e) { return ''; } })();
+    try {
+      if (/(?:^|&)from=canvas(?:&|$)/.test(hashRaw)) sessionStorage.setItem('calibre.trace.backTo', 'canvas:' + (hashMat || ''));
+      else if (navType !== 'reload' && navType !== 'back_forward') sessionStorage.removeItem('calibre.trace.backTo');
+    } catch (e) {}
+    if (hashView && VIEW_IDS.includes(hashView)) state.activeView = hashView;
     if (hashMat) {
       clearHash();
       if (state.matIndex.has(hashMat)) {
@@ -563,8 +585,9 @@
           <div class="banner-id">${escapeHtml(mat.material)}</div>
           <div class="banner-desc">${escapeHtml(mat.description || '—')}</div>
           <!-- APP-TRACE-BACK (2026-08-15) — one-click return to THIS material on Trend
-               (Trend reads #mat= on boot and re-selects it). -->
-          <a class="banner-back" href="../analysis/analysis.html#mat=${encodeURIComponent(mat.material)}" title="Return to this material on the Trend page">&larr; Back to Trend</a>
+               (Trend reads #mat= on boot); APP-CANVAS-NAV — or to the Canvas page you
+               came from, when this visit started from a Canvas tile's 💡. -->
+          ${backLinkHtml(mat.material)}
         </div>
         ${renderBannerDetails(mat.material)}
         <div class="banner-mid">
@@ -659,7 +682,7 @@
       host.innerHTML = `<div class="view-empty">
         <div style="font-size:16px;color:var(--text-pri,#e7eef0);margin-bottom:8px"><b>Material ${escapeHtml(state.traceItMissing)}</b> has no purchase-order history in this assessment.</div>
         There's nothing to trace for it — the procurement chain, distribution, year-on-year and lead-time views all need PR&nbsp;&rarr;&nbsp;PO records. Pick another material from the list on the left.
-        <div style="margin-top:12px"><a class="banner-back" href="../analysis/analysis.html#mat=${encodeURIComponent(state.traceItMissing)}">&larr; Back to Trend (${escapeHtml(state.traceItMissing)})</a></div>
+        <div style="margin-top:12px">${backLinkHtml(state.traceItMissing)}</div>
       </div>`;
       return;
     }

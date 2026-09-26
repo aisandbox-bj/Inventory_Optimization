@@ -279,6 +279,50 @@
     return sum;
   }
 
+  /* APP-LT-GAP (2026-09-26) — WHY a material that has PR History shows no lead
+     time. The lead time needs at least one order that is (a) in PR History with a
+     PO number and (b) received at site (MB51 109) under THAT PO number. When none
+     qualifies we say which link is missing instead of a bare "—" (credibility:
+     explain the blank, never guess a match). `chains` = computeChains(); `active`
+     = after Trace exclusions. Returns { code, short, detail } or null.            */
+  function leadTimeGap(json, material, chains, active){
+    chains = chains || []; active = active || chains;
+    if (active.some(c => c.siteWH)) return null;           // there IS a lead time
+    const mb51 = (json && json.data && json.data.mb51) || [];
+    const site = [];   // this material's site receipts (109)
+    let lastMb = null; // end of the whole MB51 extract (not just this material)
+    for (const r of mb51){
+      const d = r.postingDate ? String(r.postingDate).slice(0, 10) : null;
+      if (d && (!lastMb || d > lastMb)) lastMb = d;
+      if (String(r.material || '').trim() !== material) continue;
+      if (String(r.movementType || '').trim() === '109') site.push(r);
+    }
+    const chainPos = new Set(chains.map(c => c.po).filter(Boolean));
+    if (chains.some(c => c.siteWH)){
+      return { code:'excluded', short:'received orders excluded in Trace',
+        detail:'This material has orders received at site, but every one of them is excluded on the Trace page (manual exclusions or the sigma trim). Include one again in Trace to get a lead time.' };
+    }
+    const orphan = site.filter(r => !chainPos.has(String(r.purchaseOrder || '').trim()));
+    const withPo = chains.filter(c => c.po);
+    const inFlight = withPo.filter(c => c.state === 'IN_FLIGHT');
+    const notInMb = inFlight.filter(c => !mb51.some(r => String(r.purchaseOrder || '').trim() === c.po && String(r.material || '').trim() === material));
+    const at3pl = inFlight.filter(c => c.gr3pl);
+    const parts = [];
+    if (orphan.length){
+      const pos = [...new Set(orphan.map(r => String(r.purchaseOrder || '').trim() || '(no PO number)'))];
+      parts.push(`${orphan.length} site receipt${orphan.length === 1 ? '' : 's'} (MB51 109) came in under PO${pos.length === 1 ? '' : 's'} ${pos.slice(0, 4).join(', ')}${pos.length > 4 ? '…' : ''}, which ${pos.length === 1 ? 'has' : 'have'} no PR for this material in the PR History extract — so there is no PR date to time ${orphan.length === 1 ? 'it' : 'them'} from (the PR was raised before the extract window, or the PO was raised without a PR).`);
+    }
+    if (notInMb.length) parts.push(`${notInMb.length} PO${notInMb.length === 1 ? '' : 's'} from PR History (${notInMb.slice(0, 4).map(c => c.po).join(', ')}) never appear${notInMb.length === 1 ? 's' : ''} in MB51${lastMb ? ' (MB51 runs to ' + lastMb + ')' : ''} — not received yet, received after the extract, or received under a different PO number.`);
+    if (at3pl.length) parts.push(`${at3pl.length} PO${at3pl.length === 1 ? ' is' : 's are'} at the 3PL (107) with no site receipt (109) yet.`);
+    if (!withPo.length) parts.push('No PO has been raised against any of its PRs yet (open or cancelled PRs only).');
+    const short = orphan.length ? `${orphan.length} site receipt${orphan.length === 1 ? '' : 's'} not linked to a PR`
+      : !withPo.length ? 'no PO raised yet'
+      : at3pl.length && at3pl.length === inFlight.length ? 'at 3PL, not yet at site'
+      : 'no order received at site yet';
+    return { code: orphan.length ? 'unlinked' : (!withPo.length ? 'no-po' : 'in-flight'), short,
+      detail: parts.join(' ') + ' Lead time only counts orders that are in PR History AND received at site (109) under the same PO number.' };
+  }
+
   // "Nice" axis tick generator — 1/2/5 × 10^n stepping for round numbers
   function niceTicks(min, max, target){
     if (max <= min) return [min];
@@ -582,6 +626,7 @@
     renderPhaseEmpty,
     renderPhaseVisual,
     totalToSiteMean,
+    leadTimeGap,
     render
   };
 

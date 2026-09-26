@@ -447,6 +447,7 @@
             <span class="mat">${escapeHtml(mat.material)}</span>
             <button class="mat-copy" id="btnCopyMat" aria-label="Copy material number">⧉</button>
             ${opts.enableTraceLink ? `<button class="mat-trace" id="btnTraceIt">Trace it! &rarr;</button>` : ''}
+            ${opts.canvasLinkFn ? `<button class="mat-trace mat-canvas" id="btnCanvasIt">Canvas it! &rarr;</button>` : ''}
             ${(opts.analyst && opts.analyst.enabled) ? `<button class="action-star ${opts.analyst.flagged ? 'on' : ''}${opts.analyst.readOnly ? ' ro' : ''}"${opts.analyst.readOnly ? '' : ' id="btnActionStar"'} aria-pressed="${opts.analyst.flagged ? 'true' : 'false'}" aria-label="${opts.analyst.readOnly ? (opts.analyst.flagged ? 'Flagged For Action (view only)' : 'Not flagged for action') : (opts.analyst.flagged ? 'Flagged For Action — click to clear' : 'Flag For Action (analyst follow-up)')}">${opts.analyst.flagged ? '★' : '☆'}</button>` : ''}
           </div>
           <div class="desc">${descHtml(mat, opts)}</div>
@@ -480,7 +481,7 @@
         <div class="stat-cell"><span class="lab">Qty Iss. (window)</span><div class="v">${mat.totalNet}</div></div>
         ${perEventCell}
         ${lastConsCell}
-        <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History. Same figure on Trend, Canvas and Sandbox. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div></div>
+        <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History. Same figure on Trend, Canvas and Sandbox. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div>${(mat.leadDays == null && mat.leadGap) ? `<div class="lead-gap">${escapeHtml(mat.leadGap.short)} <button type="button" class="lead-why" id="leadWhyBtn">why?</button></div>` : ''}</div>
       </div>
       <button type="button" class="stat-expand" id="statExpandBtn" aria-expanded="${_statsExpanded ? 'true' : 'false'}">
         <span class="tri">${_statsExpanded ? '▾' : '▸'}</span><span class="lbl">${_statsExpanded ? 'Fewer stats' : 'More stats'}</span>
@@ -588,6 +589,31 @@
           copyBtn.textContent = orig;
         }, 1200);
       });
+    }
+
+    // APP-LT-GAP — "why?" on a blank Lead time opens a small card with the reason
+    // (hover tooltips are switched off app-wide, so the reason must be clickable).
+    const whyBtn = hostEl.querySelector('#leadWhyBtn');
+    if (whyBtn && mat.leadGap) whyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelector('.lead-why-card')?.remove();
+      const card = document.createElement('div');
+      card.className = 'lead-why-card';
+      card.innerHTML = `<div class="lead-why-h">Why no lead time · ${escapeHtml(mat.material)}<button type="button" class="lead-why-x" aria-label="Close">✕</button></div><div class="lead-why-b">${escapeHtml(mat.leadGap.detail)}</div>`;
+      const r = whyBtn.getBoundingClientRect();
+      card.style.left = Math.max(8, Math.min(window.innerWidth - 400, r.left - 160)) + 'px';
+      card.style.top = Math.min(window.innerHeight - 180, r.bottom + 6) + 'px';
+      document.body.appendChild(card);
+      const close = () => { card.remove(); document.removeEventListener('click', off, true); };
+      const off = (ev) => { if (!card.contains(ev.target) || ev.target.closest('.lead-why-x')) close(); };
+      setTimeout(() => document.addEventListener('click', off, true), 0);
+    });
+
+    // APP-CANVAS-NAV — "Canvas it" (Trend): opens this material in the Canvas
+    // review workspace. The host page supplies the handoff (opts.canvasLinkFn).
+    if (opts.canvasLinkFn) {
+      const cBtn = hostEl.querySelector('#btnCanvasIt');
+      if (cBtn) cBtn.addEventListener('click', (e) => { e.stopPropagation(); opts.canvasLinkFn(mat); });
     }
 
     // APP-T-07 — "Trace it!" cross-tool deep link (opt-in; Analysis only). Opens
