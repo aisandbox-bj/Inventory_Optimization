@@ -406,6 +406,12 @@
         prOpen = chains.some(c => c.state === 'PR_ONLY');                        // PR raised, no PO yet
       }
       m.avgProcTimelineDays = avgLT;
+      // APP-FIX-SCR-LEADCELL (2026-09-25) — the shared detail panel's "Lead time" stat
+      // reads m.leadDays, which only Trend's enrichLeadTimes() used to set, so on the
+      // Screener that cell showed "—" for EVERY material even when the lead-time graph
+      // rendered. Same calc as Trend (Trace exclusions → reached site → Σ phase means),
+      // same 1-dp rounding, so the two pages show the identical figure.
+      m.leadDays = (avgLT != null) ? Math.round(avgLT * 10) / 10 : null;
       m.poStatus = state.hasPr ? (poOpen ? 'Open' : 'None') : null;
       m.prStatus = state.hasPr ? (prOpen ? 'Open' : 'None') : null;
 

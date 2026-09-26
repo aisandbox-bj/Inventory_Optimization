@@ -327,6 +327,8 @@
         prOpen = chains.some(c => c.state === 'PR_ONLY');                        // PR raised, no PO yet
       }
       m.avgProcTimelineDays = avgLT;
+      // APP-FIX-SCR-LEADCELL — publish the same figure Trend shows, for the shared detail's Lead time stat
+      m.leadDays = (avgLT != null) ? Math.round(avgLT * 10) / 10 : null;
       m.poStatus = state.hasPr ? (poOpen ? 'Open' : 'None') : null;
       m.prStatus = state.hasPr ? (prOpen ? 'Open' : 'None') : null;
 

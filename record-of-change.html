@@ -381,6 +381,22 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Screener lead-time cell fix - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-FIX-SCR-LEADCELL</b>: the Lead time stat on the Screener / Sandbox detail was blank for every material — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator-reported:</b> many materials that show a lead-time graph showed no lead time in the stat table under the Trend graph on the Screener.</li>
+        <li><b>Root cause:</b> the shared detail panel's "Lead time" cell reads <code>leadDays</code>, which only Trend's <code>enrichLeadTimes()</code> ever set. The Screener and Sandbox already computed the identical figure (Trace exclusions → chains that reached site → sum of phase means) for their bands, but never published it as <code>leadDays</code> — so the cell showed "—" there for every material, graph or not. (The cell's help text even said "Trend only".)</li>
+        <li><b>Fix:</b> the Screener and Sandbox now set <code>leadDays</code> from that same calculation with Trend's 1-dp rounding. Verified identical on both pages: 2004641 37.8 d · 1003380 29.0 d · 1000640 31.5 d · 1003497 24.1 d; a material with no PR history still shows "—" (and has no graph). Help text + manual corrected. Possibly the same symptom as queue item #4 ("average lead time blank with one year of PR history") if that was seen on the Screener — to be confirmed with the operator, not assumed.</li>
+        <li>Files: <code>screener/screener.js</code>, <code>sandbox/sandbox.js</code>, <code>shared/material-detail.js</code> (help text). Rollback: <code>checkpoint/pre-leadcell</code> at <code>9a8f85b</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Duplicate flag - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">

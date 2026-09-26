@@ -480,7 +480,7 @@
         <div class="stat-cell"><span class="lab">Qty Iss. (window)</span><div class="v">${mat.totalNet}</div></div>
         ${perEventCell}
         ${lastConsCell}
-        <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History; Trend only. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div></div>
+        <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History. Same figure on Trend, Screener and Sandbox. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div></div>
       </div>
       <button type="button" class="stat-expand" id="statExpandBtn" aria-expanded="${_statsExpanded ? 'true' : 'false'}">
         <span class="tri">${_statsExpanded ? '▾' : '▸'}</span><span class="lbl">${_statsExpanded ? 'Fewer stats' : 'More stats'}</span>
