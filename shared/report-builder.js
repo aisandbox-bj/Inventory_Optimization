@@ -124,6 +124,32 @@
     return { W:216, H:279, M:12, orientation:'portrait', format:'letter', wide:false };
   }
 
+  /* ─── T&C block (APP-RB-TNC, operator 2026-09-25) — bottom-right of every page ── */
+  function reportDateStr(){
+    try { return new Date().toLocaleDateString('en-CA', { year:'numeric', month:'short', day:'numeric' }); }
+    catch (e) { return new Date().toISOString().slice(0, 10); }
+  }
+  function tncLines(){
+    return [
+      'Inventory and consumption are approximations based on MB51 movements and may vary slightly from actual.',
+      `Min/Max values are as at the report date (${reportDateStr()}) and may have changed since.`
+    ];
+  }
+  // T&C text size (pt) = the data-row size of the "Raw data — last N PRs" table (6.6pt,
+  // operator 2026-09-25). Shared by the PDF and the on-screen widescreen stage.
+  const TNC_PT = 6.6;
+  // Draw the T&C right-aligned at the bottom-right of the current PDF page.
+  function drawTnc(doc, g, dark){
+    const lines = tncLines().map(pdfSafe);
+    // Dark slate on white pages, light on dark pages — must read clearly on either
+    // (operator 2026-09-25: the earlier light grey was too faint on white).
+    doc.setFont('helvetica','italic'); doc.setFontSize(TNC_PT);
+    doc.setTextColor(dark ? 196 : 52, dark ? 212 : 64, dark ? 216 : 74);
+    doc.text(lines[0], g.W - g.M, g.H - 7.5, { align:'right' });
+    doc.text(lines[1], g.W - g.M, g.H - 4.9, { align:'right' });
+    doc.setFont('helvetica','normal');
+  }
+
   /* ─── header (branded) ──────────────────────────────────────────────────── */
   function drawHeader(doc, g, ctx, continuation){
     const W = g.W, M = g.M;
@@ -403,7 +429,7 @@
     // group by year of prDate
     const byYear = new Map();
     drawn.forEach(c => { const yr = (c.prDate||'').slice(0,4); if (!yr) return; if (!byYear.has(yr)) byYear.set(yr, []); byYear.get(yr).push(c); });
-    const years = [...byYear.keys()].sort();
+    const years = [...byYear.keys()].sort().reverse();   // newest year on top — matches every other table (latest → oldest)
     if (!years.length){ thinNote(P, 'No dated chains to compare by year.'); return; }
     // shared scale = max total-to-site across years
     const yearStats = years.map(yr => {
@@ -475,7 +501,7 @@
       startY: P.y,
       head: [['PR','Trig','PR date','PO','PO date','3PL GR','Site WH','1st 261','A','B','C','D','E','Tot','Qty','State']],
       body: rows, theme:'grid', pageBreak:'avoid', rowPageBreak:'avoid',
-      styles:{ fontSize:6.6, cellPadding:1, lineColor:[214,220,224], lineWidth:0.1, overflow:'ellipsize' },
+      styles:{ fontSize:6.6, cellPadding:1, lineColor:[214,220,224], lineWidth:0.1, overflow:'ellipsize', halign:'center' },   // every column centred (operator 2026-09-25)
       headStyles:{ fillColor:[12,45,59], textColor:255, fontStyle:'bold', fontSize:6.6, halign:'center' },
       columnStyles:{ 8:{halign:'center'},9:{halign:'center'},10:{halign:'center'},11:{halign:'center'},12:{halign:'center'},13:{halign:'center',fontStyle:'bold'},14:{halign:'center'} },
       tableWidth: CW, margin:{ left:M, right:M },
@@ -544,7 +570,7 @@
       startY: P.y,
       head: [['PR','PO','PR date','Site WH','A','B','C','D','To site','Shelf E','Qty']],
       body: rows, theme:'grid', pageBreak:'avoid', rowPageBreak:'avoid',
-      styles:{ fontSize:7.4, cellPadding:1.3, lineColor:[214,220,224], lineWidth:0.1 },
+      styles:{ fontSize:7.4, cellPadding:1.3, lineColor:[214,220,224], lineWidth:0.1, halign:'center' },   // every column centred (operator 2026-09-25)
       headStyles:{ fillColor:[12,45,59], textColor:255, fontStyle:'bold', fontSize:7.4, halign:'center' },
       columnStyles:{ 4:{halign:'center'},5:{halign:'center'},6:{halign:'center'},7:{halign:'center'},8:{halign:'center',fontStyle:'bold'},9:{halign:'center',textColor:[120,95,175]},10:{halign:'center'} },
       tableWidth: CW, margin:{ left:M, right:M },
@@ -668,13 +694,13 @@
         for (let p = startPage; p <= doc.getNumberOfPages(); p++) pageMat[p] = mctx.m.material;
         if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));   // yield so the UI can repaint on big sets
       }
-      // footers (per-material label + running page number)
+      // footers: left = material · assessment · page number; bottom-right = the T&C block
       const pages = doc.getNumberOfPages();
       for (let i=1;i<=pages;i++){
         doc.setPage(i);
-        doc.setTextColor(140,148,156); doc.setFont('helvetica','normal'); doc.setFontSize(7);
-        doc.text(pdfSafe(`${pageMat[i] || ctx.m.material}  -  ${ctx.assessmentName||''}`), g.M, g.H - 5);
-        doc.text(`Page ${i} / ${pages}`, g.W - g.M, g.H - 5, { align:'right' });
+        doc.setTextColor(140,148,156); doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
+        doc.text(pdfSafe(`${pageMat[i] || ctx.m.material}  -  ${(ctx.assessmentName||'').slice(0, 40)}  -  Page ${i} / ${pages}`), g.M, g.H - 4.9);
+        drawTnc(doc, g, false);
       }
       const safe = (ctx.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g,'_');
       const filename = list.length > 1
@@ -829,7 +855,11 @@
     }
     refreshWarn();
 
-    function close(){ pickerSaver.flush(); ov.remove(); document.removeEventListener('keydown', onKey); }
+    function close(){
+      pickerSaver.flush();
+      if (ov._rbTeardown) ov._rbTeardown();   // keep any widescreen layout work (saved session)
+      ov.remove(); document.removeEventListener('keydown', onKey);
+    }
     function onKey(e){ if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
     ov.querySelector('.rb-x').addEventListener('click', close);
@@ -887,6 +917,36 @@
         gen.disabled = false; gen.textContent = orig;
       }
     });
+
+    // APP-RB-WIDESESSION — a widescreen report in progress? Offer to continue it.
+    const saved = loadSession(ctx);
+    if (saved){
+      const nInc = saved.order.filter(m => !(saved.excluded || []).includes(m)).length;
+      const nRem = saved.order.length - nInc;
+      let when = '';
+      try { when = new Date(saved.savedAt).toLocaleString('en-CA', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch (e) {}
+      const ch = document.createElement('div'); ch.className = 'rb-choice';
+      ch.innerHTML = `
+        <div class="rb-choice-card">
+          <div class="rb-choice-h">You have a widescreen report in progress</div>
+          <div class="rb-choice-b">${nInc} material${nInc===1?'':'s'}${nRem ? ` (${nRem} removed)` : ''} · ${saved.theme === 'dark' ? 'Dark' : 'Light'}${when ? ` · last saved ${esc(when)}` : ''}<br>Continue where you left off — same set, same page layouts — or start a new report from the materials flagged now (${nMat}).</div>
+          <div class="rb-choice-a">
+            <button class="rb-btn ghost rb-ch-fresh">Start afresh</button>
+            <button class="rb-btn primary rb-ch-cont">Continue on current set →</button>
+          </div>
+        </div>`;
+      ov.querySelector('.rb-modal').appendChild(ch);
+      ch.querySelector('.rb-ch-fresh').addEventListener('click', () => ch.remove());
+      ch.querySelector('.rb-ch-cont').addEventListener('click', async (ev) => {
+        const b = ev.currentTarget; b.disabled = true; b.textContent = 'Opening…';
+        try { await openWideCanvas(ov, close, ctx, null, saved.theme || 'light', saved); ch.remove(); }
+        catch (e){
+          console.error(e);
+          ch.querySelector('.rb-choice-b').innerHTML = '⚠ Couldn’t reopen the saved report: ' + esc(e.message || String(e)) + '. Start afresh instead.';
+          b.remove();
+        }
+      });
+    }
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -1043,7 +1103,7 @@
       else {
         const PK=TracePhase.PHASE_KEYS, CO=TracePhase.PHASE_COLORS;
         const byYear=new Map(); drawn.forEach(c=>{const y=(c.prDate||'').slice(0,4);if(!y)return;(byYear.get(y)||byYear.set(y,[]).get(y)).push(c);});
-        const years=[...byYear.keys()].sort();
+        const years=[...byYear.keys()].sort().reverse();   // newest year on top (latest → oldest, like every other table)
         const stats=years.map(y=>{const cs=byYear.get(y);const mn=PK.map(ph=>{const s=TracePhase.boxStats(cs.map(c=>c[ph]));return s?s.mean:0;});return {y,n:cs.length,mn,toSite:mn[0]+mn[1]+mn[2]+mn[3]};});
         const mx=Math.max(1,...stats.map(s=>s.toSite));
         inner += stats.map(s=>{
@@ -1060,13 +1120,13 @@
         const dc = drawnChains(ctx);
         if (id==='rawpr'){
           const rows=(dc.act||[]).slice(0,N).map(c=>[c.pr||'—',(c.creationIndicator==='B')?'MRP':'Manual',c.prDate||'—',c.po||'—',c.siteWH||'—',c.A!=null?String(c.A):'—',c.B!=null?String(c.B):'—',c.C!=null?String(c.C):'—',c.D!=null?String(c.D):'—',c.total!=null?String(c.total):'—',c.qty!=null?String(c.qty):'—',(c.state||'—').replace(/_/g,' ')]);
-          inner += rows.length?htmlTable(TH,['PR','Trig','PR date','PO','Site WH','A','B','C','D','Tot','Qty','State'],rows,{center:[5,6,7,8,9,10], strike:(r)=>/CANCELL/i.test(r[11])}):`<div style="color:${TH.sub};font-size:12px">No PRs.</div>`;
+          inner += rows.length?htmlTable(TH,['PR','Trig','PR date','PO','Site WH','A','B','C','D','Tot','Qty','State'],rows,{center:[0,1,2,3,4,5,6,7,8,9,10,11], strike:(r)=>/CANCELL/i.test(r[11])}):`<div style="color:${TH.sub};font-size:12px">No PRs.</div>`;
         } else {
           const sel=(dc.drawn||[]).slice(0,N);
           const rows=sel.map(c=>[c.pr||'—',c.po||'—',c.prDate||'—',c.siteWH||'—',c.A!=null?c.A+'d':'—',c.B!=null?c.B+'d':'—',c.C!=null?c.C+'d':'—',c.D!=null?c.D+'d':'—',c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'—',c.qty!=null?String(c.qty):'—']);
           const scales=heatScales(sel);   // APP-RB-CHAINHEAT — same shading as the Letter table
           const cellBg=(ri,ci)=>{ const h=CHAIN_HEAT[ci]; if(!h) return null; const f=heatFill(sel[ri][h.key], scales[ci]); return f?`rgba(${f.rgb.join(',')},${f.a.toFixed(3)})`:null; };
-          inner += rows.length?htmlTable(TH,['PR','PO','PR date','Site WH','A','B','C','D','To site','Qty'],rows,{center:[4,5,6,7,8,9], cellBg})
+          inner += rows.length?htmlTable(TH,['PR','PO','PR date','Site WH','A','B','C','D','To site','Qty'],rows,{center:[0,1,2,3,4,5,6,7,8,9], cellBg})
             + (Object.keys(scales).length?`<div style="font-size:9.5px;font-style:italic;color:${TH.sub};margin-top:4px">${esc(HEAT_NOTE)}</div>`:''):`<div style="color:${TH.sub};font-size:12px">No chains.</div>`;
         }
       }
@@ -1095,32 +1155,55 @@
     return el;
   }
 
-  // ─── WIDESCREEN layout canvas — one page per flagged material (APP-RB-WIDEPAGES) ───
-  // Every flagged material is its own landscape page with its own layout. A page
-  // FOLLOWS the page before it (live) until you change something on it — then it
-  // keeps its own layout. "⧉ Copy layout from previous page" re-syncs a page;
-  // "Apply this layout to all pages" makes every page use the current arrangement.
-  // A layout is plain data ({key,id,opts,x,y,w,h,freeAspect}); each page's tiles are
-  // built from THAT page's material, so heights follow that material's content.
+  // ─── Saved widescreen session (APP-RB-WIDESESSION) ───
+  // The layout work is saved as you go (per assessment, in this browser) so leaving
+  // the builder doesn't lose it; reopening offers "Continue on current set".
+  function sessionKey(ctx){ return 'calibre.reportSession.v1.' + (ctx.assessmentName || ''); }
+  function loadSession(ctx){
+    try { const o = JSON.parse(localStorage.getItem(sessionKey(ctx)) || 'null'); return (o && o.v === 1 && Array.isArray(o.order) && o.base) ? o : null; }
+    catch (e) { return null; }
+  }
+  function saveSession(ctx, o){ try { localStorage.setItem(sessionKey(ctx), JSON.stringify(o)); } catch (e) {} }
+  function clearSession(ctx){ try { localStorage.removeItem(sessionKey(ctx)); } catch (e) {} }
+
+  // ─── WIDESCREEN layout canvas — one page per material (APP-RB-WIDEPAGES) ───
+  // Layouts are keyed by MATERIAL. A page FOLLOWS the page before it (among the
+  // materials still in the report) until you change it — then it keeps its own.
+  // The base ("starting") layout is what the first page follows.
   function imgsLoaded(el){
     const imgs = [...el.querySelectorAll('img')];
     return Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r => { im.onload = im.onerror = r; })));
   }
   function cloneLayout(lay){ return lay.map(c => ({ ...c, opts: { ...(c.opts || {}) } })); }
 
-  async function openWideCanvas(ov, close, ctx, blocks, theme){
+  async function openWideCanvas(ov, close, ctx, blocks, theme, resume){
     await ensureH2C();
-    const entries = (ctx.batch && ctx.batch.list && ctx.batch.list.length) ? ctx.batch.list : [{ m: ctx.m, bucket: ctx.bucket }];
-    const N = entries.length;
-    const pctx = (i) => (ctx.batch && ctx.batch.list && ctx.batch.list.length) ? ctxForEntry(ctx, entries[i]) : ctx;
-    const stage_host = document.createElement('div'); stage_host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(stage_host);
+    const hasBatch = !!(ctx.batch && ctx.batch.list && ctx.batch.list.length);
+    // entries by material — from the saved session (Continue) or the flagged set
+    const entryByMat = new Map();
+    let order = [], missing = 0;
+    if (resume){
+      for (const mat of resume.order){
+        const e = (ctx.batch && ctx.batch.lookup) ? ctx.batch.lookup(mat)
+          : (ctx.batch && ctx.batch.list || []).find(x => x.m.material === mat);
+        if (e){ entryByMat.set(mat, e); order.push(mat); } else missing++;
+      }
+      theme = resume.theme || theme;
+    } else {
+      const list = hasBatch ? ctx.batch.list : [{ m: ctx.m, bucket: ctx.bucket }];
+      list.forEach(e => { entryByMat.set(e.m.material, e); order.push(e.m.material); });
+    }
+    if (!order.length){ throw new Error('none of the saved materials are in this assessment any more'); }
+    const pctx = (mat) => hasBatch || resume ? ctxForEntry(ctx, entryByMat.get(mat)) : ctx;
+    const excluded = new Set(resume ? (resume.excluded || []).filter(m => entryByMat.has(m)) : []);
+    const included = () => order.filter(m => !excluded.has(m));
 
-    // Built tiles, cached per page + tile (built from that page's material).
-    const domCache = new Map();
-    async function cardFor(i, c, cache){
-      const k = i + '|' + c.key;
+    const stage_host = document.createElement('div'); stage_host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(stage_host);
+    const domCache = new Map();   // mat|key → { el, ar }
+    async function cardFor(mat, c, cache){
+      const k = mat + '|' + c.key;
       if (domCache.has(k)) return domCache.get(k);
-      const el = await buildCardDom(c.id, pctx(i), c.opts || {}, theme);
+      const el = await buildCardDom(c.id, pctx(mat), c.opts || {}, theme);
       stage_host.appendChild(el);
       await imgsLoaded(el);
       const rec = { el, ar: (el.offsetHeight / el.offsetWidth) || 1 };
@@ -1128,30 +1211,40 @@
       return rec;
     }
 
-    // Default auto-layout: flow tiles into up to 3 columns.
-    let keySeq = 0;
-    async function autoLayout(i, lay){
+    let keySeq = resume ? (resume.keySeq || 1000) : 0;
+    async function autoLayout(mat, lay){
       const cols = Math.min(3, Math.max(1, Math.round(Math.sqrt(lay.length || 1))));
       const gap = 0.015, colW = (1 - gap * (cols + 1)) / cols;
       const colY = new Array(cols).fill(gap);
       for (const c of lay){
-        const rec = await cardFor(i, c);
+        const rec = await cardFor(mat, c);
         const col = colY.indexOf(Math.min(...colY));
         c.w = colW; c.x = gap + col * (colW + gap); c.y = colY[col];
-        c.h = c.w * 1.7778 * rec.ar;   // height fraction of the 16:9 stage (used by the free-aspect comment tile)
+        c.h = c.w * 1.7778 * rec.ar;
         colY[col] += c.h + gap;
       }
     }
-    const first = blocks.map(b => ({ key: 'k' + (keySeq++), id: b.id, opts: { ...(b.opts || {}) }, freeAspect: b.id === 'comment' }));
-    await autoLayout(0, first);
-    const layouts = new Array(N).fill(null);   // null = follows the page before
-    layouts[0] = first;
-    function effective(i){ for (let j = i; j >= 0; j--) if (layouts[j]) return { lay: layouts[j], from: j }; return { lay: layouts[0], from: 0 }; }
+    let base;
+    const own = new Map();   // mat → its own layout
+    if (resume){
+      base = cloneLayout(resume.base);
+      Object.entries(resume.layouts || {}).forEach(([m, lay]) => { if (entryByMat.has(m)) own.set(m, cloneLayout(lay)); });
+    } else {
+      base = blocks.map(b => ({ key: 'k' + (keySeq++), id: b.id, opts: { ...(b.opts || {}) }, freeAspect: b.id === 'comment' }));
+      await autoLayout(order[0], base);
+    }
+    // effective layout for a material = its own, else the nearest earlier included page's own, else the base
+    function effective(mat){
+      const inc = included(); let i = inc.indexOf(mat);
+      for (; i >= 0; i--){ const m = inc[i]; if (own.has(m)) return { lay: own.get(m), from: m }; }
+      return { lay: base, from: null };
+    }
 
     // ── UI ──
     const modal = ov.querySelector('.rb-modal');
     modal.classList.add('rb-has-preview');
     modal.style.width = 'min(1180px,100%)'; modal.style.height = 'min(90vh,960px)';
+    const multi = order.length > 1;
     const pane = document.createElement('div');
     pane.className = 'rb-wide';
     pane.innerHTML = `
@@ -1161,28 +1254,36 @@
           <button class="rb-btn ghost rb-w-back">‹ Back</button>
           <button class="rb-btn ghost rb-w-add">+ Add tile</button>
           <button class="rb-btn ghost rb-w-reset">Reset layout</button>
-          ${N > 1 ? '<button class="rb-btn ghost rb-w-batch">Select pages…</button>' : ''}
+          ${multi ? '<button class="rb-btn ghost rb-w-batch">Select pages…</button>' : ''}
           <button class="rb-btn primary rb-w-render">Preview PDF →</button>
         </span>
       </div>
       <div class="rb-w-nav">
-        ${N > 1 ? '<button class="rb-btn ghost rb-w-prev">‹ Prev</button>' : ''}
+        ${multi ? '<span class="rb-w-navbtns"><button class="rb-btn ghost rb-w-prev">‹ Prev</button><button class="rb-btn ghost rb-w-next">Next ›</button></span>' : ''}
         <span class="rb-w-page"></span>
-        ${N > 1 ? '<button class="rb-btn ghost rb-w-next">Next ›</button>' : ''}
-        ${N > 1 ? '<span class="rb-w-lay"></span><button class="rb-btn ghost rb-w-copyprev">⧉ Copy layout from previous page</button><button class="rb-btn ghost rb-w-applyall">Apply this layout to all pages</button>' : ''}
+        ${multi ? '<button class="rb-btn ghost rb-w-remove" title="Take this material out of the report">✕ Remove from report</button><span class="rb-w-removed"></span>' : ''}
+        ${multi ? '<span class="rb-w-lay"></span>' : ''}
       </div>
+      ${multi ? `<div class="rb-w-nav rb-w-nav2">
+        <button class="rb-btn ghost rb-w-copyprev">⧉ Copy layout from previous page</button>
+        <button class="rb-btn ghost rb-w-applyall">Apply this layout to all pages</button>
+        <span class="rb-w-saved"></span>
+      </div>` : ''}
       <div class="rb-cmt-editor rb-w-cmt">
         <span class="rb-cmt-lab">✎ Comment<span class="rb-cmt-carry rb-w-cmt-mat"></span></span>
         <textarea class="rb-cmt-ta" rows="2" placeholder="Comment for this page's material — kept against the material and reloaded next time. Shows in the page's Comment tile."></textarea>
       </div>
-      <div class="rb-stage-wrap"><div class="rb-stage"></div></div>`;
+      <div class="rb-stage-wrap"><div class="rb-stage"><div class="rb-w-tnc"></div></div></div>`;
     modal.appendChild(pane);
-    const restoreModal = makePreviewInteractive(modal, pane);   // move / resize / maximize the whole layout panel
+    const restoreModal = makePreviewInteractive(modal, pane);
     const stage = pane.querySelector('.rb-stage');
     const wrap  = pane.querySelector('.rb-stage-wrap');
-    stage.style.background = theme === 'dark' ? '#0c2d3b' : '#ffffff';   // WYSIWYG page colour
+    const tncEl = pane.querySelector('.rb-w-tnc');
+    stage.style.background = theme === 'dark' ? '#0c2d3b' : '#ffffff';
+    tncEl.innerHTML = tncLines().map(esc).join('<br>');
+    if (theme === 'dark') tncEl.classList.add('dark');
 
-    // Keep the stage a true 16:9 that fills the panel, whatever size the panel is.
+    // true 16:9 stage that fills the panel; the T&C scales with the page (5.8pt on 338.7mm)
     function fitStage(){
       const cs = getComputedStyle(wrap);
       const aw = wrap.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -1190,12 +1291,33 @@
       if (aw <= 0 || ah <= 0) return;
       const w = Math.min(aw, ah * 16 / 9);
       stage.style.width = w + 'px'; stage.style.height = (w * 9 / 16) + 'px';
+      const pxPerMm = w / 338.7;
+      tncEl.style.fontSize = (TNC_PT / 2.8346 * pxPerMm) + 'px';
+      tncEl.style.right = (12 * pxPerMm) + 'px'; tncEl.style.bottom = (3.4 * pxPerMm) + 'px';
     }
     const roWrap = new ResizeObserver(fitStage); roWrap.observe(wrap); fitStage();
 
-    let page = 0, cur = [], curOwn = true, boxes = [], showTok = 0, busy = false;
-    function own(){   // the first change on a following page gives it its own layout
-      if (!curOwn){ layouts[page] = cur; curOwn = true; renderNav(); }
+    let mat = included()[0], cur = [], curOwn = true, boxes = [], showTok = 0, busy = false;
+    if (resume && resume.pageMat && entryByMat.has(resume.pageMat) && !excluded.has(resume.pageMat)) mat = resume.pageMat;
+
+    // ── autosave ──
+    const savedEl = pane.querySelector('.rb-w-saved');
+    const missingNote = missing ? `${missing} saved material${missing===1?'':'s'} not in this assessment — skipped · ` : '';
+    let saveT = null;
+    function snapshot(){
+      const layouts = {}; own.forEach((lay, m) => { layouts[m] = lay; });
+      return { v:1, theme, savedAt: new Date().toISOString(), order, excluded:[...excluded], base, layouts, pageMat: mat, keySeq };
+    }
+    function scheduleSave(){
+      if (saveT) clearTimeout(saveT);
+      saveT = setTimeout(() => { saveT = null; saveSession(ctx, snapshot()); if (savedEl) savedEl.textContent = missingNote + 'layout saved ✓'; }, 400);
+      if (savedEl) savedEl.textContent = missingNote + 'saving…';
+    }
+    function flushSave(){ if (saveT){ clearTimeout(saveT); saveT = null; } saveSession(ctx, snapshot()); }
+
+    function makeOwn(){
+      if (!curOwn){ own.set(mat, cur); curOwn = true; renderNav(); }
+      scheduleSave();
     }
 
     function place(b){
@@ -1204,7 +1326,7 @@
       const wpx = c.w * sw, s = wpx / CARD_W;
       box.style.left = (c.x * 100) + '%'; box.style.top = (c.y * 100) + '%'; box.style.width = (c.w * 100) + '%';
       rec.el.style.transformOrigin = 'top left';
-      rec.el.style.transform = `scale(${s})`;   // every tile — the comment too — at the same scale, so text sizes match
+      rec.el.style.transform = `scale(${s})`;
       if (c.freeAspect){
         const hpx = (c.h || c.w * 1.7778 * rec.ar) * sh;
         box.style.height = hpx + 'px';
@@ -1222,12 +1344,11 @@
       const del = document.createElement('div'); del.className = 'rb-carddel'; del.title = 'Remove this tile'; del.textContent = '✕'; box.appendChild(del);
       del.addEventListener('pointerdown', e => e.stopPropagation());
       del.addEventListener('click', e => {
-        e.stopPropagation(); own();
+        e.stopPropagation(); makeOwn();
         const i = cur.indexOf(c); if (i >= 0) cur.splice(i, 1);
-        boxes = boxes.filter(x => x !== b); box.remove();
+        boxes = boxes.filter(x => x !== b); box.remove(); scheduleSave();
       });
-      stage.appendChild(box); boxes.push(b); place(b);
-      // drag move (a click on the Comment tile jumps to the comment box instead)
+      stage.insertBefore(box, tncEl); boxes.push(b); place(b);
       box.addEventListener('pointerdown', (e) => {
         if (e.target === grip) return;
         e.preventDefault(); box.setPointerCapture(e.pointerId); box.classList.add('drag');
@@ -1235,7 +1356,7 @@
         let moved = false;
         const mv = (ev) => {
           if (!moved && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 3) return;
-          moved = true; own();
+          if (!moved){ moved = true; makeOwn(); }
           c.x = Math.max(0, Math.min(1 - c.w, ox + (ev.clientX - sx) / r.width));
           c.y = Math.max(0, Math.min(1, oy + (ev.clientY - sy) / r.height));
           c.x = Math.round(c.x / 0.005) * 0.005; c.y = Math.round(c.y / 0.005) * 0.005; place(b);
@@ -1243,44 +1364,51 @@
         const up = () => {
           box.classList.remove('drag'); try { box.releasePointerCapture(e.pointerId); } catch (_) {}
           box.removeEventListener('pointermove', mv); box.removeEventListener('pointerup', up);
-          if (!moved && c.id === 'comment') cmtTa.focus();
+          if (moved) scheduleSave();
+          else if (c.id === 'comment') cmtTa.focus();
         };
         box.addEventListener('pointermove', mv); box.addEventListener('pointerup', up);
       });
-      // resize — width follows aspect (height derived); the comment tile resizes freely
       grip.addEventListener('pointerdown', (e) => {
         e.preventDefault(); e.stopPropagation(); grip.setPointerCapture(e.pointerId);
         const r = stage.getBoundingClientRect(); const sx = e.clientX, sy = e.clientY, ow = c.w, oh = (c.h || c.w * 1.7778 * rec.ar);
+        let started = false;
         const mv = (ev) => {
-          own();
+          if (!started){ started = true; makeOwn(); }
           c.w = Math.max(0.12, Math.min(1 - c.x, ow + (ev.clientX - sx) / r.width));
           if (c.freeAspect) c.h = Math.max(0.06, oh + (ev.clientY - sy) / r.height);
           place(b);
         };
-        const up = () => { try { grip.releasePointerCapture(e.pointerId); } catch (_) {} grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); };
+        const up = () => { try { grip.releasePointerCapture(e.pointerId); } catch (_) {} grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); if (started) scheduleSave(); };
         grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up);
       });
     }
     const ro = new ResizeObserver(() => boxes.forEach(place)); ro.observe(stage);
 
-    // ── page label / layout status ──
+    // ── nav ──
     const pageEl = pane.querySelector('.rb-w-page');
     const layEl  = pane.querySelector('.rb-w-lay');
+    const remEl  = pane.querySelector('.rb-w-removed');
     function renderNav(){
-      const m = entries[page].m;
-      pageEl.innerHTML = `${N > 1 ? `Page <b>${page + 1}</b> of ${N} · ` : ''}<b class="rb-w-mat">${esc(m.material)}</b> <span class="rb-w-desc">${esc(m.description || '')}</span>${busy ? ' <em class="rb-w-busy">building…</em>' : ''}`;
+      const inc = included(), idx = inc.indexOf(mat), m = entryByMat.get(mat).m;
+      pageEl.innerHTML = `${multi ? `Page <b>${idx + 1}</b> of ${inc.length} · ` : ''}<b class="rb-w-mat">${esc(m.material)}</b> <span class="rb-w-desc">${esc(m.description || '')}</span>${busy ? ' <em class="rb-w-busy">building…</em>' : ''}`;
       if (layEl){
-        const eff = effective(page);
-        layEl.textContent = page === 0 ? 'Layout: page 1 (the starting layout)'
-          : (curOwn ? 'Layout: this page’s own' : `Layout: same as page ${eff.from + 1}`);
+        const eff = effective(mat);
+        layEl.textContent = curOwn ? 'Layout: this page’s own'
+          : (eff.from ? `Layout: same as page ${inc.indexOf(eff.from) + 1}` : 'Layout: the starting layout');
+      }
+      if (remEl){
+        remEl.innerHTML = excluded.size ? `${excluded.size} removed · <a href="#" class="rb-w-restore">restore all</a>` : '';
+        remEl.querySelector('.rb-w-restore')?.addEventListener('click', (e) => { e.preventDefault(); excluded.clear(); scheduleSave(); renderNav(); });
       }
       const prev = pane.querySelector('.rb-w-prev'), next = pane.querySelector('.rb-w-next');
-      if (prev) prev.disabled = busy || page === 0;
-      if (next) next.disabled = busy || page === N - 1;
-      const cp = pane.querySelector('.rb-w-copyprev'); if (cp) cp.disabled = busy || page === 0;
+      if (prev) prev.disabled = busy || idx <= 0;
+      if (next) next.disabled = busy || idx >= inc.length - 1;
+      const cp = pane.querySelector('.rb-w-copyprev'); if (cp) cp.disabled = busy || idx <= 0;
+      const rm = pane.querySelector('.rb-w-remove'); if (rm) rm.disabled = busy || inc.length <= 1;
     }
 
-    // ── docked comment box for the current page's material ──
+    // ── docked comment box ──
     const cmtTa  = pane.querySelector('.rb-w-cmt .rb-cmt-ta');
     const cmtMat = pane.querySelector('.rb-w-cmt-mat');
     let saver = null;
@@ -1293,68 +1421,80 @@
     }
     function loadCommentEditor(){
       if (saver) saver.flush();
-      const p = pctx(page);
+      const p = pctx(mat);
       saver = commentSaver(p);
       cmtTa.value = noteFor(p, {});
-      cmtMat.textContent = ' · ' + entries[page].m.material;
+      cmtMat.textContent = ' · ' + mat;
     }
     cmtTa.addEventListener('input', () => { saver.push(cmtTa.value); refreshCommentTiles(cmtTa.value); });
     cmtTa.addEventListener('blur', () => saver && saver.flush());
 
-    async function showPage(i){
+    async function showMat(m){
       const tok = ++showTok;
       if (saver) saver.flush();
-      page = i;
-      const eff = effective(i);
-      curOwn = eff.from === i;
-      cur = curOwn ? layouts[i] : cloneLayout(eff.lay);   // a working copy until you change it
-      stage.innerHTML = ''; boxes = [];
+      mat = m;
+      curOwn = own.has(m);
+      cur = curOwn ? own.get(m) : cloneLayout(effective(m).lay);
+      [...stage.querySelectorAll('.rb-cardbox')].forEach(n => n.remove()); boxes = [];
       loadCommentEditor();
       busy = true; renderNav();
       for (const c of cur){
-        const rec = await cardFor(i, c);
-        if (tok !== showTok) return;   // you've already moved to another page
+        const rec = await cardFor(m, c);
+        if (tok !== showTok) return;
         makeBox(c, rec);
       }
-      busy = false; renderNav();
+      busy = false; renderNav(); scheduleSave();
     }
 
-    const go = (d) => { const n = page + d; if (n >= 0 && n < N && !busy) showPage(n); };
+    const go = (d) => { if (busy) return; const inc = included(); const n = inc.indexOf(mat) + d; if (n >= 0 && n < inc.length) showMat(inc[n]); };
     pane.querySelector('.rb-w-prev')?.addEventListener('click', () => go(-1));
     pane.querySelector('.rb-w-next')?.addEventListener('click', () => go(+1));
+    // ✕ Remove from report — exclude this material and move on to the next one
+    pane.querySelector('.rb-w-remove')?.addEventListener('click', () => {
+      if (busy) return;
+      const inc = included(); if (inc.length <= 1) return;
+      const idx = inc.indexOf(mat);
+      const nextMat = inc[idx + 1] || inc[idx - 1];
+      // a following page that inherited from this one keeps the same layout: hand it over
+      if (curOwn && inc[idx + 1] && !own.has(inc[idx + 1])) own.set(inc[idx + 1], cloneLayout(cur));
+      excluded.add(mat);
+      showMat(nextMat);
+    });
     pane.querySelector('.rb-w-copyprev')?.addEventListener('click', () => {
-      if (page === 0 || busy) return;
-      layouts[page] = cloneLayout(effective(page - 1).lay);
-      showPage(page);
+      if (busy) return;
+      const inc = included(), idx = inc.indexOf(mat); if (idx <= 0) return;
+      own.set(mat, cloneLayout(effective(inc[idx - 1]).lay));
+      showMat(mat);
     });
     const applyBtn = pane.querySelector('.rb-w-applyall');
     let applyArmed = null;
     applyBtn?.addEventListener('click', () => {
       if (busy) return;
-      if (!applyArmed){   // two-step, so a stray click can't overwrite every page's layout
-        applyBtn.textContent = `Click again to apply to all ${N} pages`; applyBtn.classList.add('armed');
+      if (!applyArmed){
+        applyBtn.textContent = `Click again to apply to all ${included().length} pages`; applyBtn.classList.add('armed');
         applyArmed = setTimeout(() => { applyArmed = null; applyBtn.textContent = 'Apply this layout to all pages'; applyBtn.classList.remove('armed'); }, 4000);
         return;
       }
       clearTimeout(applyArmed); applyArmed = null; applyBtn.textContent = 'Apply this layout to all pages'; applyBtn.classList.remove('armed');
-      const lay = cloneLayout(cur);
-      layouts.fill(null); layouts[0] = lay;
-      showPage(page);
+      base = cloneLayout(cur); own.clear();
+      showMat(mat);
     });
 
     function teardown(){
       if (saver) saver.flush();
+      flushSave();
       ro.disconnect(); roWrap.disconnect(); stage_host.remove(); pane.remove();
       restoreModal(); modal.classList.remove('rb-has-preview'); modal.style.width = ''; modal.style.height = '';
     }
+    ov._rbTeardown = () => { if (saver) saver.flush(); flushSave(); };   // closing the builder keeps the session
     pane.querySelector('.rb-w-back').addEventListener('click', teardown);
     pane.querySelector('.rb-w-reset').addEventListener('click', async () => {
       if (busy) return;
-      own(); await autoLayout(page, cur); boxes.forEach(place);
+      makeOwn(); await autoLayout(mat, cur); boxes.forEach(place); scheduleSave();
     });
 
-    // Render the given pages (indices), each with its own layout, to one PDF.
-    async function renderPages(indices, onProg){
+    // Render the given materials' pages, each with its own layout, to one PDF.
+    async function renderPages(mats, onProg){
       if (saver) saver.flush();
       await ensureLibs();
       const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
@@ -1362,64 +1502,62 @@
       const doc = new jsPDFCtor({ orientation:'landscape', unit:'mm', format:g.format, compress:true });
       const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(host);
       try {
-        for (let k = 0; k < indices.length; k++){
-          const i = indices[k];
-          if (onProg) onProg(k + 1, indices.length);
+        for (let k = 0; k < mats.length; k++){
+          const m = mats[k];
+          if (onProg) onProg(k + 1, mats.length);
           if (k > 0) doc.addPage(g.format, 'landscape');
           if (theme === 'dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
-          const lay = (i === page) ? cur : effective(i).lay;
-          const p = pctx(i);
+          const lay = (m === mat) ? cur : effective(m).lay;
+          const p = pctx(m);
           for (const c of lay){
             const bx = c.x * g.W, by = c.y * g.H, bw = c.w * g.W;
             if (c.id === 'comment'){
-              const bh = (c.h || c.w * 1.7778 * 0.2) * g.H;
-              drawCommentBox(doc, bx, by, bw, bh, noteFor(p, c.opts), theme);
+              drawCommentBox(doc, bx, by, bw, (c.h || c.w * 1.7778 * 0.2) * g.H, noteFor(p, c.opts), theme);
               continue;
             }
-            // Capture a copy of the tile at natural size (cached tiles for pages you
-            // visited; unvisited pages are built on the fly and not kept).
-            const rec = await cardFor(i, c, domCache.has(i + '|' + c.key) ? true : false);
+            const rec = await cardFor(m, c, domCache.has(m + '|' + c.key));
             const el = rec.el.cloneNode(true);
             el.style.transform = 'none'; el.style.width = CARD_W + 'px'; el.style.height = '';
             host.appendChild(el); await imgsLoaded(el);
             const canvas = await global.html2canvas(el, { scale:2, backgroundColor: theme === 'dark' ? '#0c2d3b' : '#ffffff', logging:false });
             doc.addImage(canvas.toDataURL('image/jpeg', 0.86), 'JPEG', bx, by, bw, bw * rec.ar);
             host.removeChild(el);
-            if (k % 3 === 2) await new Promise(r => setTimeout(r, 0));   // let the progress label repaint on big sets
+            if (k % 3 === 2) await new Promise(r => setTimeout(r, 0));
           }
+          drawTnc(doc, g, theme === 'dark');   // T&C block, bottom-right of every page
         }
         const safe = (ctx.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
-        const filename = indices.length === 1
-          ? `Screener_Report_${entries[indices[0]].m.material}_${safe}_wide.pdf`
-          : `Screener_Report_SET_${indices.length}_${safe}_wide.pdf`;
-        return { url: URL.createObjectURL(doc.output('blob')), filename, pages: indices.length };
+        const filename = mats.length === 1
+          ? `Screener_Report_${mats[0]}_${safe}_wide.pdf`
+          : `Screener_Report_SET_${mats.length}_${safe}_wide.pdf`;
+        return { url: URL.createObjectURL(doc.output('blob')), filename, pages: mats.length };
       } finally { host.remove(); }
     }
 
     pane.querySelector('.rb-w-render').addEventListener('click', async (ev) => {
       const btn = ev.currentTarget; const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Rendering…';
       try {
-        const all = entries.map((_, i) => i);
-        const res = await renderPages(all, (k, n) => { btn.textContent = n > 1 ? `Rendering page ${k}/${n}…` : 'Rendering…'; });
-        // Single material: the preview also gets the docked comment editor + ↻ Update.
-        const single = N === 1;
-        showWidePreview(modal, res, single ? ctx : null, single ? (() => renderPages([0])) : null);
+        const mats = included();
+        const res = await renderPages(mats, (k, n) => { btn.textContent = n > 1 ? `Rendering page ${k}/${n}…` : 'Rendering…'; });
+        const single = mats.length === 1;
+        const sctx = single ? pctx(mats[0]) : null;
+        showWidePreview(modal, res, sctx, single ? (() => renderPages(mats)) : null);
       } catch (e){ console.error(e); btn.textContent = 'Failed'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500); return; }
       btn.disabled = false; btn.textContent = orig;
     });
     pane.querySelector('.rb-w-batch')?.addEventListener('click', () => {
       if (busy) return;
-      openBatchPicker(modal, entries, (idxs, onProg) => renderPages(idxs, onProg));
+      const inc = included();
+      openBatchPicker(modal, inc.map(m => entryByMat.get(m)), (idxs, onProg) => renderPages(idxs.map(i => inc[i]), onProg));
     });
 
-    // + Add tile — add a tile to THIS page and drop it top-left for you to place.
     async function addCard(blockId){
-      own();
+      makeOwn();
       const bdef = BLOCKS.find(b => b.id === blockId) || {};
       const c = { key: 'k' + (keySeq++), id: blockId, opts: { box: blockId === 'avgDur', lastN: bdef.lastN || 8 }, x: 0.03, y: 0.03, w: 0.3, freeAspect: blockId === 'comment' };
-      const rec = await cardFor(page, c);
+      const rec = await cardFor(mat, c);
       c.h = c.w * 1.7778 * rec.ar;
-      cur.push(c); makeBox(c, rec);
+      cur.push(c); makeBox(c, rec); scheduleSave();
     }
     pane.querySelector('.rb-w-add').addEventListener('click', (e) => {
       document.querySelector('.rb-addmenu')?.remove();
@@ -1435,7 +1573,7 @@
       menu.querySelectorAll('.rb-addmenu-item').forEach(it => it.addEventListener('click', async () => { const id = it.dataset.id; closeMenu(); await addCard(id); }));
     });
 
-    await showPage(0);
+    await showMat(mat);
   }
 
   // ctx for one material in a batch (same shape open() passes for a single one)

@@ -287,7 +287,10 @@
       // The flagged set: configure the layout once, generate a page-set per material.
       batch: {
         list:          flagged.map(e => ({ m: e.m, bucket: e.bucket })),
-        traceFiltersFor: (mat) => traceFiltersFor(mat)
+        traceFiltersFor: (mat) => traceFiltersFor(mat),
+        // find ANY analysed material by number — used to reopen a saved widescreen
+        // report ("Continue on current set") even if the flags have changed since
+        lookup: (mat) => { const e = state.materials.find(x => x.m.material === mat); return e ? { m: e.m, bucket: e.bucket } : null; }
       }
     });
   }

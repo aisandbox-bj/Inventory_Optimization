@@ -381,6 +381,24 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Report review round: remove / continue / T&C - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>Report review round</b>: remove a material · continue a saved report · Select pages fixed · T&amp;C on every page · newest-year-first · centred tables · fixed Prev/Next (APP-RB-WIDESESSION + APP-RB-TNC) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>✕ Remove from report</b> on the widescreen layout screen: excludes the current material (left out of the PDF and page count), moves to the next one, "N removed · restore all". A following page that inherited the removed page's layout keeps it. Layouts are now keyed by material (not page position) so removal can't shift anyone else's layout.</li>
+        <li><b>Continue on current set.</b> The widescreen session (material set, removals, base + per-page layouts, current page, theme) auto-saves as you work (localStorage <code>calibre.reportSession.v1.&lt;assessment&gt;</code>) and is flushed when the builder closes by any route (✕, Cancel, Esc, click outside). Reopening Build report offers <b>Continue on current set</b> or <b>Start afresh</b>; Continue reopens the saved set via a Screener lookup (so it works even if flags changed) and names any saved material no longer in the assessment. Verified: click-outside → reopen → Continue restored the page you were on, the removal and page 1's own layout at identical positions.</li>
+        <li><b>Select pages… fixed.</b> Root cause: its panel had no z-index and opened underneath the layout screen (z 5), so the button looked dead. Now on top; lists only the materials still in the report.</li>
+        <li><b>T&amp;C block</b>, bottom-right of every page (Widescreen stage + PDF, Letter footer — Letter page number moved left): "Inventory and consumption are approximations based on MB51 movements and may vary slightly from actual. Min/Max values are as at the report date (&lt;date&gt;) and may have changed since." Size = the raw-PR table's data text (6.6pt, measured equal); dark slate on white / light on dark, after the operator flagged light grey as too faint on white.</li>
+        <li><b>Annual progression</b> lists the newest year first (Letter + Widescreen), aligning with every other table. <b>Raw-PR and procurement-chain tables</b> centre headers and all entries (Letter + Widescreen). <b>‹ Prev / Next ›</b> sit together at the left of the page counter so Next doesn't move with the text length.</li>
+        <li>Files: <code>shared/report-builder.{js,css}</code>, <code>screener/screener.js</code> (lookup). No SCHEMA_VERSION change. Rollback: <code>checkpoint/pre-widesession</code> at <code>a1da8a7</code> + local <code>_rollback/WIDE-SESSION-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Widescreen pages + chains shading - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">

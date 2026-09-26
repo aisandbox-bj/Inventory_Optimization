@@ -2,6 +2,9 @@
 
 **Updated:** 2026-09-25 (**v2.2.0-dev** — Screener Report Builder + cadence + **durable report comments / live comment editor**; browser-verified; rollback refs `backup/pre-v2.2.0` + `checkpoint/pre-v2.2.0` at `00ccee7`). Prior tip: v2.1.5-dev (**APP-INT-UITIDY** `2294bd4`).
 
+## ✅ SHIPPED — v2.2.0-dev · Report review round (2026-09-25) — browser-verified; pending operator off-repo validation
+APP-RB-WIDESESSION: ✕ Remove from report (exclude + move on, restore all; layouts keyed by material) · autosaved widescreen session + "Continue on current set / Start afresh" on reopen (flushed on any close; Screener `batch.lookup`) · Select pages fixed (`.rb-choice` z-index) · Prev/Next together at the left. APP-RB-TNC: T&C bottom-right of every page (Widescreen + Letter), 6.6pt = raw-PR table text, dark slate on white. YoY newest year first; raw-PR + chains tables fully centred. Rollback `checkpoint/pre-widesession` @ `a1da8a7` + `_rollback/WIDE-SESSION-pre/`.
+
 ## ✅ SHIPPED — v2.2.0-dev · Widescreen pages + chains shading (2026-09-25) — browser-verified; pending operator off-repo validation
 APP-RB-WIDEPAGES: widescreen layout = one page per flagged material (Prev/Next); per-page layouts (a page follows the previous until edited, then its own); ⧉ Copy layout from previous page; two-click Apply to all pages; docked per-page comment box (live into the Comment tile); layout panel move/resize/maximize with a JS-fitted true-16:9 stage; Preview PDF renders every page with its own layout; "Select pages…" subset; comment tile scaled like the other tiles + PDF comment font follows tile scale (floors 5.5/6.5pt); modal clips when shrunk. Replaced `renderWidePdf` / `renderWidePdfBatch` with one `renderPages`. APP-RB-CHAINHEAT: "Last N procurement chains" B/C/D white→red per column, To site green→amber→red, key line — Letter + Widescreen. Rollback `checkpoint/pre-widepages` @ `5f1dc68` + `_rollback/WIDE-CANVAS-PAGES-pre/`.
 
