@@ -497,6 +497,33 @@
     P.y = doc.lastAutoTable.finalY + 5;
   }
 
+  // APP-RB-CHAINHEAT (operator 2026-09-25) — conditional shading on the procurement-
+  // chains table. Phases B / C / D: white → red within each column (the slowest chain
+  // is the strongest red, the fastest has no shading). To site: green → amber → red.
+  // Each column is scaled over the chains shown; a column with fewer than two values,
+  // or where every value is equal, stays unshaded (nothing to compare).
+  const CHAIN_HEAT = { 5:{ key:'B', kind:'red' }, 6:{ key:'C', kind:'red' }, 7:{ key:'D', kind:'red' }, 8:{ key:'totalToSite', kind:'gyr' } };
+  function heatScales(chains){
+    const out = {};
+    for (const [ci, h] of Object.entries(CHAIN_HEAT)){
+      const v = chains.map(c => c[h.key]).filter(x => x != null && isFinite(x));
+      if (v.length < 2) continue;
+      const lo = Math.min(...v), hi = Math.max(...v);
+      if (hi > lo) out[ci] = { lo, hi, kind: h.kind };
+    }
+    return out;
+  }
+  // → { rgb:[r,g,b], a } or null (no shading)
+  function heatFill(val, sc){
+    if (!sc || val == null || !isFinite(val)) return null;
+    const t = (val - sc.lo) / (sc.hi - sc.lo);
+    if (sc.kind === 'red') return t > 0 ? { rgb: [239,68,68], a: 0.6 * t } : null;
+    const G = [52,211,153], Y = [251,191,36], R = [239,68,68];
+    const mix = (a, b, u) => a.map((x, i) => Math.round(x + (b[i] - x) * u));
+    return { rgb: t < 0.5 ? mix(G, Y, t * 2) : mix(Y, R, (t - 0.5) * 2), a: 0.55 };
+  }
+  const HEAT_NOTE = 'Shading: phases B, C, D — slowest chain in red, fastest unshaded · To site — green (fastest) to red (slowest).';
+
   async function blockChains(P, host, opts, fit){
     const { doc, g, ctx } = P; const M = g.M; const CW = g.W - 2*M;
     let N = Math.max(1, (opts && opts.lastN) || 5);
@@ -511,7 +538,8 @@
       c.A!=null?c.A+'d':'-', c.B!=null?c.B+'d':'-', c.C!=null?c.C+'d':'-', c.D!=null?c.D+'d':'-',
       (c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'-'), c.E!=null?c.E+'d':'-', c.qty!=null?String(c.qty):'-'
     ].map(pdfSafe));
-    P.ensure((rows.length + 1) * 6 + 6);   // reserve room for the whole table
+    P.ensure((rows.length + 1) * 6 + 10);   // reserve room for the whole table + shading note
+    const scales = heatScales(chains);
     doc.autoTable({
       startY: P.y,
       head: [['PR','PO','PR date','Site WH','A','B','C','D','To site','Shelf E','Qty']],
@@ -519,9 +547,21 @@
       styles:{ fontSize:7.4, cellPadding:1.3, lineColor:[214,220,224], lineWidth:0.1 },
       headStyles:{ fillColor:[12,45,59], textColor:255, fontStyle:'bold', fontSize:7.4, halign:'center' },
       columnStyles:{ 4:{halign:'center'},5:{halign:'center'},6:{halign:'center'},7:{halign:'center'},8:{halign:'center',fontStyle:'bold'},9:{halign:'center',textColor:[120,95,175]},10:{halign:'center'} },
-      tableWidth: CW, margin:{ left:M, right:M }
+      tableWidth: CW, margin:{ left:M, right:M },
+      didParseCell:(d)=>{
+        if (d.row.section !== 'body') return;
+        const h = CHAIN_HEAT[d.column.index]; if (!h) return;
+        const f = heatFill(chains[d.row.index][h.key], scales[d.column.index]);
+        if (f) d.cell.styles.fillColor = f.rgb.map(x => Math.round(255 + (x - 255) * f.a));   // blend onto white
+      }
     });
-    P.y = doc.lastAutoTable.finalY + 5;
+    P.y = doc.lastAutoTable.finalY + 3;
+    if (Object.keys(scales).length){
+      doc.setFont('helvetica','italic'); doc.setFontSize(6.3); doc.setTextColor(120,130,138);
+      doc.text(HEAT_NOTE, M, P.y + 1.5);
+      P.y += 3;
+    }
+    P.y += 2;
   }
 
   async function blockCadence(P, host, opts, fit){
@@ -893,7 +933,10 @@
       const struck = opts.strike && opts.strike(r);            // cancelled PR → red strikethrough, eye-catching
       const rowBg = struck ? 'background:rgba(239,68,68,.16)' : `background:${ri%2?TH.alt:'transparent'}`;
       const cellFx = struck ? `color:#ff5a5a;text-decoration:line-through;text-decoration-color:#ff2d2d;text-decoration-thickness:2px;font-weight:700` : `color:${TH.text}`;
-      return `<tr style="${rowBg}">${r.map((c,ci)=>`<td style="font-size:10px;padding:3px 5px;border:1px solid ${TH.border};text-align:${(opts.center&&opts.center.includes(ci))?'center':'left'};white-space:nowrap;${cellFx}">${esc(c)}</td>`).join('')}</tr>`;
+      return `<tr style="${rowBg}">${r.map((c,ci)=>{
+        const bg = (!struck && opts.cellBg) ? opts.cellBg(ri, ci) : null;   // optional conditional shading
+        return `<td style="font-size:10px;padding:3px 5px;border:1px solid ${TH.border};text-align:${(opts.center&&opts.center.includes(ci))?'center':'left'};white-space:nowrap;${cellFx}${bg?';background:'+bg:''}">${esc(c)}</td>`;
+      }).join('')}</tr>`;
     }).join('');
     return `<table style="border-collapse:collapse;width:100%;font-family:'JetBrains Mono',monospace">${th?`<thead><tr>${th}</tr></thead>`:''}<tbody>${body}</tbody></table>`;
   }
@@ -1019,8 +1062,12 @@
           const rows=(dc.act||[]).slice(0,N).map(c=>[c.pr||'—',(c.creationIndicator==='B')?'MRP':'Manual',c.prDate||'—',c.po||'—',c.siteWH||'—',c.A!=null?String(c.A):'—',c.B!=null?String(c.B):'—',c.C!=null?String(c.C):'—',c.D!=null?String(c.D):'—',c.total!=null?String(c.total):'—',c.qty!=null?String(c.qty):'—',(c.state||'—').replace(/_/g,' ')]);
           inner += rows.length?htmlTable(TH,['PR','Trig','PR date','PO','Site WH','A','B','C','D','Tot','Qty','State'],rows,{center:[5,6,7,8,9,10], strike:(r)=>/CANCELL/i.test(r[11])}):`<div style="color:${TH.sub};font-size:12px">No PRs.</div>`;
         } else {
-          const rows=(dc.drawn||[]).slice(0,N).map(c=>[c.pr||'—',c.po||'—',c.prDate||'—',c.siteWH||'—',c.A!=null?c.A+'d':'—',c.B!=null?c.B+'d':'—',c.C!=null?c.C+'d':'—',c.D!=null?c.D+'d':'—',c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'—',c.qty!=null?String(c.qty):'—']);
-          inner += rows.length?htmlTable(TH,['PR','PO','PR date','Site WH','A','B','C','D','To site','Qty'],rows,{center:[4,5,6,7,8,9]}):`<div style="color:${TH.sub};font-size:12px">No chains.</div>`;
+          const sel=(dc.drawn||[]).slice(0,N);
+          const rows=sel.map(c=>[c.pr||'—',c.po||'—',c.prDate||'—',c.siteWH||'—',c.A!=null?c.A+'d':'—',c.B!=null?c.B+'d':'—',c.C!=null?c.C+'d':'—',c.D!=null?c.D+'d':'—',c.totalToSite!=null?c.totalToSite.toFixed(0)+'d':'—',c.qty!=null?String(c.qty):'—']);
+          const scales=heatScales(sel);   // APP-RB-CHAINHEAT — same shading as the Letter table
+          const cellBg=(ri,ci)=>{ const h=CHAIN_HEAT[ci]; if(!h) return null; const f=heatFill(sel[ri][h.key], scales[ci]); return f?`rgba(${f.rgb.join(',')},${f.a.toFixed(3)})`:null; };
+          inner += rows.length?htmlTable(TH,['PR','PO','PR date','Site WH','A','B','C','D','To site','Qty'],rows,{center:[4,5,6,7,8,9], cellBg})
+            + (Object.keys(scales).length?`<div style="font-size:9.5px;font-style:italic;color:${TH.sub};margin-top:4px">${esc(HEAT_NOTE)}</div>`:''):`<div style="color:${TH.sub};font-size:12px">No chains.</div>`;
         }
       }
     }
@@ -1040,38 +1087,68 @@
     else if (id === 'comment'){
       const txt=(noteFor(ctx,opts)||'').trim();
       el.style.display='flex'; el.style.flexDirection='column';   // fill the (freely-resized) box
-      inner = sectionTitle(TH,'Comments') + `<div style="flex:1;border-left:3px solid ${TH.accent};padding:8px 12px;background:${TH.alt};font-size:14px;color:${TH.text};white-space:pre-wrap;min-height:40px;overflow:hidden">${esc(txt)||'<span style="color:'+TH.sub+'">(empty)</span>'}</div>`;
+      // 13px body + the standard 14px section title — the same sizes as the other
+      // tiles; the canvas scales this tile exactly like the rest, so text matches.
+      inner = sectionTitle(TH,'Comments') + `<div class="rb-cmt-body" style="flex:1;border-left:3px solid ${TH.accent};padding:8px 12px;background:${TH.alt};font-size:13px;line-height:1.45;color:${TH.text};white-space:pre-wrap;min-height:40px;overflow:hidden">${esc(txt)||'<span class="rb-cmt-empty" style="color:'+TH.sub+'">(no comment yet)</span>'}</div>`;
     }
     el.innerHTML = inner;
     return el;
   }
 
-  // Render each card DOM offscreen, measure natural AR, build canvas + PDF export.
+  // ─── WIDESCREEN layout canvas — one page per flagged material (APP-RB-WIDEPAGES) ───
+  // Every flagged material is its own landscape page with its own layout. A page
+  // FOLLOWS the page before it (live) until you change something on it — then it
+  // keeps its own layout. "⧉ Copy layout from previous page" re-syncs a page;
+  // "Apply this layout to all pages" makes every page use the current arrangement.
+  // A layout is plain data ({key,id,opts,x,y,w,h,freeAspect}); each page's tiles are
+  // built from THAT page's material, so heights follow that material's content.
+  function imgsLoaded(el){
+    const imgs = [...el.querySelectorAll('img')];
+    return Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r => { im.onload = im.onerror = r; })));
+  }
+  function cloneLayout(lay){ return lay.map(c => ({ ...c, opts: { ...(c.opts || {}) } })); }
+
   async function openWideCanvas(ov, close, ctx, blocks, theme){
     await ensureH2C();
-    const stage_host = document.createElement('div'); stage_host.style.cssText='position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(stage_host);
-    const cards = [];
-    for (const b of blocks){
-      const el = await buildCardDom(b.id, ctx, b.opts||{}, theme);
-      stage_host.appendChild(el);
-      // wait for embedded images to load so the natural height is correct
-      const imgs = [...el.querySelectorAll('img')];
-      await Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(res => { im.onload = im.onerror = res; })));
-      const ar = el.offsetHeight / el.offsetWidth || 1;
-      cards.push({ id:b.id, opts:b.opts||{}, el, ar });
-    }
-    // default auto-layout (0..1 coords): flow into up to 3 columns
-    const cols = Math.min(3, Math.max(1, Math.round(Math.sqrt(cards.length))));
-    const gap = 0.015, colW = (1 - gap*(cols+1))/cols;
-    const colY = new Array(cols).fill(gap);
-    cards.forEach(c => {
-      const col = colY.indexOf(Math.min(...colY));
-      c.w = colW; c.x = gap + col*(colW+gap); c.y = colY[col];
-      c.freeAspect = (c.id === 'comment');   // the comment box resizes freely (flexible aspect)
-      c.h = c.w * 1.7778 * c.ar;             // height fraction of the 16:9 stage (used when freeAspect)
-      colY[col] += c.h + gap;
-    });
+    const entries = (ctx.batch && ctx.batch.list && ctx.batch.list.length) ? ctx.batch.list : [{ m: ctx.m, bucket: ctx.bucket }];
+    const N = entries.length;
+    const pctx = (i) => (ctx.batch && ctx.batch.list && ctx.batch.list.length) ? ctxForEntry(ctx, entries[i]) : ctx;
+    const stage_host = document.createElement('div'); stage_host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(stage_host);
 
+    // Built tiles, cached per page + tile (built from that page's material).
+    const domCache = new Map();
+    async function cardFor(i, c, cache){
+      const k = i + '|' + c.key;
+      if (domCache.has(k)) return domCache.get(k);
+      const el = await buildCardDom(c.id, pctx(i), c.opts || {}, theme);
+      stage_host.appendChild(el);
+      await imgsLoaded(el);
+      const rec = { el, ar: (el.offsetHeight / el.offsetWidth) || 1 };
+      if (cache !== false) domCache.set(k, rec); else stage_host.removeChild(el);
+      return rec;
+    }
+
+    // Default auto-layout: flow tiles into up to 3 columns.
+    let keySeq = 0;
+    async function autoLayout(i, lay){
+      const cols = Math.min(3, Math.max(1, Math.round(Math.sqrt(lay.length || 1))));
+      const gap = 0.015, colW = (1 - gap * (cols + 1)) / cols;
+      const colY = new Array(cols).fill(gap);
+      for (const c of lay){
+        const rec = await cardFor(i, c);
+        const col = colY.indexOf(Math.min(...colY));
+        c.w = colW; c.x = gap + col * (colW + gap); c.y = colY[col];
+        c.h = c.w * 1.7778 * rec.ar;   // height fraction of the 16:9 stage (used by the free-aspect comment tile)
+        colY[col] += c.h + gap;
+      }
+    }
+    const first = blocks.map(b => ({ key: 'k' + (keySeq++), id: b.id, opts: { ...(b.opts || {}) }, freeAspect: b.id === 'comment' }));
+    await autoLayout(0, first);
+    const layouts = new Array(N).fill(null);   // null = follows the page before
+    layouts[0] = first;
+    function effective(i){ for (let j = i; j >= 0; j--) if (layouts[j]) return { lay: layouts[j], from: j }; return { lay: layouts[0], from: 0 }; }
+
+    // ── UI ──
     const modal = ov.querySelector('.rb-modal');
     modal.classList.add('rb-has-preview');
     modal.style.width = 'min(1180px,100%)'; modal.style.height = 'min(90vh,960px)';
@@ -1079,113 +1156,286 @@
     pane.className = 'rb-wide';
     pane.innerHTML = `
       <div class="rb-pv-bar">
-        <span class="rb-pv-meta">Widescreen 16:9 · ${theme==='dark'?'Dark':'Light'} · drag to place, drag a corner to resize</span>
+        <span class="rb-pv-meta">Widescreen 16:9 · ${theme==='dark'?'Dark':'Light'} · drag tiles to place, drag a corner to resize</span>
         <span class="rb-pv-actions">
           <button class="rb-btn ghost rb-w-back">‹ Back</button>
           <button class="rb-btn ghost rb-w-add">+ Add tile</button>
           <button class="rb-btn ghost rb-w-reset">Reset layout</button>
-          <button class="rb-btn ghost rb-w-batch">Print set…</button>
+          ${N > 1 ? '<button class="rb-btn ghost rb-w-batch">Select pages…</button>' : ''}
           <button class="rb-btn primary rb-w-render">Preview PDF →</button>
         </span>
       </div>
+      <div class="rb-w-nav">
+        ${N > 1 ? '<button class="rb-btn ghost rb-w-prev">‹ Prev</button>' : ''}
+        <span class="rb-w-page"></span>
+        ${N > 1 ? '<button class="rb-btn ghost rb-w-next">Next ›</button>' : ''}
+        ${N > 1 ? '<span class="rb-w-lay"></span><button class="rb-btn ghost rb-w-copyprev">⧉ Copy layout from previous page</button><button class="rb-btn ghost rb-w-applyall">Apply this layout to all pages</button>' : ''}
+      </div>
+      <div class="rb-cmt-editor rb-w-cmt">
+        <span class="rb-cmt-lab">✎ Comment<span class="rb-cmt-carry rb-w-cmt-mat"></span></span>
+        <textarea class="rb-cmt-ta" rows="2" placeholder="Comment for this page's material — kept against the material and reloaded next time. Shows in the page's Comment tile."></textarea>
+      </div>
       <div class="rb-stage-wrap"><div class="rb-stage"></div></div>`;
     modal.appendChild(pane);
+    const restoreModal = makePreviewInteractive(modal, pane);   // move / resize / maximize the whole layout panel
     const stage = pane.querySelector('.rb-stage');
+    const wrap  = pane.querySelector('.rb-stage-wrap');
     stage.style.background = theme === 'dark' ? '#0c2d3b' : '#ffffff';   // WYSIWYG page colour
 
-    function place(c){
-      c.box.style.left = (c.x*100)+'%'; c.box.style.top = (c.y*100)+'%'; c.box.style.width = (c.w*100)+'%';
-      const wpx = c.w * stage.clientWidth;
+    // Keep the stage a true 16:9 that fills the panel, whatever size the panel is.
+    function fitStage(){
+      const cs = getComputedStyle(wrap);
+      const aw = wrap.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const ah = wrap.clientHeight - parseFloat(cs.paddingTop)  - parseFloat(cs.paddingBottom);
+      if (aw <= 0 || ah <= 0) return;
+      const w = Math.min(aw, ah * 16 / 9);
+      stage.style.width = w + 'px'; stage.style.height = (w * 9 / 16) + 'px';
+    }
+    const roWrap = new ResizeObserver(fitStage); roWrap.observe(wrap); fitStage();
+
+    let page = 0, cur = [], curOwn = true, boxes = [], showTok = 0, busy = false;
+    function own(){   // the first change on a following page gives it its own layout
+      if (!curOwn){ layouts[page] = cur; curOwn = true; renderNav(); }
+    }
+
+    function place(b){
+      const { c, rec, box } = b;
+      const sw = stage.clientWidth, sh = stage.clientHeight;
+      const wpx = c.w * sw, s = wpx / CARD_W;
+      box.style.left = (c.x * 100) + '%'; box.style.top = (c.y * 100) + '%'; box.style.width = (c.w * 100) + '%';
+      rec.el.style.transformOrigin = 'top left';
+      rec.el.style.transform = `scale(${s})`;   // every tile — the comment too — at the same scale, so text sizes match
       if (c.freeAspect){
-        // free width + height — the card fills the box (used for the comment box)
-        const hpx = (c.h || c.w*1.7778*c.ar) * stage.clientHeight;
-        c.box.style.height = hpx + 'px';
-        c.el.style.transform = 'none'; c.el.style.width = wpx + 'px'; c.el.style.height = hpx + 'px';
+        const hpx = (c.h || c.w * 1.7778 * rec.ar) * sh;
+        box.style.height = hpx + 'px';
+        rec.el.style.width = CARD_W + 'px'; rec.el.style.height = (s > 0 ? hpx / s : hpx) + 'px';
       } else {
-        // height follows the card's fixed aspect ratio; card scaled to the box width
-        c.box.style.height = (wpx * c.ar) + 'px';
-        c.el.style.transform = `scale(${wpx / CARD_W})`;
+        box.style.height = (wpx * rec.ar) + 'px';
       }
     }
-    function makeBox(c){
-      const box = document.createElement('div'); box.className='rb-cardbox'; c.box = box;
-      const scaler = document.createElement('div'); scaler.className='rb-cardscale';
-      c.el.style.transformOrigin='top left'; scaler.appendChild(c.el); box.appendChild(scaler);
-      const grip = document.createElement('div'); grip.className='rb-cardgrip'; grip.title='Drag to resize'; box.appendChild(grip);
-      const del = document.createElement('div'); del.className='rb-carddel'; del.title='Remove this tile'; del.textContent='✕'; box.appendChild(del);
+    function makeBox(c, rec){
+      const box = document.createElement('div'); box.className = 'rb-cardbox';
+      const b = { c, rec, box };
+      const scaler = document.createElement('div'); scaler.className = 'rb-cardscale';
+      scaler.appendChild(rec.el); box.appendChild(scaler);
+      const grip = document.createElement('div'); grip.className = 'rb-cardgrip'; grip.title = 'Drag to resize'; box.appendChild(grip);
+      const del = document.createElement('div'); del.className = 'rb-carddel'; del.title = 'Remove this tile'; del.textContent = '✕'; box.appendChild(del);
       del.addEventListener('pointerdown', e => e.stopPropagation());
-      del.addEventListener('click', e => { e.stopPropagation(); const i = cards.indexOf(c); if (i >= 0) cards.splice(i,1); box.remove(); });
-      stage.appendChild(box); place(c);
-      // drag move
+      del.addEventListener('click', e => {
+        e.stopPropagation(); own();
+        const i = cur.indexOf(c); if (i >= 0) cur.splice(i, 1);
+        boxes = boxes.filter(x => x !== b); box.remove();
+      });
+      stage.appendChild(box); boxes.push(b); place(b);
+      // drag move (a click on the Comment tile jumps to the comment box instead)
       box.addEventListener('pointerdown', (e) => {
         if (e.target === grip) return;
         e.preventDefault(); box.setPointerCapture(e.pointerId); box.classList.add('drag');
-        const r = stage.getBoundingClientRect(); const sx=e.clientX, sy=e.clientY, ox=c.x, oy=c.y;
-        const mv = (ev) => { c.x = Math.max(0, Math.min(1-c.w, ox + (ev.clientX-sx)/r.width)); c.y = Math.max(0, Math.min(1, oy + (ev.clientY-sy)/r.height)); c.x=Math.round(c.x/0.005)*0.005; c.y=Math.round(c.y/0.005)*0.005; place(c); };
-        const up = () => { box.classList.remove('drag'); box.releasePointerCapture(e.pointerId); box.removeEventListener('pointermove',mv); box.removeEventListener('pointerup',up); };
-        box.addEventListener('pointermove',mv); box.addEventListener('pointerup',up);
+        const r = stage.getBoundingClientRect(); const sx = e.clientX, sy = e.clientY, ox = c.x, oy = c.y;
+        let moved = false;
+        const mv = (ev) => {
+          if (!moved && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 3) return;
+          moved = true; own();
+          c.x = Math.max(0, Math.min(1 - c.w, ox + (ev.clientX - sx) / r.width));
+          c.y = Math.max(0, Math.min(1, oy + (ev.clientY - sy) / r.height));
+          c.x = Math.round(c.x / 0.005) * 0.005; c.y = Math.round(c.y / 0.005) * 0.005; place(b);
+        };
+        const up = () => {
+          box.classList.remove('drag'); try { box.releasePointerCapture(e.pointerId); } catch (_) {}
+          box.removeEventListener('pointermove', mv); box.removeEventListener('pointerup', up);
+          if (!moved && c.id === 'comment') cmtTa.focus();
+        };
+        box.addEventListener('pointermove', mv); box.addEventListener('pointerup', up);
       });
-      // resize — width follows aspect (height derived); comment box resizes freely
+      // resize — width follows aspect (height derived); the comment tile resizes freely
       grip.addEventListener('pointerdown', (e) => {
         e.preventDefault(); e.stopPropagation(); grip.setPointerCapture(e.pointerId);
-        const r = stage.getBoundingClientRect(); const sx=e.clientX, sy=e.clientY, ow=c.w, oh=(c.h||c.w*1.7778*c.ar);
+        const r = stage.getBoundingClientRect(); const sx = e.clientX, sy = e.clientY, ow = c.w, oh = (c.h || c.w * 1.7778 * rec.ar);
         const mv = (ev) => {
-          c.w = Math.max(0.12, Math.min(1-c.x, ow + (ev.clientX-sx)/r.width));
-          if (c.freeAspect) c.h = Math.max(0.06, oh + (ev.clientY-sy)/r.height);
-          place(c);
+          own();
+          c.w = Math.max(0.12, Math.min(1 - c.x, ow + (ev.clientX - sx) / r.width));
+          if (c.freeAspect) c.h = Math.max(0.06, oh + (ev.clientY - sy) / r.height);
+          place(b);
         };
-        const up = () => { grip.releasePointerCapture(e.pointerId); grip.removeEventListener('pointermove',mv); grip.removeEventListener('pointerup',up); };
-        grip.addEventListener('pointermove',mv); grip.addEventListener('pointerup',up);
+        const up = () => { try { grip.releasePointerCapture(e.pointerId); } catch (_) {} grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); };
+        grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up);
       });
     }
-    cards.forEach(makeBox);
-    // reflow on resize
-    const ro = new ResizeObserver(() => cards.forEach(place)); ro.observe(stage);
+    const ro = new ResizeObserver(() => boxes.forEach(place)); ro.observe(stage);
 
-    pane.querySelector('.rb-w-back').addEventListener('click', () => { ro.disconnect(); stage_host.remove(); pane.remove(); modal.classList.remove('rb-has-preview'); modal.style.width=''; modal.style.height=''; });
-    pane.querySelector('.rb-w-reset').addEventListener('click', () => {
-      const colY2=new Array(cols).fill(gap); cards.forEach(c=>{const col=colY2.indexOf(Math.min(...colY2)); c.w=colW; c.x=gap+col*(colW+gap); c.y=colY2[col]; c.h=c.w*1.7778*c.ar; place(c); colY2[col]+=c.h+gap;});
+    // ── page label / layout status ──
+    const pageEl = pane.querySelector('.rb-w-page');
+    const layEl  = pane.querySelector('.rb-w-lay');
+    function renderNav(){
+      const m = entries[page].m;
+      pageEl.innerHTML = `${N > 1 ? `Page <b>${page + 1}</b> of ${N} · ` : ''}<b class="rb-w-mat">${esc(m.material)}</b> <span class="rb-w-desc">${esc(m.description || '')}</span>${busy ? ' <em class="rb-w-busy">building…</em>' : ''}`;
+      if (layEl){
+        const eff = effective(page);
+        layEl.textContent = page === 0 ? 'Layout: page 1 (the starting layout)'
+          : (curOwn ? 'Layout: this page’s own' : `Layout: same as page ${eff.from + 1}`);
+      }
+      const prev = pane.querySelector('.rb-w-prev'), next = pane.querySelector('.rb-w-next');
+      if (prev) prev.disabled = busy || page === 0;
+      if (next) next.disabled = busy || page === N - 1;
+      const cp = pane.querySelector('.rb-w-copyprev'); if (cp) cp.disabled = busy || page === 0;
+    }
+
+    // ── docked comment box for the current page's material ──
+    const cmtTa  = pane.querySelector('.rb-w-cmt .rb-cmt-ta');
+    const cmtMat = pane.querySelector('.rb-w-cmt-mat');
+    let saver = null;
+    function refreshCommentTiles(txt){
+      boxes.filter(b => b.c.id === 'comment').forEach(b => {
+        const body = b.rec.el.querySelector('.rb-cmt-body'); if (!body) return;
+        if (txt && txt.trim()) body.textContent = txt;
+        else body.innerHTML = '<span class="rb-cmt-empty">(no comment yet)</span>';
+      });
+    }
+    function loadCommentEditor(){
+      if (saver) saver.flush();
+      const p = pctx(page);
+      saver = commentSaver(p);
+      cmtTa.value = noteFor(p, {});
+      cmtMat.textContent = ' · ' + entries[page].m.material;
+    }
+    cmtTa.addEventListener('input', () => { saver.push(cmtTa.value); refreshCommentTiles(cmtTa.value); });
+    cmtTa.addEventListener('blur', () => saver && saver.flush());
+
+    async function showPage(i){
+      const tok = ++showTok;
+      if (saver) saver.flush();
+      page = i;
+      const eff = effective(i);
+      curOwn = eff.from === i;
+      cur = curOwn ? layouts[i] : cloneLayout(eff.lay);   // a working copy until you change it
+      stage.innerHTML = ''; boxes = [];
+      loadCommentEditor();
+      busy = true; renderNav();
+      for (const c of cur){
+        const rec = await cardFor(i, c);
+        if (tok !== showTok) return;   // you've already moved to another page
+        makeBox(c, rec);
+      }
+      busy = false; renderNav();
+    }
+
+    const go = (d) => { const n = page + d; if (n >= 0 && n < N && !busy) showPage(n); };
+    pane.querySelector('.rb-w-prev')?.addEventListener('click', () => go(-1));
+    pane.querySelector('.rb-w-next')?.addEventListener('click', () => go(+1));
+    pane.querySelector('.rb-w-copyprev')?.addEventListener('click', () => {
+      if (page === 0 || busy) return;
+      layouts[page] = cloneLayout(effective(page - 1).lay);
+      showPage(page);
     });
-    pane.querySelector('.rb-w-render').addEventListener('click', async (ev) => {
-      const btn = ev.currentTarget; const orig = btn.textContent; btn.disabled=true; btn.textContent='Rendering…';
+    const applyBtn = pane.querySelector('.rb-w-applyall');
+    let applyArmed = null;
+    applyBtn?.addEventListener('click', () => {
+      if (busy) return;
+      if (!applyArmed){   // two-step, so a stray click can't overwrite every page's layout
+        applyBtn.textContent = `Click again to apply to all ${N} pages`; applyBtn.classList.add('armed');
+        applyArmed = setTimeout(() => { applyArmed = null; applyBtn.textContent = 'Apply this layout to all pages'; applyBtn.classList.remove('armed'); }, 4000);
+        return;
+      }
+      clearTimeout(applyArmed); applyArmed = null; applyBtn.textContent = 'Apply this layout to all pages'; applyBtn.classList.remove('armed');
+      const lay = cloneLayout(cur);
+      layouts.fill(null); layouts[0] = lay;
+      showPage(page);
+    });
+
+    function teardown(){
+      if (saver) saver.flush();
+      ro.disconnect(); roWrap.disconnect(); stage_host.remove(); pane.remove();
+      restoreModal(); modal.classList.remove('rb-has-preview'); modal.style.width = ''; modal.style.height = '';
+    }
+    pane.querySelector('.rb-w-back').addEventListener('click', teardown);
+    pane.querySelector('.rb-w-reset').addEventListener('click', async () => {
+      if (busy) return;
+      own(); await autoLayout(page, cur); boxes.forEach(place);
+    });
+
+    // Render the given pages (indices), each with its own layout, to one PDF.
+    async function renderPages(indices, onProg){
+      if (saver) saver.flush();
+      await ensureLibs();
+      const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
+      const g = geomFor('wide');
+      const doc = new jsPDFCtor({ orientation:'landscape', unit:'mm', format:g.format, compress:true });
+      const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(host);
       try {
-        const res = await renderWidePdf(ctx, cards, theme);
-        // Live comment editor only when the flagged set is a single material.
-        const single = !(ctx.batch && ctx.batch.list && ctx.batch.list.length > 1);
-        showWidePreview(modal, res, single ? ctx : null, single ? (() => renderWidePdf(ctx, cards, theme)) : null);
-      } catch(e){ console.error(e); btn.textContent='Failed'; setTimeout(()=>{btn.textContent=orig;btn.disabled=false;},1500); return; }
-      btn.disabled=false; btn.textContent=orig;
+        for (let k = 0; k < indices.length; k++){
+          const i = indices[k];
+          if (onProg) onProg(k + 1, indices.length);
+          if (k > 0) doc.addPage(g.format, 'landscape');
+          if (theme === 'dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
+          const lay = (i === page) ? cur : effective(i).lay;
+          const p = pctx(i);
+          for (const c of lay){
+            const bx = c.x * g.W, by = c.y * g.H, bw = c.w * g.W;
+            if (c.id === 'comment'){
+              const bh = (c.h || c.w * 1.7778 * 0.2) * g.H;
+              drawCommentBox(doc, bx, by, bw, bh, noteFor(p, c.opts), theme);
+              continue;
+            }
+            // Capture a copy of the tile at natural size (cached tiles for pages you
+            // visited; unvisited pages are built on the fly and not kept).
+            const rec = await cardFor(i, c, domCache.has(i + '|' + c.key) ? true : false);
+            const el = rec.el.cloneNode(true);
+            el.style.transform = 'none'; el.style.width = CARD_W + 'px'; el.style.height = '';
+            host.appendChild(el); await imgsLoaded(el);
+            const canvas = await global.html2canvas(el, { scale:2, backgroundColor: theme === 'dark' ? '#0c2d3b' : '#ffffff', logging:false });
+            doc.addImage(canvas.toDataURL('image/jpeg', 0.86), 'JPEG', bx, by, bw, bw * rec.ar);
+            host.removeChild(el);
+            if (k % 3 === 2) await new Promise(r => setTimeout(r, 0));   // let the progress label repaint on big sets
+          }
+        }
+        const safe = (ctx.assessmentName || 'assessment').replace(/[^A-Za-z0-9_-]+/g, '_');
+        const filename = indices.length === 1
+          ? `Screener_Report_${entries[indices[0]].m.material}_${safe}_wide.pdf`
+          : `Screener_Report_SET_${indices.length}_${safe}_wide.pdf`;
+        return { url: URL.createObjectURL(doc.output('blob')), filename, pages: indices.length };
+      } finally { host.remove(); }
+    }
+
+    pane.querySelector('.rb-w-render').addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget; const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Rendering…';
+      try {
+        const all = entries.map((_, i) => i);
+        const res = await renderPages(all, (k, n) => { btn.textContent = n > 1 ? `Rendering page ${k}/${n}…` : 'Rendering…'; });
+        // Single material: the preview also gets the docked comment editor + ↻ Update.
+        const single = N === 1;
+        showWidePreview(modal, res, single ? ctx : null, single ? (() => renderPages([0])) : null);
+      } catch (e){ console.error(e); btn.textContent = 'Failed'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500); return; }
+      btn.disabled = false; btn.textContent = orig;
     });
-    pane.querySelector('.rb-w-batch').addEventListener('click', () => {
-      if (!ctx.batch || !ctx.batch.list || !ctx.batch.list.length){ return; }
-      openBatchPicker(modal, ctx, cards, theme);
+    pane.querySelector('.rb-w-batch')?.addEventListener('click', () => {
+      if (busy) return;
+      openBatchPicker(modal, entries, (idxs, onProg) => renderPages(idxs, onProg));
     });
-    // + Add tile — build a fresh card and drop it top-left for the operator to place.
+
+    // + Add tile — add a tile to THIS page and drop it top-left for you to place.
     async function addCard(blockId){
+      own();
       const bdef = BLOCKS.find(b => b.id === blockId) || {};
-      const opts = { box: blockId === 'avgDur', lastN: bdef.lastN || 8, comment: '' };
-      const el = await buildCardDom(blockId, ctx, opts, theme);
-      stage_host.appendChild(el);
-      const imgs = [...el.querySelectorAll('img')];
-      await Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r => { im.onload = im.onerror = r; })));
-      const ar = el.offsetHeight / el.offsetWidth || 1;
-      const c = { id: blockId, opts, el, ar, w: 0.3, x: 0.03, y: 0.03, freeAspect: blockId === 'comment' };
-      c.h = c.w * 1.7778 * c.ar;
-      cards.push(c); makeBox(c);
+      const c = { key: 'k' + (keySeq++), id: blockId, opts: { box: blockId === 'avgDur', lastN: bdef.lastN || 8 }, x: 0.03, y: 0.03, w: 0.3, freeAspect: blockId === 'comment' };
+      const rec = await cardFor(page, c);
+      c.h = c.w * 1.7778 * rec.ar;
+      cur.push(c); makeBox(c, rec);
     }
     pane.querySelector('.rb-w-add').addEventListener('click', (e) => {
-      pane.parentNode.querySelector('.rb-addmenu')?.remove();
+      document.querySelector('.rb-addmenu')?.remove();
       const menu = document.createElement('div'); menu.className = 'rb-addmenu';
       const avail = BLOCKS.filter(b => !b.soon && (b.needs !== 'pr' || ctx.hasPr));
       menu.innerHTML = avail.map(b => `<div class="rb-addmenu-item" data-id="${b.id}">${esc(b.label)}</div>`).join('');
       const r = e.currentTarget.getBoundingClientRect();
       menu.style.left = Math.max(8, r.left) + 'px'; menu.style.top = (r.bottom + 4) + 'px';
       document.body.appendChild(menu);
-      const close = () => { menu.remove(); document.removeEventListener('click', off, true); };
-      const off = (ev) => { if (!menu.contains(ev.target) && ev.target !== e.currentTarget) close(); };
+      const closeMenu = () => { menu.remove(); document.removeEventListener('click', off, true); };
+      const off = (ev) => { if (!menu.contains(ev.target) && ev.target !== e.currentTarget) closeMenu(); };
       setTimeout(() => document.addEventListener('click', off, true), 0);
-      menu.querySelectorAll('.rb-addmenu-item').forEach(it => it.addEventListener('click', async () => { const id = it.dataset.id; close(); await addCard(id); }));
+      menu.querySelectorAll('.rb-addmenu-item').forEach(it => it.addEventListener('click', async () => { const id = it.dataset.id; closeMenu(); await addCard(id); }));
     });
+
+    await showPage(0);
   }
 
   // ctx for one material in a batch (same shape open() passes for a single one)
@@ -1198,23 +1448,21 @@
     };
   }
 
-  // "Print set" — pick which materials, then render the SAME arranged layout for
-  // each onto its own landscape page.
-  function openBatchPicker(modal, base, cards, theme){
-    const list = base.batch.list;
+  // "Select pages…" — pick which materials' pages to render (each uses its own layout).
+  function openBatchPicker(modal, list, render){
     const pick = document.createElement('div');
     pick.className = 'rb-choice';
     pick.innerHTML = `
       <div class="rb-choice-card" style="width:min(560px,94%);max-height:82%;display:flex;flex-direction:column">
-        <div class="rb-choice-h">Print this layout for a set of materials</div>
-        <div class="rb-choice-b">Every selected material prints on its own landscape page using the layout you just arranged.</div>
+        <div class="rb-choice-h">Choose which pages to render</div>
+        <div class="rb-choice-b">Each selected material renders on its own landscape page, using that page's layout.</div>
         <div style="display:flex;gap:8px;margin-bottom:8px">
           <button class="rb-btn ghost rb-bp-all" style="padding:4px 10px">Select all</button>
           <button class="rb-btn ghost rb-bp-none" style="padding:4px 10px">None</button>
           <span class="rb-bp-count" style="margin-left:auto;align-self:center;font-size:12px;color:#9bb0b6"></span>
         </div>
         <div class="rb-bp-list" style="flex:1;overflow:auto;border:1px solid rgba(155,176,182,.25);border-radius:6px">
-          ${list.map((e,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:5px 9px;border-bottom:1px solid rgba(155,176,182,.12);font-size:12.5px;color:#dbe7e9"><input type="checkbox" class="rb-bp-chk" data-i="${i}" checked style="accent-color:#1FCED8"><b style="font-family:'JetBrains Mono',monospace">${esc(e.m.material)}</b><span style="color:#9bb0b6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.m.description||'')}</span></label>`).join('')}
+          ${list.map((e,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:5px 9px;border-bottom:1px solid rgba(155,176,182,.12);font-size:12.5px;color:#dbe7e9"><input type="checkbox" class="rb-bp-chk" data-i="${i}" checked style="accent-color:#1FCED8"><span style="color:#9bb0b6;width:26px">${i+1}</span><b style="font-family:'JetBrains Mono',monospace">${esc(e.m.material)}</b><span style="color:#9bb0b6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.m.description||'')}</span></label>`).join('')}
         </div>
         <div class="rb-choice-a" style="margin-top:12px">
           <button class="rb-btn ghost rb-bp-cancel">Cancel</button>
@@ -1233,61 +1481,34 @@
       const idxs = chks().filter(c=>c.checked).map(c=>+c.dataset.i);
       if (!idxs.length) return;
       const btn = ev.currentTarget; btn.disabled = true;
-      const entries = idxs.map(i => list[i]);
       try {
-        for (let k=0;k<entries.length;k++){ btn.textContent = `Rendering ${k+1}/${entries.length}…`; }
-        const res = await renderWidePdfBatch(base, cards, entries, theme, (k,n)=>{ btn.textContent = `Rendering ${k}/${n}…`; });
+        const res = await render(idxs, (k,n)=>{ btn.textContent = `Rendering page ${k}/${n}…`; });
         pick.remove();
         showWidePreview(modal, res);
       } catch(e){ console.error(e); btn.textContent='Failed'; btn.disabled=false; }
     });
   }
 
-  async function renderWidePdfBatch(base, cards, entries, theme, onProg){
-    await ensureLibs(); await ensureH2C();
-    const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
-    const g = geomFor('wide');
-    const doc = new jsPDFCtor({ orientation:'landscape', unit:'mm', format:g.format, compress:true });
-    const host = document.createElement('div'); host.style.cssText='position:fixed;left:-99999px;top:0;width:1400px;'; document.body.appendChild(host);
-    try {
-      for (let pi=0; pi<entries.length; pi++){
-        if (onProg) onProg(pi+1, entries.length);
-        if (pi>0) doc.addPage(g.format,'landscape');
-        if (theme==='dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
-        const ectx = ctxForEntry(base, entries[pi]);
-        for (const c of cards){
-          // box (mm) from the arranged template
-          const bx=c.x*g.W, by=c.y*g.H, bw=c.w*g.W;
-          const bh = c.freeAspect ? (c.h || c.w*1.7778*c.ar)*g.H : bw*c.ar;
-          if (c.id === 'comment'){ drawCommentBox(doc, bx, by, bw, bh, noteFor(ectx, c.opts), theme); continue; }
-          const el = await buildCardDom(c.id, ectx, c.opts||{}, theme);
-          host.appendChild(el);
-          const imgs=[...el.querySelectorAll('img')];
-          await Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r=>{im.onload=im.onerror=r;})));
-          const cardH = el.offsetHeight || CARD_W;
-          let sc = bw/CARD_W; if (cardH*sc > bh) sc = bh/cardH;   // contain-scale into the box
-          const iw = CARD_W*sc, ih = cardH*sc;
-          const canvas = await global.html2canvas(el, { scale:2, backgroundColor: theme==='dark'?'#0c2d3b':'#ffffff', logging:false });
-          doc.addImage(canvas.toDataURL('image/jpeg',0.86), 'JPEG', bx, by, iw, ih);
-          host.removeChild(el);
-        }
-      }
-      const safe=(base.assessmentName||'assessment').replace(/[^A-Za-z0-9_-]+/g,'_');
-      return { url: URL.createObjectURL(doc.output('blob')), filename:`Screener_Report_SET_${entries.length}_${safe}_wide.pdf`, pages:entries.length };
-    } finally { host.remove(); }
-  }
-
   // Native-text comment box for the PDF (fills its freely-sized rectangle, crisp text).
+  // Text is sized like the OTHER tiles: they're rendered at CARD_W px and scaled to the
+  // tile width, so a 13px body / 14px heading becomes px × (tile mm / CARD_W) mm. Floors
+  // keep it legible on small tiles (operator 2026-09-25: "similar, while still legible").
   function drawCommentBox(doc, x, y, w, h, text, theme){
     const dark = theme === 'dark';
+    const PT_PER_MM = 2.8346, mmPerPx = w / CARD_W;
+    const headPt = Math.max(6.5, 14 * mmPerPx * PT_PER_MM);
+    const bodyPt = Math.max(5.5, 13 * mmPerPx * PT_PER_MM);
+    const lineMm = bodyPt / PT_PER_MM * 1.45, pad = Math.max(2.5, 14 * mmPerPx);
     doc.setFillColor(dark ? 12 : 246, dark ? 45 : 249, dark ? 59 : 250); doc.rect(x, y, w, h, 'F');
     doc.setDrawColor(dark ? 60 : 210, dark ? 90 : 216, dark ? 100 : 220); doc.setLineWidth(0.2); doc.rect(x, y, w, h);
-    doc.setFillColor(31, 206, 216); doc.rect(x, y, 1.6, h, 'F');
-    doc.setTextColor(dark ? 223 : 12, dark ? 243 : 45, dark ? 245 : 59); doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
-    doc.text('Comments', x + 4.5, y + 6.5);
-    doc.setTextColor(dark ? 220 : 40, dark ? 231 : 48, dark ? 233 : 58); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
-    const lines = doc.splitTextToSize(pdfSafe(text || ''), w - 9);
-    let ty = y + 13; for (const l of lines){ if (ty > y + h - 3) break; doc.text(l, x + 4.5, ty); ty += 4.6; }
+    doc.setFillColor(31, 206, 216); doc.rect(x, y, Math.max(0.8, 3 * mmPerPx), h, 'F');
+    doc.setTextColor(dark ? 223 : 12, dark ? 243 : 45, dark ? 245 : 59); doc.setFont('helvetica','bold'); doc.setFontSize(headPt);
+    let ty = y + pad + headPt / PT_PER_MM;
+    doc.text('Comments', x + pad, ty);
+    ty += lineMm * 1.2;
+    doc.setTextColor(dark ? 220 : 40, dark ? 231 : 48, dark ? 233 : 58); doc.setFont('helvetica','normal'); doc.setFontSize(bodyPt);
+    const lines = doc.splitTextToSize(pdfSafe(text || ''), w - pad * 2);
+    for (const l of lines){ if (ty > y + h - pad * 0.5) break; doc.text(l, x + pad, ty); ty += lineMm; }
   }
 
   // Live comment editor docked in the preview — write while you see the report.
@@ -1386,30 +1607,6 @@
       actions.insertBefore(btn, actions.firstChild);
     }
     return () => { modal.style.width = entry.w; modal.style.height = entry.h; modal.style.transform = ''; };
-  }
-
-  async function renderWidePdf(ctx, cards, theme){
-    await ensureLibs();
-    const jsPDFCtor = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
-    const g = geomFor('wide');
-    const doc = new jsPDFCtor({ orientation:'landscape', unit:'mm', format:g.format, compress:true });
-    // page background for dark theme
-    if (theme === 'dark'){ doc.setFillColor(12,45,59); doc.rect(0,0,g.W,g.H,'F'); }
-    for (const c of cards){
-      const x = c.x*g.W, y = c.y*g.H, w = c.w*g.W;
-      const h = c.freeAspect ? (c.h || c.w*1.7778*c.ar)*g.H : w * c.ar;
-      if (c.id === 'comment'){ drawCommentBox(doc, x, y, w, h, noteFor(ctx, c.opts), theme); continue; }
-      const prevT = c.el.style.transform; c.el.style.transform = 'none';   // capture at natural resolution
-      let img;
-      try {
-        const canvas = await global.html2canvas(c.el, { scale: 2, backgroundColor: theme==='dark' ? '#0c2d3b' : '#ffffff', logging:false });
-        img = canvas.toDataURL('image/jpeg', 0.88);
-      } finally { c.el.style.transform = prevT; }
-      doc.addImage(img, 'JPEG', x, y, w, h);
-    }
-    const safe = (ctx.assessmentName||'assessment').replace(/[^A-Za-z0-9_-]+/g,'_');
-    const filename = `Screener_Report_${ctx.m.material}_${safe}_wide.pdf`;
-    return { url: URL.createObjectURL(doc.output('blob')), filename, pages:1 };
   }
 
   // `ctx`/`regen` are passed only for a single-material widescreen render, so the

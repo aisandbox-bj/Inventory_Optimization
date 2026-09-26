@@ -381,6 +381,26 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Widescreen pages + chains shading - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>Widescreen report: one page per material, per-page layouts, copy-from-previous</b> (APP-RB-WIDEPAGES) + <b>procurement-chains shading</b> (APP-RB-CHAINHEAT) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Why.</b> Operator testing with 25 flagged materials: the layout screen showed only one material with no way to page; "Preview PDF" produced one page; the layout panel couldn't be resized; the comment tile couldn't be typed in and its text was far bigger than everything else; and every page needed the same layout re-done by hand.</li>
+        <li><b>One page per flagged material</b> with ‹ Prev / Next › ("Page 3 of 25 · material"). <b>Per-page layouts:</b> a page follows the page before it until you change it, then keeps its own ("Layout: same as page N" / "this page's own"). <b>⧉ Copy layout from previous page</b> and a two-click <b>Apply this layout to all pages</b>. Each page's tiles are built from that page's material.</li>
+        <li><b>Preview PDF renders every page</b>, each with its own layout ("Rendering page k/N"); <b>Select pages…</b> (was "Print set…") renders a chosen subset with their own layouts.</li>
+        <li><b>Docked comment box</b> on the layout screen for the current page's material, at reading size, updating that page's Comment tile as you type and saving against the material (debounced; flushed on page change, render and Back). Clicking the Comment tile focuses it.</li>
+        <li><b>The layout panel moves, resizes and maximizes</b> (same controls as the PDF preview) and the page stays a true <b>16:9</b> at any size — CSS used to distort it when the panel was short. The block picker underneath no longer spills out when the panel is made smaller.</li>
+        <li><b>Comment text size.</b> Root cause: every other tile is drawn at full size and scaled down, the comment tile was drawn at box size and not scaled. Now it's scaled like the rest (13px body / 14px heading). In the PDF the comment text follows the same scale (was a fixed 9.5/10.5pt) with a legibility floor of 5.5pt body / 6.5pt heading — measured 6.1 / 6.5pt on a typical tile.</li>
+        <li><b>Procurement-chains shading</b> (Letter + Widescreen "Last N procurement chains"): B, C, D shaded no-colour (fastest) → red (slowest) within each column; To site green → amber → red; scaled over the chains shown; single-value or all-equal columns unshaded; a one-line key under the table. Verified on 2004641 (B 1d→11d, C 4d→16d, D 8d→12d, To site 17d green → 34d red).</li>
+        <li><b>Verified</b> on 3 flagged materials: paging, inherit/own/copy/apply-all, per-material comment (no cross-material leak — pages without a comment print none), panel resize keeps 16:9 (720×404 → 419×235), Preview PDF = 3 landscape pages with their own tiles, Back restores the picker cleanly, no new console errors. <b>Pending:</b> operator run with the real 25-material set (render time scales with pages × tiles). Files: <code>shared/report-builder.{js,css}</code>. Rollback: local <code>_rollback/WIDE-CANVAS-PAGES-pre/</code> + <code>checkpoint/pre-widepages</code> at <code>5f1dc68</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Code-review fixes - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">
