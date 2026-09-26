@@ -381,6 +381,22 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Cadence open PRs - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>MRP-run cadence: open PRs shown hollow, with how long they've been open</b> (APP-MRPFREQ-OPENPR) + a counting fix — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Correctness fix found while building this.</b> A requisition with no PO yet (state PR_ONLY) was classed as "in-flight", and in-flight was merged into the solid green <b>PR → PO</b> stack — so open PRs were drawn, and counted in the "PR → PO · PO placed" KPI, as if a PO had been raised. In the June assessment 22 materials had open PRs affected (plus one PR-History row with no material number). Now they're their own outcome everywhere. Example 2004641: PR → PO 14 (was shown as 16), Open PR 2, Cancelled 63 = the 79 Raw-Data chains.</li>
+        <li><b>Cadence chart (top):</b> a new <b>Open PR (no PO yet)</b> stack drawn <b>hollow</b> (outline only, no fill = no commitment) between the solid PR → PO and red Cancelled stacks; a new <b>Open PR</b> KPI; the click-helper shows the MRP/manual split and the oldest open age.</li>
+        <li><b>Replenishment chart (bottom):</b> each open PR is a <b>hollow</b> green box of its requested quantity stacked on that day's stock, labelled with how long it's been open ("open 122d", PR date → today; "2× …" when several share a period). Labels sit on a <b>semi-transparent grey card</b> above the box, staggered when neighbours would overlap (operator's choice after reviewing an overlapping version). Click-helper line: requested qty + oldest open age.</li>
+        <li>Same change in the Trace page (<code>trace/trace.js</code>) and the report's cadence block (<code>shared/mrp-cadence.js</code>) — verified to produce identical counts. No SCHEMA_VERSION change. Rollback: <code>checkpoint/pre-openpr</code> at <code>82a52e6</code> + local <code>_rollback/MRPFREQ-OPENPR-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Report review round: remove / continue / T&C - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">

@@ -33,8 +33,13 @@
   function isMrpChain(c){ return (String(c.creationIndicator || '').trim() || 'B') === 'B'; }
   function chainOutcome(c){
     if (c.state === 'CANCELLED') return 'cancelled';
+    if (c.state === 'PR_ONLY') return 'open';   // APP-MRPFREQ-OPENPR — raised, no PO yet (was mis-counted as PR → PO)
     if (c.state === 'COMPLETE' || c.state === 'NOT_YET_CONSUMED') return 'complete';
     return 'inflight';
+  }
+  function daysOpen(prDate, todayIso){
+    const a = Date.parse(String(prDate || '').slice(0, 10)), b = Date.parse(todayIso);
+    return (isFinite(a) && isFinite(b)) ? Math.max(0, Math.round((b - a) / 864e5)) : null;
   }
   function mfSlotStart(dateStr, period){
     const s = String(dateStr || '').slice(0, 10);
@@ -100,17 +105,18 @@
 
     // aggregate by slot × outcome × source
     const agg = new Map();
-    let undated = 0, complete = 0, inflight = 0, cancelled = 0, manualCt = 0;
+    let undated = 0, complete = 0, inflight = 0, openPr = 0, cancelled = 0, manualCt = 0;
     for (const c of chains){
       const oc = chainOutcome(c), mrp = isMrpChain(c);
       if (!mrp) manualCt++;
       const start = mfSlotStart(c.prDate, period);
       if (start == null){ undated++; continue; }
-      let e = agg.get(start); if (!e){ e = { cMrp:0,cMan:0,iMrp:0,iMan:0,xMrp:0,xMan:0 }; agg.set(start, e); }
-      e[(oc === 'complete' ? 'c' : oc === 'inflight' ? 'i' : 'x') + (mrp ? 'Mrp' : 'Man')]++;
-      if (oc === 'complete') complete++; else if (oc === 'inflight') inflight++; else cancelled++;
+      let e = agg.get(start); if (!e){ e = { cMrp:0,cMan:0,iMrp:0,iMan:0,oMrp:0,oMan:0,xMrp:0,xMan:0 }; agg.set(start, e); }
+      e[({ complete:'c', inflight:'i', open:'o', cancelled:'x' })[oc] + (mrp ? 'Mrp' : 'Man')]++;
+      if (oc === 'complete') complete++; else if (oc === 'inflight') inflight++; else if (oc === 'open') openPr++; else cancelled++;
     }
-    if (!(complete + inflight + cancelled)) return { empty:true, reason:'no dated requisitions' };
+    if (!(complete + inflight + openPr + cancelled)) return { empty:true, reason:'no dated requisitions' };
+    const todayIsoAll = (typeof AppLocale !== 'undefined' && AppLocale.localDateISO) ? AppLocale.localDateISO() : mfIso(Date.now());
 
     // continuous slots. If the caller passes an explicit span (opts.spanStart /
     // spanEnd) — e.g. the Trend consumption chart's date range, so the two line up
@@ -139,11 +145,18 @@
     const repPoMrp = new Array(slots.length).fill(0), repPoMan = new Array(slots.length).fill(0), repPo = new Array(slots.length).fill(0);
     const repCancelStock = new Array(slots.length).fill(null);
     const repLatestDay = new Array(slots.length).fill(null), repCancelDay = new Array(slots.length).fill(null);
-    let repAny = false, repCancelAny = false;
+    let repAny = false, repCancelAny = false, repOpenAny = false;
+    const repOpen = new Array(slots.length).fill(0), repOpenN = new Array(slots.length).fill(0), repOpenAge = new Array(slots.length).fill(null);
     for (const c of chains){
       const sm = mfSlotStart(c.prDate, period); if (sm == null || !slotIdx.has(sm)) continue;
       const i = slotIdx.get(sm); const day = String(c.prDate || '').slice(0,10);
       if (c.state === 'CANCELLED'){ if (!repCancelDay[i] || day > repCancelDay[i]) repCancelDay[i] = day; repCancelAny = true; continue; }
+      if (c.state === 'PR_ONLY'){   // APP-MRPFREQ-OPENPR — requested qty drawn hollow + age label
+        repOpen[i] += (typeof c.qty === 'number' && c.qty > 0) ? c.qty : 0; repOpenN[i]++; repOpenAny = true;
+        const age = daysOpen(c.prDate, todayIsoAll); if (age != null && (repOpenAge[i] == null || age > repOpenAge[i])) repOpenAge[i] = age;
+        if (!repLatestDay[i] || day > repLatestDay[i]) repLatestDay[i] = day;
+        continue;
+      }
       if (!c.po) continue;
       const q = (typeof c.qty === 'number' && c.qty > 0) ? c.qty : 0;
       if (isMrpChain(c)) repPoMrp[i] += q; else repPoMan[i] += q;
@@ -152,7 +165,7 @@
     }
     if (dotInfo.ok){
       for (let i=0;i<slots.length;i++){
-        if (repPo[i] > 0 && repLatestDay[i] && dotInfo.sohByDay.has(repLatestDay[i])) repStock[i] = Math.max(0, dotInfo.sohByDay.get(repLatestDay[i]));
+        if ((repPo[i] > 0 || repOpenN[i] > 0) && repLatestDay[i] && dotInfo.sohByDay.has(repLatestDay[i])) repStock[i] = Math.max(0, dotInfo.sohByDay.get(repLatestDay[i]));
         if (repCancelDay[i] && dotInfo.sohByDay.has(repCancelDay[i])) repCancelStock[i] = Math.max(0, dotInfo.sohByDay.get(repCancelDay[i]));
       }
     }
@@ -163,6 +176,7 @@
     const dPoMan = slots.map(ms => gv(ms,'cMan') + gv(ms,'iMan'));
     const dPo    = slots.map((_,i)=> dPoMrp[i] + dPoMan[i]);
     const dCan   = slots.map(ms => gv(ms,'xMrp') + gv(ms,'xMan'));
+    const dOpen  = slots.map(ms => gv(ms,'oMrp') + gv(ms,'oMan'));   // APP-MRPFREQ-OPENPR — hollow stack
 
     const Y_AX_W = 58, DAY_PAD_TOP = 14;
 
@@ -234,6 +248,27 @@
         ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(13,20,20,.85)'; ctx.stroke(); }
       ctx.restore();
     }};
+    // APP-MRPFREQ-OPENPR — "open Nd" above each open-PR (hollow) box; neighbours staggered.
+    const openAgeLabels = { id:'openAgeLabels', afterDatasetsDraw(chart){
+      const { ctx, chartArea, scales } = chart; const y = scales.y; if (!y) return;
+      const n = slots.length, w = (chartArea.right - chartArea.left)/n; ctx.save();
+      ctx.fillStyle = PO_GREEN; ctx.font = '700 9px JetBrains Mono, monospace';
+      // above its box on a semi-transparent grey card; neighbouring cards staggered (no overlap)
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      let prev = null;
+      for (let i=0;i<n;i++){ if (!repOpenN[i]) continue;
+        const lab0 = repOpenAge[i] != null ? `open ${repOpenAge[i]}d` : 'open';
+        const lab = repOpenN[i] > 1 ? `${repOpenN[i]}× ${lab0}` : lab0;
+        const tw = ctx.measureText(lab).width, cw = tw + 10, ch = 14, x = chartArea.left + w*(i+0.5);
+        const yTop = y.getPixelForValue((repStock[i]||0) + (repPo[i]||0) + (repOpen[i]||0));
+        let cy = Math.max(chartArea.top + ch/2 + 1, yTop - ch/2 - 3);
+        if (prev && Math.abs(x - prev.x) < (cw + prev.cw)/2 + 2 && Math.abs(cy - prev.cy) < ch + 2) cy = prev.cy - ch - 2;
+        ctx.fillStyle = 'rgba(120,132,140,.55)'; ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - cw/2, cy - ch/2, cw, ch, 3); else ctx.rect(x - cw/2, cy - ch/2, cw, ch);
+        ctx.fill(); ctx.fillStyle = '#F0F4F3'; ctx.fillText(lab, x, cy + 0.5);
+        prev = { x, cy, cw }; }
+      ctx.restore();
+    }};
     const makeHatch = (base) => {
       const p = document.createElement('canvas'); p.width = 7; p.height = 7; const pc = p.getContext('2d');
       pc.fillStyle = base; pc.fillRect(0,0,7,7); pc.strokeStyle = 'rgba(11,18,18,.55)'; pc.lineWidth = 1.6;
@@ -249,7 +284,10 @@
     const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0'; host.appendChild(c1);
     const chart1 = new Chart(c1, {
       type:'bar',
-      data:{ labels, datasets:[ { label:'PR → PO', data:dPo, backgroundColor:COMP, stack:'s' }, { label:'Cancelled', data:dCan, backgroundColor:CAN, stack:'s' } ] },
+      data:{ labels, datasets:[
+        { label:'PR → PO', data:dPo, backgroundColor:COMP, stack:'s' },
+        { label:'Open PR (no PO yet)', data:dOpen, backgroundColor:'rgba(47,191,136,0)', borderColor:COMP, borderWidth:1.6, borderSkipped:false, stack:'s' },
+        { label:'Cancelled', data:dCan, backgroundColor:CAN, stack:'s' } ] },
       options:{ responsive:false, animation:false, maintainAspectRatio:false, events:[],
         layout:{ padding:{ right:26, bottom: period==='month'?48:70 } },
         scales:{ x:{ stacked:true, grid:{display:false}, ticks:{ color:'#9BABA8', maxRotation:0, autoSkip:true, maxTicksLimit:20, padding:DAY_PAD_TOP, font:{family:'JetBrains Mono',size:9} } },
@@ -262,8 +300,9 @@
     const repStockD = repStock.slice();
     const repPoMrpD = repPoMrp.map(v => (v>0?v:null));
     const repPoManD = repPoMan.map(v => (v>0?v:null));
+    const repOpenD  = repOpen.map(v => (v>0?v:null));
     let repMaxVal = 0;
-    for (let i=0;i<slots.length;i++){ const s = repStock[i]||0, p = repPo[i]||0; if (s+p > repMaxVal) repMaxVal = s+p; if (repCancelStock[i] != null && repCancelStock[i] > repMaxVal) repMaxVal = repCancelStock[i]; }
+    for (let i=0;i<slots.length;i++){ const s = repStock[i]||0, p = repPo[i]||0, o = repOpen[i]||0; if (s+p+o > repMaxVal) repMaxVal = s+p+o; if (repCancelStock[i] != null && repCancelStock[i] > repMaxVal) repMaxVal = repCancelStock[i]; }
     if (dotInfo.max != null && dotInfo.max > repMaxVal) repMaxVal = dotInfo.max;
     const repSuggMax = repMaxVal > 0 ? repMaxVal*1.1 : 10;
     const PO_HATCH = makeHatch(PO_GREEN);
@@ -274,14 +313,15 @@
       data:{ labels, datasets:[
         { label:'Stock on hand', data:repStockD, backgroundColor:STK_BLUE, borderColor:REP_SEP, borderWidth:{top:1.5,right:0,bottom:0,left:0}, stack:'r' },
         { label:'PO qty (MRP)',  data:repPoMrpD, backgroundColor:PO_GREEN, borderColor:REP_SEP, borderWidth:{top:1.5,right:0,bottom:0,left:0}, borderSkipped:false, stack:'r' },
-        { label:'PO qty (manual)', data:repPoManD, backgroundColor:PO_HATCH, borderColor:REP_SEP, borderWidth:{top:1.5,right:0,bottom:0,left:0}, borderSkipped:false, stack:'r' }
+        { label:'PO qty (manual)', data:repPoManD, backgroundColor:PO_HATCH, borderColor:REP_SEP, borderWidth:{top:1.5,right:0,bottom:0,left:0}, borderSkipped:false, stack:'r' },
+        { label:'Open PR qty (no PO yet)', data:repOpenD, backgroundColor:'rgba(55,211,153,0)', borderColor:PO_GREEN, borderWidth:1.6, borderSkipped:false, stack:'r' }
       ] },
       options:{ responsive:false, animation:false, maintainAspectRatio:false, events:[],
         layout:{ padding:{ right:26, bottom: period==='month'?42:62 } },
         scales:{ x:{ stacked:true, grid:{display:false}, ticks:{ color:'#9BABA8', maxRotation:0, autoSkip:true, maxTicksLimit:20, padding:8, font:{family:'JetBrains Mono',size:9} } },
                  y:{ stacked:true, beginAtZero:true, suggestedMax:repSuggMax, afterFit:(s)=>{s.width=Y_AX_W;}, ticks:{ color:'#9BABA8', font:{family:'JetBrains Mono',size:10} }, grid:{ color:'rgba(31,206,216,.06)' } } },
         plugins:{ legend:{ labels:{ color:'#DBE9F0', font:{family:'JetBrains Mono',size:11}, boxWidth:12 } }, tooltip:{ enabled:false } } },
-      plugins:[ bgPlugin, makeDateAxis(8), minmaxLines, cancelDots ]
+      plugins:[ bgPlugin, makeDateAxis(8), minmaxLines, cancelDots, openAgeLabels ]
     });
 
     document.body.appendChild(host);
@@ -296,7 +336,7 @@
     return {
       empty:false, cadence, replen,
       cadenceAR: (opts.cadenceH||300)/W, replenAR: (opts.replenH||230)/W,
-      meta:{ chains:chains.length, complete, inflight, cancelled, manualCt, emptySlots, undated, period, repAny, repCancelAny, hasDots:dotInfo.ok }
+      meta:{ chains:chains.length, complete, inflight, openPr, cancelled, manualCt, emptySlots, undated, period, repAny, repCancelAny, repOpenAny, hasDots:dotInfo.ok }
     };
   }
 

@@ -779,8 +779,16 @@
   // PO-raised or PR-pending → In-flight; deleted PR with no PO → Cancelled.
   function chainOutcome(c){
     if (c.state === 'CANCELLED') return 'cancelled';
+    // APP-MRPFREQ-OPENPR (2026-09-25) — a PR with no PO yet is its OWN outcome. It used
+    // to fall into 'inflight' and so was drawn/counted as "PR → PO" although no PO exists.
+    if (c.state === 'PR_ONLY') return 'open';
     if (c.state === 'COMPLETE' || c.state === 'NOT_YET_CONSUMED') return 'complete';
-    return 'inflight';   // IN_FLIGHT · PR_ONLY
+    return 'inflight';   // IN_FLIGHT — PO raised, not yet received
+  }
+  // Days a still-open PR has been in the system (PR date → today).
+  function daysOpen(prDate, todayIso){
+    const a = Date.parse(String(prDate || '').slice(0, 10)), b = Date.parse(todayIso);
+    return (isFinite(a) && isFinite(b)) ? Math.max(0, Math.round((b - a) / 864e5)) : null;
   }
   function mfPad(x){ return ('0' + x).slice(-2); }
   // Slot start (ms, UTC) for a PR date at the chosen granularity; null if undated.
@@ -878,19 +886,19 @@
     // 44 rows). Each chain is split two ways: by outcome (Complete / In-flight /
     // Cancelled = its state) AND by source — MRP-generated (creation ind. B, solid
     // fill) vs manually created or other (R / F, hatched fill). Nothing is dropped.
-    const agg = new Map();   // slotMs -> {cMrp,cMan, iMrp,iMan, xMrp,xMan}
-    let undated = 0, complete = 0, inflight = 0, cancelled = 0, manualCt = 0;
+    const agg = new Map();   // slotMs -> {cMrp,cMan, iMrp,iMan, oMrp,oMan, xMrp,xMan}
+    let undated = 0, complete = 0, inflight = 0, openPr = 0, cancelled = 0, manualCt = 0;
     for (const c of chains){
-      const oc  = chainOutcome(c);                 // complete | inflight | cancelled
+      const oc  = chainOutcome(c);                 // complete | inflight | open | cancelled
       const mrp = isMrpChain(c);
       if (!mrp) manualCt++;
       const start = mfSlotStart(c.prDate, period);
       if (start == null){ undated++; continue; }
-      let e = agg.get(start); if (!e){ e = { cMrp:0, cMan:0, iMrp:0, iMan:0, xMrp:0, xMan:0 }; agg.set(start, e); }
-      e[(oc === 'complete' ? 'c' : oc === 'inflight' ? 'i' : 'x') + (mrp ? 'Mrp' : 'Man')]++;
-      if (oc === 'complete') complete++; else if (oc === 'inflight') inflight++; else cancelled++;
+      let e = agg.get(start); if (!e){ e = { cMrp:0, cMan:0, iMrp:0, iMan:0, oMrp:0, oMan:0, xMrp:0, xMan:0 }; agg.set(start, e); }
+      e[({ complete:'c', inflight:'i', open:'o', cancelled:'x' })[oc] + (mrp ? 'Mrp' : 'Man')]++;
+      if (oc === 'complete') complete++; else if (oc === 'inflight') inflight++; else if (oc === 'open') openPr++; else cancelled++;
     }
-    const charted = complete + inflight + cancelled;   // dated chains
+    const charted = complete + inflight + openPr + cancelled;   // dated chains
     if (!charted){
       host.innerHTML = `<div class="view-empty"><h3>No dated requisitions</h3><p>All ${chains.length.toLocaleString()} requisition chains for material <b>${escapeHtml(String(mat || ''))}</b> are missing a valid requisition date, so there is nothing to place on the timeline.</p></div>`;
       return;
@@ -927,9 +935,14 @@
     const repPo    = new Array(slots.length).fill(0);   // total (MRP + manual), for stock lookup + tooltip
     const repCancelStock = new Array(slots.length).fill(null);   // stock level on a cancelled PR's date (red dot)
     const slotIdx  = new Map(); slots.forEach((ms, i) => slotIdx.set(ms, i));
-    let repAny = false, repCancelAny = false, repManAny = false;
+    let repAny = false, repCancelAny = false, repManAny = false, repOpenAny = false;
     const repLatestDay = new Array(slots.length).fill(null);
     const repCancelDay = new Array(slots.length).fill(null);
+    // APP-MRPFREQ-OPENPR — PRs not yet converted to a PO: requested qty (drawn as a
+    // HOLLOW box — no commitment yet) + how long the oldest one has been open.
+    const repOpen     = new Array(slots.length).fill(0);
+    const repOpenN    = new Array(slots.length).fill(0);
+    const repOpenAge  = new Array(slots.length).fill(null);
     for (const c of chains){
       const sm = mfSlotStart(c.prDate, period);
       if (sm == null || !slotIdx.has(sm)) continue;
@@ -941,6 +954,14 @@
         repCancelAny = true;
         continue;
       }
+      if (c.state === 'PR_ONLY'){
+        repOpen[i] += (typeof c.qty === 'number' && c.qty > 0) ? c.qty : 0;
+        repOpenN[i]++; repOpenAny = true;
+        const age = daysOpen(c.prDate, todayIso);
+        if (age != null && (repOpenAge[i] == null || age > repOpenAge[i])) repOpenAge[i] = age;
+        if (!repLatestDay[i] || day > repLatestDay[i]) repLatestDay[i] = day;
+        continue;
+      }
       if (!c.po) continue;                                  // otherwise only PRs flipped to a PO
       const q = (typeof c.qty === 'number' && c.qty > 0) ? c.qty : 0;
       if (isMrpChain(c)) repPoMrp[i] += q; else { repPoMan[i] += q; if (q > 0) repManAny = true; }
@@ -949,7 +970,7 @@
     }
     if (dotInfo.ok){
       for (let i = 0; i < slots.length; i++){
-        if (repPo[i] > 0 && repLatestDay[i] && dotInfo.sohByDay.has(repLatestDay[i])){
+        if ((repPo[i] > 0 || repOpenN[i] > 0) && repLatestDay[i] && dotInfo.sohByDay.has(repLatestDay[i])){
           repStock[i] = Math.max(0, dotInfo.sohByDay.get(repLatestDay[i]));
         }
         if (repCancelDay[i] && dotInfo.sohByDay.has(repCancelDay[i])){
@@ -971,6 +992,8 @@
     const dInfMan  = slots.map(ms => gv(ms, 'iMan'));
     const dCanMrp  = slots.map(ms => gv(ms, 'xMrp'));
     const dCanMan  = slots.map(ms => gv(ms, 'xMan'));
+    const dOpenMrp = slots.map(ms => gv(ms, 'oMrp'));
+    const dOpenMan = slots.map(ms => gv(ms, 'oMan'));
 
     const pBtn = (p, lab) => `<button type="button" class="mf-period ${period === p ? 'active' : ''}" data-mf="${p}">${lab}</button>`;
     // Dot-strip legend — only meaningful when the back-calc produced a series.
@@ -978,11 +1001,12 @@
       ? `<span class="mf-dot-legend"><b>Stock status</b> (dots, Current SAP): <span class="ds ds-g"></span> ${dotInfo.thrLabel ? '≥ ' + dotInfo.thrLabel : 'in stock'} · ${dotInfo.thr != null ? '<span class="ds ds-o"></span> below ' + dotInfo.thrLabel + ' · ' : ''}<span class="ds ds-r"></span> stockout</span>`
       : `<span class="mf-dot-legend mf-dot-legend-off">Stock-status dots unavailable — ${dotInfo.currentSOH == null ? 'no current stock-on-hand on the Inventory Master' : 'no back-calc series for this material'}.</span>`;
     // Replenishment caption / empty note.
-    const repNote = (!repAny && !repCancelAny)
-      ? `No PR was flipped to a PO — and none were cancelled — in this window, so there is nothing to place on the replenishment chart.`
+    const openNote = repOpenAny ? ` An <b>open PR</b> (raised, no PO yet) is a <b>hollow</b> green box of the requested qty on its PR date — no commitment yet — labelled with how long it has been open.` : '';
+    const repNote = (!repAny && !repCancelAny && !repOpenAny)
+      ? `No PR was flipped to a PO — and none are open or cancelled — in this window, so there is nothing to place on the replenishment chart.`
       : !dotInfo.ok
         ? `PO quantities are shown, but stock-on-hand could not be back-calculated (${dotInfo.currentSOH == null ? 'no current SOH' : 'no series'}), so the stock portion and cancelled-PR dots are omitted.`
-        : `On each date a PR was flipped to a PO, the bar stacks that day's <b style="color:#2E6BE6">stock-on-hand</b> under the <b style="color:#37D399">ordered PO qty</b> — the top of the bar is the projected stock once the order lands. A PO from a <b>manually-created</b> PR (system override) is drawn as a <b>hatched</b> green box; a plain solid green box is an MRP-generated PO. A <b style="color:#EF4444">red dot</b> marks the stock level on any date a PR was <b>cancelled</b>. Compare against <b style="color:#EF4444">Min</b> (red dotted) and <b style="color:#37D399">Max</b> (green dotted): below Min = still short after receipt · between = replenished into band · above Max = over-ordered.${(dotInfo.min == null && dotInfo.max == null) ? ' <em>No Min/Max on the Inventory Master for this material.</em>' : ''}`;
+        : `On each date a PR was flipped to a PO, the bar stacks that day's <b style="color:#2E6BE6">stock-on-hand</b> under the <b style="color:#37D399">ordered PO qty</b> — the top of the bar is the projected stock once the order lands. A PO from a <b>manually-created</b> PR (system override) is drawn as a <b>hatched</b> green box; a plain solid green box is an MRP-generated PO. A <b style="color:#EF4444">red dot</b> marks the stock level on any date a PR was <b>cancelled</b>. Compare against <b style="color:#EF4444">Min</b> (red dotted) and <b style="color:#37D399">Max</b> (green dotted): below Min = still short after receipt · between = replenished into band · above Max = over-ordered.${openNote}${(dotInfo.min == null && dotInfo.max == null) ? ' <em>No Min/Max on the Inventory Master for this material.</em>' : ''}`;
     host.innerHTML = `
       <div class="mf-tile" id="mfTile">
         <div class="mf-toolbar">
@@ -992,13 +1016,14 @@
         <div class="vol-kpi-strip">
           <div class="vk-cell"><span class="lab">Requisitions</span><span class="v">${chains.length.toLocaleString()}</span><span class="sub">all chains · ties to Raw Data</span></div>
           <div class="vk-cell"><span class="lab">PR → PO</span><span class="v" style="color:#2FBF88">${(complete + inflight).toLocaleString()}</span><span class="sub">PO placed (any state)</span></div>
+          <div class="vk-cell"><span class="lab">Open PR</span><span class="v">${openPr.toLocaleString()}</span><span class="sub">no PO yet</span></div>
           <div class="vk-cell"><span class="lab">Cancelled</span><span class="v ${cancelled ? 'warn' : ''}">${cancelled.toLocaleString()}</span><span class="sub">deleted, no PO</span></div>
           <div class="vk-cell"><span class="lab">Manual</span><span class="v ${manualCt ? 'warn' : ''}">${manualCt.toLocaleString()}</span><span class="sub">creation R / F</span></div>
           <div class="vk-cell"><span class="lab">Empty ${period}s</span><span class="v">${emptySlots.toLocaleString()}</span><span class="sub">no requisition</span></div>
         </div>
         <div class="mf-chart-title">MRP-run cadence — requisitions raised per ${period}</div>
         <div class="vol-chart-host mf-host-top"><canvas id="mfChart"></canvas></div>
-        <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). The question here is simply <em>did a PO get raised when it was needed</em>, so bars are just <b style="color:#2FBF88">PR → PO</b> (a PO was placed — received or still inbound, doesn't matter) vs <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO). Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}${dotLegend} For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
+        <div class="chart-caveat">Each bar = a requisition chain whose PR date falls in that ${period}, on a <b>continuous</b> axis — every ${period} is drawn and empty ones are gaps (no requisition raised). The question here is simply <em>did a PO get raised when it was needed</em>, so bars are <b style="color:#2FBF88">PR → PO</b> (solid — a PO was placed, received or still inbound), <b style="color:#2FBF88">open PR</b> (hollow outline — raised but no PO yet, so no commitment) and <b style="color:#EF4444">Cancelled</b> (deleted PR, no PO). Every chain is charted (MRP-generated + manual), so the totals reconcile with Raw Data's <b>${chains.length.toLocaleString()}</b> chains${manualCt ? ` — <b>${manualCt.toLocaleString()}</b> manually created (creation R / F)` : ''}. <b>Hover a bar</b> for the MRP-vs-manual split. ${undated ? `<b>${undated}</b> chain${undated === 1 ? '' : 's'} had no valid PR date and ${undated === 1 ? 'is' : 'are'} omitted. ` : ''}${dotLegend} For material <b>${escapeHtml(String(mat || ''))}</b>.</div>
         <div class="mf-chart-title">Replenishment — stock + incoming PO qty vs Min/Max</div>
         <div class="vol-chart-host mf-host-bot"><canvas id="mfChart2"></canvas></div>
         <div class="chart-caveat">${repNote}</div>
@@ -1020,6 +1045,7 @@
     const dPoMan = slots.map((_, i) => dCompMan[i] + dInfMan[i]);
     const dPo    = slots.map((_, i) => dPoMrp[i] + dPoMan[i]);
     const dCan   = slots.map((_, i) => dCanMrp[i] + dCanMan[i]);
+    const dOpen  = slots.map((_, i) => dOpenMrp[i] + dOpenMan[i]);   // APP-MRPFREQ-OPENPR — hollow stack
     // APP-FIX-MRPFREQ-AXIS3 (2026-08-17) — stacked date axis so EVERY month shows (no
     // skipping): row 1 = day-number (Chart tick, day/week only); row 2 = short month
     // name (Jan…Dec), centred under each month span; row 3 = year, centred under each
@@ -1124,6 +1150,8 @@
         labels,
         datasets: [
           { label: 'PR → PO',   data: dPo,  backgroundColor: COMP, stack: 's' },
+          // APP-MRPFREQ-OPENPR — raised but no PO yet: HOLLOW (outline only, no fill = no commitment)
+          { label: 'Open PR (no PO yet)', data: dOpen, backgroundColor: 'rgba(47,191,136,0)', borderColor: COMP, borderWidth: 1.6, borderSkipped: false, stack: 's' },
           { label: 'Cancelled', data: dCan, backgroundColor: CAN,  stack: 's' }
         ]
       },
@@ -1154,9 +1182,9 @@
               },
               label: (item) => {
                 const idx = item.dataIndex, v = item.parsed.y || 0;
-                return item.dataset.label === 'PR → PO'
-                  ? `PR → PO: ${v}  (MRP ${dPoMrp[idx]} · man ${dPoMan[idx]})`
-                  : `Cancelled: ${v}  (MRP ${dCanMrp[idx]} · man ${dCanMan[idx]})`;
+                if (item.dataset.label === 'PR → PO') return `PR → PO: ${v}  (MRP ${dPoMrp[idx]} · man ${dPoMan[idx]})`;
+                if (item.dataset.label === 'Cancelled') return `Cancelled: ${v}  (MRP ${dCanMrp[idx]} · man ${dCanMan[idx]})`;
+                return `Open PR, no PO yet: ${v}  (MRP ${dOpenMrp[idx]} · man ${dOpenMan[idx]})${repOpenAge[idx] != null ? ` · oldest open ${repOpenAge[idx]}d` : ''}`;
               }
             },
             filter: (item) => (item.parsed.y || 0) > 0
@@ -1190,9 +1218,10 @@
     const repStockD  = repStock.slice();                // stock at the PO event day (null where none)
     const repPoMrpD  = repPoMrp.map(v => (v > 0 ? v : null));
     const repPoManD  = repPoMan.map(v => (v > 0 ? v : null));
+    const repOpenD   = repOpen.map(v => (v > 0 ? v : null));   // APP-MRPFREQ-OPENPR — hollow box
     let repMaxVal = 0;
     for (let i = 0; i < slots.length; i++){
-      const s = repStock[i] || 0, p = repPo[i] || 0; if (s + p > repMaxVal) repMaxVal = s + p;
+      const s = repStock[i] || 0, p = repPo[i] || 0, o = repOpen[i] || 0; if (s + p + o > repMaxVal) repMaxVal = s + p + o;
       if (repCancelStock[i] != null && repCancelStock[i] > repMaxVal) repMaxVal = repCancelStock[i];
     }
     if (dotInfo.max != null && dotInfo.max > repMaxVal) repMaxVal = dotInfo.max;
@@ -1219,6 +1248,39 @@
         ctx.restore();
       }
     };
+    // APP-MRPFREQ-OPENPR — "open Nd" label above each open-PR (hollow) box: how long
+    // the oldest still-open PR in that period has been in the system (PR date → today).
+    const openAgeLabels = {
+      id: 'openAgeLabels',
+      afterDatasetsDraw(chart){
+        const { ctx, chartArea, scales } = chart;
+        const y = scales.y; if (!y) return;
+        const n = slots.length; const w = (chartArea.right - chartArea.left) / n;
+        ctx.save();
+        ctx.fillStyle = PO_GREEN; ctx.font = '700 9px JetBrains Mono, monospace';
+        // Label above its box on a semi-transparent grey card (operator 2026-09-25) so it
+        // reads cleanly over bars/outlines; neighbouring cards are staggered so they never overlap.
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        let prev = null;
+        for (let i = 0; i < n; i++){
+          if (!repOpenN[i]) continue;
+          const lab0 = repOpenAge[i] != null ? `open ${repOpenAge[i]}d` : 'open';
+          const lab = repOpenN[i] > 1 ? `${repOpenN[i]}× ${lab0}` : lab0;
+          const tw = ctx.measureText(lab).width, cw = tw + 10, ch = 14;
+          const x = chartArea.left + w * (i + 0.5);
+          const yTop = y.getPixelForValue((repStock[i] || 0) + (repPo[i] || 0) + (repOpen[i] || 0));
+          let cy = Math.max(chartArea.top + ch / 2 + 1, yTop - ch / 2 - 3);   // card centre
+          if (prev && Math.abs(x - prev.x) < (cw + prev.cw) / 2 + 2 && Math.abs(cy - prev.cy) < ch + 2) cy = prev.cy - ch - 2;
+          ctx.fillStyle = 'rgba(120,132,140,.55)';
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x - cw / 2, cy - ch / 2, cw, ch, 3); else ctx.rect(x - cw / 2, cy - ch / 2, cw, ch);
+          ctx.fill();
+          ctx.fillStyle = '#F0F4F3'; ctx.fillText(lab, x, cy + 0.5);
+          prev = { x, cy, cw };
+        }
+        ctx.restore();
+      }
+    };
     const c2 = $('#mfChart2');
     if (c2){
       state.chart2 = new Chart(c2, {
@@ -1228,7 +1290,9 @@
           datasets: [
             { label: 'Stock on hand',      data: repStockD, backgroundColor: STK_BLUE, borderColor: REP_SEP, borderWidth: { top: 1.5, right: 0, bottom: 0, left: 0 }, stack: 'r' },
             { label: 'PO qty (MRP)',       data: repPoMrpD, backgroundColor: PO_GREEN, borderColor: REP_SEP, borderWidth: { top: 1.5, right: 0, bottom: 0, left: 0 }, borderSkipped: false, stack: 'r' },
-            { label: 'PO qty (manual)',    data: repPoManD, backgroundColor: PO_HATCH, borderColor: REP_SEP, borderWidth: { top: 1.5, right: 0, bottom: 0, left: 0 }, borderSkipped: false, stack: 'r' }
+            { label: 'PO qty (manual)',    data: repPoManD, backgroundColor: PO_HATCH, borderColor: REP_SEP, borderWidth: { top: 1.5, right: 0, bottom: 0, left: 0 }, borderSkipped: false, stack: 'r' },
+            // APP-MRPFREQ-OPENPR — requested qty of a PR with no PO yet: outline only (no fill = no commitment)
+            { label: 'Open PR qty (no PO yet)', data: repOpenD, backgroundColor: 'rgba(55,211,153,0)', borderColor: PO_GREEN, borderWidth: 1.6, borderSkipped: false, stack: 'r' }
           ]
         },
         options: {
@@ -1259,6 +1323,7 @@
                     else if (dotInfo.max != null && tot > dotInfo.max) L.push('↑ above Max (over-ordered)');
                     else if (dotInfo.min != null || dotInfo.max != null) L.push('● replenished into band');
                   }
+                  if (repOpenN[idx] > 0) L.push(`○ open PR${repOpenN[idx] > 1 ? 's' : ''}, no PO yet — requested ${Math.round(repOpen[idx]).toLocaleString()}${repOpenAge[idx] != null ? ` · oldest open ${repOpenAge[idx]} days` : ''}`);
                   if (repCancelStock[idx] != null) L.push('✕ cancelled PR — stock then ' + Math.round(repCancelStock[idx]).toLocaleString());
                   return L;
                 }
@@ -1270,7 +1335,7 @@
             }
           }
         },
-        plugins: [makeDateAxis(8), minmaxLines, cancelDots]
+        plugins: [makeDateAxis(8), minmaxLines, cancelDots, openAgeLabels]
       });
     }
 
