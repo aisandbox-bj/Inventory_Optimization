@@ -191,6 +191,37 @@
 .tl-filter button.showall-toggle{ color:#9B97E8; border-color:rgba(155,151,232,.45); }
 .tl-filter button.showall-toggle:hover{ border-color:#9B97E8; }
 .tl-filter button.showall-toggle.active{ color:#0b0a1e; border-color:#9B97E8; background:#9B97E8; font-weight:700; }
+/* APP-DUP-FLAG — "Classification ▾" filter tab + its menu (opens OVER the page) */
+.tl-filter button.cls-filter{ color:#86D6CF; border-color:rgba(134,214,207,.45); }
+.tl-filter button.cls-filter:hover{ border-color:#86D6CF; }
+.tl-filter button.cls-filter.active{ color:#062220; border-color:#86D6CF; background:#86D6CF; font-weight:700; }
+.tl-filter button.cls-clear{ padding-left:6px; padding-right:6px; color:#86D6CF; border-color:rgba(134,214,207,.45); }
+.cls-menu{ position:fixed; z-index:1300; min-width:230px; padding:6px; display:flex; flex-direction:column; gap:2px;
+  background:var(--bg-elevated); border:1px solid var(--border-soft); border-radius:8px; box-shadow:0 16px 40px rgba(0,0,0,.5); }
+.cls-menu .cls-h{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:.6px; text-transform:uppercase; color:#86D6CF;
+  padding:6px 9px 7px; border-bottom:1px solid var(--border-soft); margin-bottom:2px; }
+.cls-menu .cls-n{ text-transform:none; color:var(--text-muted); letter-spacing:0; margin-left:4px; }
+.cls-menu .cls-item{ text-align:left; padding:8px 10px; border:none; background:none; cursor:pointer; border-radius:5px;
+  color:var(--text-pri); font-family:var(--font-body); font-size:13px; display:flex; flex-direction:column; gap:1px; }
+.cls-menu .cls-item:hover{ background:rgba(134,214,207,.12); }
+.cls-menu .cls-item.on{ color:#86D6CF; font-weight:700; }
+.cls-menu .cls-item[disabled]{ opacity:.45; cursor:default; }
+.cls-menu .cls-item[disabled]:hover{ background:none; }
+.cls-menu .cls-why{ font-size:11px; color:var(--text-muted); font-style:italic; }
+.cls-menu .cls-off{ border-top:1px solid var(--border-soft); border-radius:0 0 5px 5px; margin-top:2px; color:var(--text-sec); }
+/* DUP / REF tags on list rows + duplicate-family rows */
+.list-table .dup-tag{ display:inline-block; margin-left:5px; padding:0 4px; border-radius:3px; font-family:var(--font-mono);
+  font-size:9px; font-weight:700; letter-spacing:.5px; line-height:14px; color:#062220; background:#86D6CF; vertical-align:1px; }
+.list-table .dup-tag.ref{ background:#F0F4F3; color:#0c2d3b; }
+.list-table tr.fam-row td{ cursor:pointer; padding:8px 12px; background:rgba(134,214,207,.07); border-top:1px solid rgba(134,214,207,.25); }
+.list-table tr.fam-row:hover td{ background:rgba(134,214,207,.13); }
+.list-table tr.fam-row .fam-caret{ display:inline-block; width:14px; color:#86D6CF; }
+.list-table tr.fam-row .fam-desc{ color:var(--text-pri); margin-right:8px; }
+.list-table tr.fam-row .fam-ref{ font-family:var(--font-mono); font-size:11.5px; color:#86D6CF; margin-right:10px; }
+.list-table tr.fam-row .fam-n{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-muted); }
+.list-table tr.fam-member td:first-child{ box-shadow:inset 3px 0 0 rgba(134,214,207,.45); }
+.list-table tr.fam-missing td{ color:var(--text-muted); font-style:italic; cursor:default; }
+.list-table tr.fam-missing .fam-na{ font-size:11px; }
 
 .list-table-wrap{
   flex:1;overflow:auto;max-height:540px;

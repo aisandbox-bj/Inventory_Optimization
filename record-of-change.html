@@ -381,6 +381,21 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Duplicate flag - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>Duplicate flag</b>: upload a potential-duplicates list in Intake → <b>Classification → Duplicates</b> on Trend (All duplicates · Duplicate families) (APP-DUP-FLAG) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Intake:</b> a new optional <b>Duplicate list</b> upload tile (☆ "adds the Duplicates filter on Trend"). Auto-detects a flat list of SAP #s or families (reference in column A, duplicates across the row or comma/semicolon-separated in one cell); header rows and description text are ignored (only material-number-like tokens are read). Deliberately <b>outside</b> the column-mapping step and the DQ gate — its own reader (<code>DuplicateList.readFile</code>, raw rows, so a headerless list keeps its first SAP #) — so the load-bearing Intake path is untouched. Saved as an additive top-level <code>json.duplicates</code> block (no SCHEMA_VERSION bump); restored on JSON upload; not carried by "Reuse datasets" (it belongs to its assessment).</li>
+        <li><b>Trend:</b> a <b>Classification ▾</b> filter tab opens a menu over the page (no layout shift): <b>All duplicates</b> (filter) and <b>Duplicate families</b> (grouped under a clickable header per reference material — description · SAP # (reference) · member count; open → reference first tagged REF, then members; members not in this analysis listed greyed, never silently dropped). Options grey out with the reason when no list / no groups. <b>DUP</b> tag on flagged rows everywhere. Prev/Next follow the grouped order (and open the family they land in). Combines with the other filters and survives the Trace round-trip (filter-hold).</li>
+        <li><b>Verified</b> on the June assessment with a test list (2 families + 1 single, incl. a description column and a non-analysed material): tile "7 materials · 2 families"; JSON-upload restore; empty-state greying; DUP tags on the 6 analysed; All duplicates = 6 of 175; families headers + "2 in this view"; open family = REF, member, greyed non-analysed row; Prev/Next across families; closing a family; held across Trace and back; no console errors. Files: <code>shared/duplicate-list.js</code> (new in the repo), <code>intake/intake.{js,html}</code>, <code>analysis/analysis.{js,css,html}</code>. Rollback: <code>checkpoint/pre-dupflag</code> at <code>9ede3cd</code> + local <code>_rollback/DUPFLAG-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Cadence open PRs - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">

@@ -131,7 +131,8 @@
     mrpTemplate: false,                              // APP-MRP-REQ Part A — opt-in: this run will produce the MRP Request Template, so Fleet Master + IW39 become required (they resolve each part to fleet make/model/site)
     psFilters: [],                                   // Parameter-Search filter cards
     alignmentAck: null,                              // APP-E6 · { acknowledgedAt, dimensions } once operator confirms scope alignment
-    inventoryMasterDate: null                        // APP-FIX-SNAPSHOT-ALIGN · SAP extract date of the Inventory Master (yyyy-mm-dd)
+    inventoryMasterDate: null,                       // APP-FIX-SNAPSHOT-ALIGN · SAP extract date of the Inventory Master (yyyy-mm-dd)
+    duplicates: null                                 // APP-DUP-FLAG · parsed potential-duplicates list { hasFamilies, materials, families } (→ json.duplicates)
   };
 
   /* APP-FIX-SNAPSHOT-ALIGN — pull a yyyy-mm-dd (or yyyymmdd / yyyy_mm_dd) date out
@@ -269,6 +270,8 @@
           : { level:'na' };
       case 'leadTimes':
         return { level:'opt', reason:'enables lead-time-based Min/Max' };
+      case 'duplicateList':   // APP-DUP-FLAG
+        return { level:'opt', reason:'adds the Duplicates filter on Trend' };
       default:
         return { level:'na' };
     }
@@ -332,6 +335,57 @@
       });
     }
     syncInventoryMasterDateInput();
+    setupDuplicateDrop();   // APP-DUP-FLAG
+  }
+
+  /* APP-DUP-FLAG — the potential-duplicates worklist. Deliberately NOT one of the
+     REQUIRED/CONDITIONAL_SOURCES: it's a freeform list (one SAP # column, or a
+     reference in column A with its duplicates across the row / comma-separated), not
+     a fixed-column SAP export — so it skips column mapping and the DQ gate entirely
+     and is parsed by shared/duplicate-list.js into an additive json.duplicates block. */
+  function setupDuplicateDrop(){
+    const drop = document.querySelector('.drop[data-source="duplicateList"]');
+    if (!drop || drop._dupWired) return;
+    drop._dupWired = true;
+    const input = drop.querySelector('input[type="file"]');
+    drop.addEventListener('dragover',  (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+    drop.addEventListener('dragleave', ()  => drop.classList.remove('dragover'));
+    drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('dragover'); if (e.dataTransfer.files.length) handleDuplicateFile(e.dataTransfer.files[0]); });
+    input.addEventListener('change', (e) => { if (e.target.files.length) handleDuplicateFile(e.target.files[0]); e.target.value = ''; });
+  }
+  function duplicateSummary(d){
+    if (!d) return '';
+    const n = (d.materials || []).length, f = (d.families || []).length;
+    return `${n.toLocaleString()} material${n === 1 ? '' : 's'}` + (f ? ` · ${f.toLocaleString()} famil${f === 1 ? 'y' : 'ies'}` : ' · flat list');
+  }
+  function showDuplicateTile(label){
+    const drop = document.querySelector('.drop[data-source="duplicateList"]');
+    if (!drop) return;
+    drop.classList.toggle('loaded', !!state.duplicates);
+    drop.querySelector('.file').textContent = label;
+  }
+  async function handleDuplicateFile(file){
+    if (typeof DuplicateList === 'undefined'){ toast('Duplicate-list reader unavailable.', 'crit'); return; }
+    showDuplicateTile(`${file.name} · reading…`);
+    try {
+      const rows = await DuplicateList.readFile(file);
+      const d = DuplicateList.parse(rows);
+      if (!d.materials.length){
+        state.duplicates = null;
+        showDuplicateTile(`${file.name} · no SAP material numbers found`);
+        toast('No SAP material numbers found in that file — nothing loaded.', 'crit');
+      } else {
+        state.duplicates = d;
+        showDuplicateTile(`${file.name} · ${duplicateSummary(d)}`);
+        toast(`Duplicate list loaded — ${duplicateSummary(d)}.`, 'ok');
+      }
+      renderJsonPreview();
+    } catch (e){
+      console.error(e);
+      state.duplicates = null;
+      showDuplicateTile(`${file.name} · ERROR: ${e.message || e}`);
+      toast('Duplicate list failed to load: ' + (e.message || e), 'crit');
+    }
   }
 
   // APP-FIX-SNAPSHOT-ALIGN — reflect state.inventoryMasterDate into the field + a
@@ -2177,6 +2231,8 @@
     for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
       if (state.parsed[s]) json.data[s] = state.parsed[s].canonical;
     }
+    // APP-DUP-FLAG — additive, optional top-level block (no SCHEMA_VERSION bump; absent = no list)
+    if (state.duplicates && state.duplicates.materials && state.duplicates.materials.length) json.duplicates = state.duplicates;
     json.validation = state.dq ? {
       passed: state.dq.passed,
       issues: state.dq.issues.concat(state.dq.warnings).map(i => ({
@@ -2195,6 +2251,7 @@
       const arr = summary.data[key] || [];
       summary.data[key] = arr.length > 0 ? `[ … ${arr.length} rows … ]` : `[ ]`;
     }
+    if (summary.duplicates) summary.duplicates = `{ … ${duplicateSummary(summary.duplicates)} … }`;   // APP-DUP-FLAG
     host.textContent = JSON.stringify(summary, null, 2);
 
     const sizeBytes = new Blob([JSON.stringify(json)]).size;
@@ -2333,6 +2390,9 @@
         // back to createdAt as the closest honest proxy.
         state.uploadedAt = json.metadata.uploadedAt || json.metadata.createdAt || null;
         state.inventoryMasterDate = (json.metadata && json.metadata.inventoryMasterDate) || null;  // APP-FIX-SNAPSHOT-ALIGN
+        // APP-DUP-FLAG — carry the duplicate list through a JSON upload so a re-save keeps it
+        state.duplicates = (json.duplicates && Array.isArray(json.duplicates.materials) && json.duplicates.materials.length) ? json.duplicates : null;
+        showDuplicateTile(state.duplicates ? `${duplicateSummary(state.duplicates)} · loaded from JSON` : 'drag .xlsx / .csv here, or click');
         // Stuff data into parsed slots so downstream UI works
         for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
           if (json.data[s] && json.data[s].length) {

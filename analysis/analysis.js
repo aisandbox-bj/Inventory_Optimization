@@ -17,6 +17,9 @@
     filterTl:        'ALL',
     filterAction:    false,       // APP-TREND-ACTFILTER — show only For-Action-flagged materials
     showAllUserList: false,       // APP-USERLIST-SHOWALL — override: show EVERY material in a user-specified list (bypass the usage + event screens). In-memory, defaults off.
+    dupIdx:          null,        // APP-DUP-FLAG — DuplicateList.index(json.duplicates) (null-safe lookups)
+    filterDup:       null,        // APP-DUP-FLAG — null | 'all' (All duplicates) | 'families' (Duplicate families)
+    dupOpen:         new Set(),   // APP-DUP-FLAG — family reference materials currently expanded
     selectedFleets:  new Set(),   // APP-ACT-02b — buckets ticked for the "Selected fleets" exports
     traceExcl:       { manualByMat:{}, sigmaLimit:null },  // APP-FIX-TREND-LT-SUPPRESS — Trace outlier suppression (from trace.viewState)
     sortKey:         'totalNet',
@@ -59,6 +62,8 @@
     // last left (e.g. a Trace round-trip full-page reload). Read NOW, before the
     // boot-time selectBucket() clears them, then re-apply at the end of boot.
     const savedFilters = readSavedFilters();
+    // APP-DUP-FLAG — index the optional potential-duplicates list (absent → empty index)
+    state.dupIdx = (typeof DuplicateList !== 'undefined') ? DuplicateList.index(json.duplicates) : null;
     renderLoadedBanner();
     // APP-FIX-TREND-LT-SUPPRESS — load Trace's persisted outlier suppression (manual
     // PO excludes + sigma) so the lead-time figures reflect what the operator trimmed
@@ -98,7 +103,8 @@
       sessionStorage.setItem(filterHoldKey(), JSON.stringify({
         s:   state.searchText   || '',
         tl:  state.filterTl     || 'ALL',
-        act: !!state.filterAction
+        act: !!state.filterAction,
+        dup: state.filterDup || null     // APP-DUP-FLAG
       }));
     } catch (e) { /* private mode / quota / no sessionStorage — non-fatal */ }
   }
@@ -111,17 +117,21 @@
       return {
         s:   typeof o.s  === 'string' ? o.s  : '',
         tl:  typeof o.tl === 'string' ? o.tl : 'ALL',
-        act: !!o.act
+        act: !!o.act,
+        dup: (o.dup === 'all' || o.dup === 'families') ? o.dup : null
       };
     } catch (e) { return null; }
   }
   function applySavedFilters(f){
     if (!f) return;
     // Nothing held (all defaults) → leave the fresh view untouched.
-    if (!f.s && (f.tl === 'ALL' || !f.tl) && !f.act) return;
+    if (!f.s && (f.tl === 'ALL' || !f.tl) && !f.act && !f.dup) return;
     state.searchText   = f.s;
     state.filterTl     = f.tl || 'ALL';
     state.filterAction = f.act;
+    // APP-DUP-FLAG — only re-apply a Duplicates view this assessment can actually show
+    state.filterDup    = (f.dup === 'all' && state.dupIdx && state.dupIdx.loaded) ? 'all'
+                       : (f.dup === 'families' && state.dupIdx && state.dupIdx.hasFamilies) ? 'families' : null;
     const inp = $('#listSearch');
     if (inp) inp.value = f.s;
     renderFilterButtons();
@@ -479,7 +489,15 @@
     const saHtml = isUserSpecifiedList()
       ? `<span class="tl-sep"></span><button data-showall="1" class="showall-toggle${state.showAllUserList ? ' active' : ''}" title="Show EVERY material in your uploaded list — including parts with no consumption in the window. Bypasses the usage (threshold) and event-count filters; parts with nothing to recommend on appear GREY. Re-runs the analysis.">⊕ Show all list materials</button>`
       : '';
-    host.innerHTML = tlHtml + actHtml + saHtml;
+    // APP-DUP-FLAG — "Classification ▾" filter tab (operator 2026-09-25). Its menu opens
+    // OVER the page (no layout shift). Label shows the active choice + a ✕ to clear it.
+    const dupLab = state.filterDup === 'all' ? 'All duplicates' : state.filterDup === 'families' ? 'Duplicate families' : '';
+    const clsHtml = `<button data-cls="1" class="cls-filter${state.filterDup ? ' active' : ''}">Classification${dupLab ? `: ${dupLab}` : ''} ▾</button>`
+      + (state.filterDup ? `<button data-clsclear="1" class="cls-clear" aria-label="Clear classification filter">✕</button>` : '')
+      + `<span class="tl-sep"></span>`;
+    host.innerHTML = clsHtml + tlHtml + actHtml + saHtml;
+    host.querySelector('button[data-cls]')?.addEventListener('click', (e) => { e.stopPropagation(); openClassificationMenu(e.currentTarget); });
+    host.querySelector('button[data-clsclear]')?.addEventListener('click', () => setDupFilter(null));
     $$('#tlFilter button[data-tl]').forEach(b => {
       b.addEventListener('click', () => { state.filterTl = b.dataset.tl; renderList(); renderFilterButtons(); persistFilters(); });
     });
@@ -487,6 +505,44 @@
     if (af) af.addEventListener('click', () => { state.filterAction = !state.filterAction; renderList(); renderFilterButtons(); persistFilters(); });
     const sa = host.querySelector('button[data-showall]');
     if (sa) sa.addEventListener('click', async () => { state.showAllUserList = !state.showAllUserList; await runPipelineNow(false); });
+  }
+
+  // APP-DUP-FLAG — Classification menu. Duplicates is only selectable when a duplicate
+  // list was loaded at Intake; "Duplicate families" only when that list has groups.
+  function setDupFilter(v){
+    state.filterDup = v;
+    renderFilterButtons(); renderList(); persistFilters();
+  }
+  function openClassificationMenu(btn){
+    document.querySelector('.cls-menu')?.remove();
+    const idx = state.dupIdx || { loaded:false, hasFamilies:false, count:()=>0, familyCount:()=>0 };
+    const item = (val, label, enabled, why) => `<button class="cls-item${state.filterDup === val ? ' on' : ''}" data-v="${val}" ${enabled ? '' : 'disabled'}>${label}${!enabled && why ? `<span class="cls-why">${why}</span>` : ''}</button>`;
+    const menu = document.createElement('div');
+    menu.className = 'cls-menu';
+    menu.innerHTML =
+      `<div class="cls-h">Duplicates${idx.loaded ? ` <span class="cls-n">${idx.count().toLocaleString()} flagged${idx.hasFamilies ? ` · ${idx.familyCount().toLocaleString()} families` : ''}</span>` : ''}</div>`
+      + item('all', 'All duplicates', idx.loaded, 'load a duplicate list in Intake')
+      + item('families', 'Duplicate families', idx.hasFamilies, idx.loaded ? 'your list has no groups' : 'load a duplicate list in Intake')
+      + (state.filterDup ? `<button class="cls-item cls-off" data-v="">Show all materials (clear)</button>` : '');
+    const r = btn.getBoundingClientRect();
+    menu.style.left = Math.max(8, r.left) + 'px';
+    menu.style.top  = (r.bottom + 4) + 'px';
+    document.body.appendChild(menu);
+    const close = () => { menu.remove(); document.removeEventListener('click', off, true); };
+    const off = (ev) => { if (!menu.contains(ev.target)) close(); };
+    setTimeout(() => document.addEventListener('click', off, true), 0);
+    menu.querySelectorAll('.cls-item:not([disabled])').forEach(b => b.addEventListener('click', () => { close(); setDupFilter(b.dataset.v || null); }));
+  }
+  // Description for any material (analysed row first, else Inventory Master) — used for
+  // family headers and for family members that aren't in this analysis.
+  let _imDesc = null;
+  function descFor(mat, rowByMat){
+    const r = rowByMat && rowByMat.get(mat); if (r && r.description) return r.description;
+    if (!_imDesc){
+      _imDesc = new Map();
+      for (const x of ((state.json && state.json.data && state.json.data.inventoryMaster) || [])){ const k = String(x.material || '').trim(); if (k && !_imDesc.has(k)) _imDesc.set(k, x.description || ''); }
+    }
+    return _imDesc.get(String(mat)) || '';
   }
 
   // APP-USERLIST-SHOWALL — the "Show all" override applies only to a user-typed
@@ -567,6 +623,10 @@
     if (state.filterTl !== 'ALL') rows = rows.filter(m => m.trafficLight === state.filterTl);
     // APP-TREND-ACTFILTER — isolate materials flagged For Action (ANDed with TL/search).
     if (state.filterAction && state.analyst) rows = rows.filter(m => state.analyst.isAction(m.material));
+    // APP-DUP-FLAG — Classification: All duplicates / Duplicate families (ANDed with the rest)
+    const dup = state.dupIdx;
+    if (state.filterDup === 'all' && dup && dup.loaded) rows = rows.filter(m => dup.isDuplicate(m.material));
+    if (state.filterDup === 'families' && dup && dup.hasFamilies) rows = rows.filter(m => dup.familyOf(m.material));
     if (state.searchText) {
       const q = state.searchText.toLowerCase();
       rows = rows.filter(m => (m.material || '').toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q));
@@ -580,7 +640,24 @@
       if (typeof av === 'number' && typeof bv === 'number') return dir === 'asc' ? av - bv : bv - av;
       return dir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
     });
+    // Families view: regroup into family order (list order), reference first, then the
+    // members in the current sort — so Prev/Next steps through exactly what's on screen.
+    if (state.filterDup === 'families' && dup && dup.hasFamilies) return familyGroups(rows).flatMap(g => g.rows);
     return rows;
+  }
+  // APP-DUP-FLAG — group the (already filtered + sorted) rows by duplicate family.
+  // A material that appears in more than one family is listed under its first family.
+  function familyGroups(rows){
+    const dup = state.dupIdx, byMat = new Map(rows.map(m => [m.material, m]));
+    const placed = new Set(), out = [];
+    for (const f of dup.families()){
+      const ref = byMat.get(f.ref);
+      const members = rows.filter(m => m.material !== f.ref && !placed.has(m.material) && dup.familyOf(m.material) === f);
+      const grp = (ref && !placed.has(f.ref) ? [ref] : []).concat(members);
+      grp.forEach(m => placed.add(m.material));
+      out.push({ fam: f, rows: grp });
+    }
+    return out;
   }
 
   // APP-ACT-01 — Prev/Next stepping. Moves the selection one row through the
@@ -607,7 +684,8 @@
     const rows = computeVisibleRows();
 
     const tbl = $('#listTableWrap');
-    if (rows.length === 0) {
+    // (families view handles its own empty state — a family can be all "not in this analysis")
+    if (rows.length === 0 && state.filterDup !== 'families') {
       tbl.innerHTML = `<div class="list-empty">no materials match the current filter</div>`;
       return;
     }
@@ -624,18 +702,24 @@
         </th>`;
     }).join('');
 
-    const tbody = rows.map(m => {
+    const dupIdx = state.dupIdx;
+    const famMode = state.filterDup === 'families' && dupIdx && dupIdx.hasFamilies;
+    const rowHtml = (m, extra) => {
       const isReview = state.marked.review.has(m.material);
       const isAction = !!(state.analyst && state.analyst.isAction(m.material));   // APP-ACT-01
       const isNote   = !!(state.analyst && state.analyst.hasNote(m.material));    // APP-TREND-NOTES
+      // APP-DUP-FLAG — REF on a family's reference row (families view), DUP on any flagged duplicate
+      const dupTag = (extra && extra.ref) ? '<span class="dup-tag ref">REF</span>'
+                   : (dupIdx && dupIdx.isDuplicate(m.material)) ? '<span class="dup-tag">DUP</span>' : '';
       const rowClasses = [
         state.selectedMaterial === m.material ? 'selected' : '',
         (isReview || isAction || isNote) ? 'marked-any' : '',
         isReview ? 'marked-review' : '',
-        isAction ? 'marked-action' : ''
+        isAction ? 'marked-action' : '',
+        (extra && extra.fam) ? 'fam-member' : ''
       ].filter(Boolean).join(' ');
-      const badges = (isReview || isAction || isNote)
-        ? `<span class="mark-badges">${isAction ? '<span class="mark-badge action" title="Flagged For Action">★</span>' : ''}${isNote ? '<span class="mark-badge note" title="Has an analyst note">✎</span>' : ''}${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}</span>`
+      const badges = (isReview || isAction || isNote || dupTag)
+        ? `<span class="mark-badges">${dupTag}${isAction ? '<span class="mark-badge action" title="Flagged For Action">★</span>' : ''}${isNote ? '<span class="mark-badge note" title="Has an analyst note">✎</span>' : ''}${isReview ? '<span class="mark-badge review" title="Marked for LLM review">✦</span>' : ''}</span>`
         : '';
       return `
       <tr data-material="${escapeAttr(m.material)}" class="${rowClasses}">
@@ -652,11 +736,50 @@
         <td class="num">${m.mrpRecFlag ? `<span class="mrp-reclass" title="${escapeAttr(m.mrpReclassNote || '')}">${escapeHtml(m.mrpRecFlag)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="num" style="color:${m.pattern === 'LUMPY' ? 'var(--status-warn)' : 'var(--text-muted)'}">${escapeHtml(m.pattern || '—')}</td>
       </tr>`;
-    }).join('');
+    };
+
+    let tbody, famCount = 0;
+    if (!famMode){
+      tbody = rows.map(m => rowHtml(m)).join('');
+    } else {
+      // APP-DUP-FLAG — Duplicate families: a clickable header per reference material;
+      // open it to review the family (reference first). Members NOT in this analysis are
+      // listed greyed (no data to open) when no other filter is narrowing the view.
+      const rowByMat = new Map(bucket.materials.map(m => [m.material, m]));
+      const narrowed = state.filterTl !== 'ALL' || state.filterAction || !!state.searchText || Object.keys(state.colFilters).some(k => colFilterActive(k));
+      const NC = LIST_COLS.length;
+      // Prev/Next landing inside a closed family opens it, so the selection is visible
+      // (once per selection — so you can still close that family afterwards)
+      const selFam = state.selectedMaterial && dupIdx.familyOf(state.selectedMaterial);
+      if (selFam && state._dupAutoFor !== state.selectedMaterial){ state.dupOpen.add(selFam.ref); state._dupAutoFor = state.selectedMaterial; }
+      tbody = familyGroups(rows).map(g => {
+        const f = g.fam, missing = narrowed ? [] : f.members.filter(x => !rowByMat.has(x));
+        if (!g.rows.length && !missing.length) return '';
+        famCount++;
+        const open = state.dupOpen.has(f.ref);
+        const head = `<tr class="fam-row${open ? ' open' : ''}" data-fam="${escapeAttr(f.ref)}"><td colspan="${NC}">
+            <span class="fam-caret">${open ? '▾' : '▸'}</span>
+            <b class="fam-desc">${escapeHtml(descFor(f.ref, rowByMat) || '(no description)')}</b>
+            <span class="fam-ref">${escapeHtml(f.ref)} (reference)</span>
+            <span class="fam-n">${f.members.length} material${f.members.length === 1 ? '' : 's'}${g.rows.length !== f.members.length ? ` · ${g.rows.length} in this view` : ''}</span>
+          </td></tr>`;
+        if (!open) return head;
+        const body = g.rows.map(m => rowHtml(m, { fam: true, ref: m.material === f.ref })).join('')
+          + missing.map(x => `<tr class="fam-member fam-missing"><td></td><td class="mat">${escapeHtml(x)}${x === f.ref ? '<span class="mark-badges"><span class="dup-tag ref">REF</span></span>' : ''}</td><td class="desc" colspan="${NC - 2}">${escapeHtml(descFor(x) || '')} <span class="fam-na">— not in this analysis (no consumption in the window, or out of scope)</span></td></tr>`).join('');
+        return head + body;
+      }).join('');
+      if (!famCount) { tbl.innerHTML = `<div class="list-empty">no duplicate families match the current filter</div>`; return; }
+    }
     tbl.innerHTML = `<table class="list-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
                      <div class="list-meta" style="padding:8px 14px;font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted);letter-spacing:.5px;">
-                       ${rows.length.toLocaleString()} of ${bucket.materials.length.toLocaleString()} materials shown
+                       ${rows.length.toLocaleString()} of ${bucket.materials.length.toLocaleString()} materials shown${famMode ? ` · ${famCount.toLocaleString()} famil${famCount === 1 ? 'y' : 'ies'} — click a family to open it` : ''}
                      </div>`;
+    // APP-DUP-FLAG — open / close a family
+    $$('#listTableWrap tr.fam-row').forEach(tr => tr.addEventListener('click', () => {
+      const ref = tr.dataset.fam;
+      if (state.dupOpen.has(ref)) state.dupOpen.delete(ref); else state.dupOpen.add(ref);
+      renderList();
+    }));
 
     // Sort: click label → toggle sort
     $$('#listTableWrap .th-label').forEach(lab => {
@@ -675,7 +798,7 @@
         openColFilterPopover(btn);
       });
     });
-    $$('#listTableWrap tbody tr').forEach(tr => {
+    $$('#listTableWrap tbody tr[data-material]').forEach(tr => {   // material rows only (not family headers / not-in-analysis rows)
       tr.addEventListener('click', () => {
         state.selectedMaterial = tr.dataset.material;
         renderList();

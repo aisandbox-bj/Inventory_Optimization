@@ -269,6 +269,15 @@
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv" />
           </label>
+          <!-- APP-DUP-FLAG (2026-09-25) — potential-duplicates worklist. Freeform list, so it
+               is read by shared/duplicate-list.js (no column mapping, no DQ gate). -->
+          <label class="drop drop-cond" data-source="duplicateList">
+            <span class="drop-flag" aria-hidden="true"></span>
+            <div class="name">Duplicate list <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional)</em></div>
+            <div class="hint">Potential duplicate materials. Either <b>one column of SAP #s</b>, or <b>groups</b>: the <b>reference</b> SAP # in column A with its potential duplicates across the same row (or comma-separated in one cell). Description text is ignored. Adds the <b>Duplicates</b> filter on Trend.</div>
+            <span class="file">drag .xlsx / .csv here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv,.txt" />
+          </label>
         </div>
       </div>
     </section>
@@ -512,6 +521,7 @@
 <script src="../shared/inventory-back-calc.js"></script>
 <script src="../shared/pipeline.js"></script>
 <script src="../shared/analyst-marks.js"></script>
+<script src="../shared/duplicate-list.js"></script><!-- APP-DUP-FLAG — parse the potential-duplicates worklist -->
 <script src="intake.js"></script>
 
 </body>
