@@ -381,6 +381,26 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Code-review fixes - 2026-09-25 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-25</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>Code-review fixes</b> for the day's new features — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Why.</b> After a day of heavy change the operator asked for a full code review of everything since <code>00ccee7</code>. It found <b>no regressions in the older app</b> (Trend maths, Intake DQ gate, the existing Screener export all intact) but ten issues in the new work. All ten are fixed here, plus one small extra found while testing.</li>
+        <li><b>Batch report comment leak (the serious one).</b> In a report for several flagged materials, any material without its own comment printed the <em>first</em> material's comment, and a comment typed in the block picker was silently saved as the first material's note. Now each material prints <b>only its own saved comment</b>; for a multi-material set the picker shows "each material prints its own saved comment" instead of a shared box. Verified: 2 flagged, only the first has a note → the note prints on its pages only, not on the second material's page.</li>
+        <li><b>Trend filter-hold only survived one Trace round-trip.</b> The page's start-up reset overwrote the held filter and the restore didn't re-save it. Fixed; verified "BOTTLE" held across two full Trend → Trace → Trend round-trips.</li>
+        <li><b>Trend notes and report comments could drift apart.</b> The durable comment store was only written by the report builder, so a note cleared on Trend could come back in a report as "carried forward". Now <b>every</b> note write (Trend notes drawer included) goes through one place that also updates the durable store; the comment store is loaded on Trend too. Verified: write on Trend → durable updated; clear on Trend → durable cleared.</li>
+        <li><b>Preview resize grip lingered after "‹ Back"</b> and stacked up on each preview; Widescreen "Maximize" then Back left the layout canvas oversized. The grip now lives inside the preview and leaves with it, and Back restores the exact previous size. Verified on Letter and Widescreen.</li>
+        <li><b>Duplicate-list reader</b> (not yet in use) would have turned description text into fake part numbers. It now only accepts tokens that look like material numbers (no spaces, at least one digit), and checks the header on the raw first cell. Known limit: a description cell that is <em>only</em> a code-like value with a digit (e.g. "2-114") would still be read as a part number.</li>
+        <li><b>Smaller:</b> the Trace "no purchase history" notice now has its own "← Back to Trend" link; the charting library for the cadence block loads only when first needed instead of on every Screener visit (verified: not loaded at start, loaded on the first cadence build, charts render); comment typing is saved after a short pause instead of rewriting both stores on every keystroke (flushed on leaving the box, on ↻ Update, on Preview and on close); an old "Report failed" message no longer lingers over a later successful build; stale code comments and the Build-report tooltip corrected; a no-op call removed.</li>
+        <li><b>Files:</b> <code>shared/report-builder.{js,css}</code>, <code>shared/analyst-marks.js</code>, <code>analysis/analysis.{js,html}</code>, <code>screener/screener.{js,html}</code>, <code>trace/trace.js</code>, <code>intake/intake.js</code> (comment only), <code>shared/duplicate-list.js</code> (working folder only). No SCHEMA_VERSION change. Rollback: <code>checkpoint/pre-review-fixes</code> at <code>26057c2</code> + local <code>_rollback/CODE-REVIEW-FIX-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Durable report comments + live comment editor - 2026-09-25 -->
     <article class="roc-entry dev">
       <div class="head">

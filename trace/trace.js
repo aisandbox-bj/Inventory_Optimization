@@ -659,6 +659,7 @@
       host.innerHTML = `<div class="view-empty">
         <div style="font-size:16px;color:var(--text-pri,#e7eef0);margin-bottom:8px"><b>Material ${escapeHtml(state.traceItMissing)}</b> has no purchase-order history in this assessment.</div>
         There's nothing to trace for it — the procurement chain, distribution, year-on-year and lead-time views all need PR&nbsp;&rarr;&nbsp;PO records. Pick another material from the list on the left.
+        <div style="margin-top:12px"><a class="banner-back" href="../analysis/analysis.html#mat=${encodeURIComponent(state.traceItMissing)}">&larr; Back to Trend (${escapeHtml(state.traceItMissing)})</a></div>
       </div>`;
       return;
     }

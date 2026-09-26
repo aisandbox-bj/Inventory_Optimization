@@ -2387,9 +2387,11 @@
   }
   /* APP-E3-TRIM — keep only the materials this assessment uses, dropping the
      full material catalog + any out-of-scope rows from the material-keyed
-     tables. Keep-set = (scope-resolved materials, via the pipeline's own bucket
-     logic so every scope mode is handled) ∪ (PR-History materials, so Trace's
-     chains survive). SAFE/lossless: the pipeline already restricts to scope at
+     tables. Keep-set = (explicit user-list materials) ∪ (scope-resolved materials,
+     via the pipeline's own bucket logic so every scope mode is handled). PR History
+     is trimmed to the same set (APP-FIX-TRIM-BLOAT 2026-09-25) — out-of-scope PR
+     history is dropped; Trace keeps the chains of every in-scope material because
+     computeChains filters prHistory by material. SAFE/lossless: the pipeline already restricts to scope at
      the bucket level, every per-material consumer looks up by in-scope material,
      and the Inv-Adj rate exclusion uses the STORED confirmed dates (not the σ
      candidate scan). Full reasoning: "_Hand-over docs/APP-E3 - JSON trim safety

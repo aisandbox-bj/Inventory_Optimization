@@ -143,6 +143,10 @@
         else if (data[material]) delete data[material].note;
         pruneIfEmpty(material);
         persist(name, data);
+        // APP-COMMENT-DURABLE — mirror EVERY note write (Trend notes drawer, report
+        // editor, …) into the durable per-material store when it's loaded, so an edit
+        // or a delete anywhere stays in sync and a cleared note can't be resurrected.
+        try { if (typeof CommentStore !== 'undefined') CommentStore.set(material, text, name || ''); } catch (e) {}
       },
       hasNote(material){ return noteHasContent(data[material]); },
 

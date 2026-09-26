@@ -108,6 +108,7 @@ a.rb-pv-dl{ text-decoration:none; }
   border-radius:6px; padding:7px 10px; }
 .rb-cmt-ta:focus{ outline:none; border-color:#1FCED8; box-shadow:0 0 0 2px rgba(31,206,216,.18); }
 .rb-cmt-upd{ white-space:nowrap; align-self:flex-start; }
+.rb-cmt-batchnote{ font-size:11.5px; font-style:italic; color:#8aa6ac; }
 
 /* Movable / resizable preview "workbench" (APP-RB-PVWORKBENCH) */
 .rb-pv-bar-move{ cursor:move; touch-action:none; }

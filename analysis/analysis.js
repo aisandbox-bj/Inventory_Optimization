@@ -126,6 +126,9 @@
     if (inp) inp.value = f.s;
     renderFilterButtons();
     renderList();
+    // Re-save: boot's selectBucket() already overwrote the held entry with the reset
+    // defaults, so without this the filters survived only ONE Trace round-trip.
+    persistFilters();
   }
 
   // APP-TRACE-BACK (2026-08-15) — Calibre Trace's "← Back to Trend" link lands here

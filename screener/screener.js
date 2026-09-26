@@ -262,8 +262,6 @@
     menu.querySelector('[data-act="import"]').addEventListener('click', () => { $('#commentsImport').click(); close(); });
   }
 
-  // APP-SCR-REPORT — enable the "Build report" button only when a material is
-  // selected (the report is per-material, like the flagged PDF export).
   // APP-SCR-REPORT — the Build-report button works like "Export flagged": it keys
   // off the flagged materials (the row checkboxes), and the builder operates on the
   // whole flagged SET (configure once → generate all), not one selected material.
@@ -518,7 +516,6 @@
      COMBINED DETAIL (MaterialDetail + TracePhase) — responsive grid
   ═════════════════════════════════════════════════════════════════════════ */
   function renderDetail(){
-    updateReportButton();   // APP-SCR-REPORT — toggle the Build-report button with selection
     const host = $('#scrDetail');
     const entry = state.materials.find(e => e.m.material === state.selectedMaterial);
     if (!entry) {

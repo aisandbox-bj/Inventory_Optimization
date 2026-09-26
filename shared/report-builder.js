@@ -70,6 +70,15 @@
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
     _h2cReady = true;
   }
+  // Chart.js is only needed for the MRP-run cadence block — load it on first use
+  // instead of blocking every Screener page load (code-review 2026-09-25).
+  let _chartLoad = null;
+  function ensureChartJs(){
+    if (global.Chart) return Promise.resolve();
+    if (!_chartLoad) _chartLoad = loadScript('https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js')
+      .catch(e => { _chartLoad = null; throw e; });   // allow a retry after a network failure
+    return _chartLoad;
+  }
 
   // SVG → JPEG dataURL (dark bg fill, small files). Reads viewBox for size.
   function svgToJpeg(svgEl, scale, quality){
@@ -271,33 +280,46 @@
     const m = ctx.m || {};
     return { soh: m.stock, mrpInd: m.mrpType, safetyStock: m.safetyStock, mrpMin: m.cmin, mrpMax: m.cmax };
   }
-  // The report comment for a material = its analyst NOTE (the same per-material store
-  // as the Trend notes — persisted per assessment, round-trips in the JSON), falling
-  // back to the picker's default comment for materials with no note.
-  // Read priority: the current assessment's analyst note (keeps report ⇄ Trend in
-  // sync within THIS assessment) → the durable per-material comment (carries across
-  // assessments, survives deleting the JSON) → the picker fallback.
-  function noteFor(ctx, opts){
+  // The report comment for a material = ITS OWN saved comment, never another
+  // material's. Read priority: the current assessment's analyst note (keeps report
+  // ⇄ Trend in sync within THIS assessment) → the durable per-material comment
+  // (carries across assessments, survives deleting the JSON). There is deliberately
+  // NO fallback to the picker text — in a batch that leaked the reference material's
+  // comment onto every other material (code-review 2026-09-25). `opts` is unused but
+  // kept so existing call sites stay unchanged.
+  function noteFor(ctx, opts){   // eslint-disable-line no-unused-vars
     let n = '';
     try { n = (ctx.analyst && ctx.analyst.getNote) ? (ctx.analyst.getNote(ctx.m.material) || '') : ''; } catch (e) {}
     if (n && n.trim()) return n;
     try { if (typeof CommentStore !== 'undefined'){ const c = CommentStore.get(ctx.m.material); if (c && c.trim()) return c; } } catch (e) {}
-    return (opts && opts.comment) || '';
+    return '';
   }
-  // Dual-write: the per-assessment analyst note (round-trips into the JSON + drives
-  // the Trend notes drawer) AND the durable per-material store (survives JSON
-  // deletion; reappears on any future assessment that contains this material).
+  // One write path: AnalystMarks.setNote persists the per-assessment note (round-trips
+  // in the JSON, drives the Trend drawer) and itself mirrors into the durable store.
+  // Only when there's no analyst sidecar do we write the durable store directly.
   function saveNote(ctx, text){
-    try { if (ctx.analyst && ctx.analyst.setNote) ctx.analyst.setNote(ctx.m.material, text || ''); } catch (e) {}
-    try { if (typeof CommentStore !== 'undefined') CommentStore.set(ctx.m && ctx.m.material, text || '', ctx.assessmentName || ''); } catch (e) {}
+    const mat = ctx.m && ctx.m.material;
+    try {
+      if (ctx.analyst && ctx.analyst.setNote) ctx.analyst.setNote(mat, text || '');
+      else if (typeof CommentStore !== 'undefined') CommentStore.set(mat, text || '', ctx.assessmentName || '');
+    } catch (e) {}
     // Let the host page (e.g. the Screener toolbar count) refresh without coupling.
     try { document.dispatchEvent(new CustomEvent('calibre:comments-changed')); } catch (e) {}
+  }
+  // Debounced saver for a comment textarea — typing no longer rewrites both stores
+  // on every keystroke. Call flush() before anything reads the note back.
+  function commentSaver(ctx){
+    let t = null, pending = null;
+    const flush = () => { if (t){ clearTimeout(t); t = null; } if (pending !== null){ const v = pending; pending = null; saveNote(ctx, v); } };
+    return { push(v){ pending = v; if (t) clearTimeout(t); t = setTimeout(flush, 350); }, flush };
   }
   const _cadCache = new Map();
   async function cadenceImages(ctx){
     if (typeof MrpCadence === 'undefined' || !MrpCadence.renderImages) return { empty:true, reason:'cadence renderer unavailable' };
     const key = (ctx.assessmentName || '') + '|' + String(ctx.m && ctx.m.material);
     if (_cadCache.has(key)) return _cadCache.get(key);
+    try { await ensureChartJs(); }
+    catch (e) { return { empty:true, reason:'the chart library could not be loaded (network)' }; }
     // Weekly is the standard, and the axis matches the Trend consumption chart's
     // date range [min(p1Start, first movement) .. max(p2End, last movement)] so the
     // cadence and the consumption line line up for assessing system behaviour.
@@ -562,7 +584,7 @@
       case 'rawpr':  { const n = Math.min((opts&&opts.lastN)||8, (safeDrawn(ctx).act||[]).length); return 16 + 8 + n*5.5; }
       case 'chains': { const n = Math.min((opts&&opts.lastN)||5, (safeDrawn(ctx).drawn||[]).length); return 16 + 8 + n*7; }
       case 'cadence': return 16 + CW*(0.333+0.255) + 14;
-      case 'comment':{ const t=(opts&&opts.comment||''); return t.trim()? 16 + Math.max(10, Math.ceil(t.length/90)*4.4+5) : 0; }
+      case 'comment':{ const t=noteFor(ctx, opts); return t.trim()? 16 + Math.max(10, Math.ceil(t.length/90)*4.4+5) : 0; }
       default: return 0;
     }
   }
@@ -642,8 +664,9 @@
       on: b.on && (b.needs !== 'pr' || ctx.hasPr) && !b.soon,
       box: b.id==='avgDur',
       lastN: b.lastN || 8,
-      comment: b.id === 'comment' ? noteFor(ctx, {}) : ''   // pre-fill from the reference material's note
+      comment: (b.id === 'comment' && nMat === 1) ? noteFor(ctx, {}) : ''   // single material: pre-fill from its own note
     }));
+    const pickerSaver = commentSaver(ctx);
 
     const ov = document.createElement('div');
     ov.className = 'rb-overlay';
@@ -698,7 +721,11 @@
       let optHtml = '';
       if (it.opt === 'box') optHtml = `<label class="rb-optb"><input type="checkbox" class="rb-box" ${it.box?'checked':''}> box &amp; whisker</label>`;
       if (it.opt === 'lastN') optHtml = `<label class="rb-optb">last <input type="number" class="rb-n" min="1" max="50" value="${it.lastN}"> </label>`;
-      if (it.opt === 'comment') optHtml = `<textarea class="rb-comment" placeholder="Type comments to include in the report…" rows="2">${esc(it.comment)}</textarea>`;
+      // Single material: the picker edits that material's own comment. A batch has no
+      // single comment to edit — each material prints its own saved comment.
+      if (it.opt === 'comment') optHtml = nMat > 1
+        ? `<span class="rb-cmt-batchnote">each material prints its own saved comment</span>`
+        : `<textarea class="rb-comment" placeholder="Type comments to include in the report…" rows="2">${esc(it.comment)}</textarea>`;
       li.innerHTML = `
         <span class="rb-grip" title="Drag to reorder">⠿</span>
         <label class="rb-chk"><input type="checkbox" class="rb-on" ${it.on?'checked':''} ${disabled?'disabled':''}></label>
@@ -709,7 +736,11 @@
       if (onBox) onBox.addEventListener('change', () => { it.on = onBox.checked; li.classList.toggle('on', it.on); refreshWarn(); });
       const box = li.querySelector('.rb-box'); if (box) box.addEventListener('change', () => { it.box = box.checked; refreshWarn(); });
       const n = li.querySelector('.rb-n'); if (n) n.addEventListener('input', () => { it.lastN = Math.max(1, Math.min(50, parseInt(n.value||'1',10)||1)); refreshWarn(); });
-      const cm = li.querySelector('.rb-comment'); if (cm) cm.addEventListener('input', () => { it.comment = cm.value; saveNote(ctx, cm.value); });   // persist like a Trend note
+      const cm = li.querySelector('.rb-comment');
+      if (cm){   // persist like a Trend note (debounced; flushed on blur and before Preview)
+        cm.addEventListener('input', () => { it.comment = cm.value; pickerSaver.push(cm.value); });
+        cm.addEventListener('blur', pickerSaver.flush);
+      }
       // DnD
       li.addEventListener('dragstart', e => { li.classList.add('drag'); e.dataTransfer.setData('text/plain', it.id); });
       li.addEventListener('dragend',   () => li.classList.remove('drag'));
@@ -758,7 +789,7 @@
     }
     refreshWarn();
 
-    function close(){ ov.remove(); document.removeEventListener('keydown', onKey); }
+    function close(){ pickerSaver.flush(); ov.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e){ if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
     ov.querySelector('.rb-x').addEventListener('click', close);
@@ -793,8 +824,10 @@
     }
 
     ov.querySelector('.rb-gen').addEventListener('click', async () => {
+      pickerSaver.flush();   // the build reads comments back from the note store
       const blocks = selectedBlocks();
       if (!blocks.length){ warnEl.hidden = false; warnEl.className='rb-warn'; warnEl.innerHTML = '⚠ Pick at least one block to include.'; return; }
+      refreshWarn();   // clear any earlier "Report failed" so it can't linger over a successful build
       const gen = ov.querySelector('.rb-gen'); const orig = gen.textContent;
       gen.disabled = true; gen.textContent = pageSize === 'wide' ? 'Building cards…' : 'Rendering…';
       try {
@@ -1284,11 +1317,13 @@
     const frame = pv.querySelector('.rb-pv-frame');
     pv.insertBefore(bar, frame);
     const ta = bar.querySelector('.rb-cmt-ta');
-    ta.addEventListener('input', () => saveNote(ctx, ta.value));
+    const saver = commentSaver(ctx);   // debounced — not a full store rewrite per keystroke
+    ta.addEventListener('input', () => saver.push(ta.value));
+    ta.addEventListener('blur', saver.flush);
     const upd = bar.querySelector('.rb-cmt-upd');
     if (upd && regen) upd.addEventListener('click', async (e) => {
       const b = e.currentTarget; const o = b.textContent; b.disabled = true; b.textContent = '…';
-      saveNote(ctx, ta.value);
+      saver.push(ta.value); saver.flush();
       try { const nres = await regen(); const fr = pv.querySelector('.rb-pv-frame'); const old = fr.src; fr.src = nres.url; try { URL.revokeObjectURL(old); } catch (er){} } catch (err){ console.error(err); }
       b.disabled = false; b.textContent = o;
     });
@@ -1298,7 +1333,9 @@
   // move it, drag the corner grip to resize (bigger = zoom in on the report), and
   // a ⤢ Maximize toggle for a quick full-screen look. Applied to both Letter and
   // Widescreen previews.
+  // Returns restore() — puts the modal back to its pre-preview size/position.
   function makePreviewInteractive(modal, pv){
+    const entry = { w: modal.style.width, h: modal.style.height };
     const bar = pv.querySelector('.rb-pv-bar');
     let tx = 0, ty = 0;
     const applyT = () => { modal.style.transform = (tx || ty) ? `translate(${tx}px,${ty}px)` : ''; };
@@ -1315,9 +1352,10 @@
         bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
       });
     }
-    // Resize — bottom-right grip
+    // Resize — bottom-right grip. Lives INSIDE the preview panel so it leaves with it
+    // (it used to be appended to the modal and lingered/stacked after Back).
     const grip = document.createElement('div'); grip.className = 'rb-pv-resize'; grip.title = 'Drag to resize';
-    modal.appendChild(grip);
+    pv.appendChild(grip);
     grip.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation();
       try { grip.setPointerCapture(e.pointerId); } catch (_) {}
@@ -1347,6 +1385,7 @@
       });
       actions.insertBefore(btn, actions.firstChild);
     }
+    return () => { modal.style.width = entry.w; modal.style.height = entry.h; modal.style.transform = ''; };
   }
 
   async function renderWidePdf(ctx, cards, theme){
@@ -1380,8 +1419,8 @@
     pv.innerHTML = `<div class="rb-pv-bar"><span class="rb-pv-meta">Widescreen · ${res.pages} page${res.pages===1?'':'s'}</span><span class="rb-pv-actions"><button class="rb-btn ghost rb-pv-back">‹ Back to layout</button><button class="rb-btn ghost rb-pv-print">🖨 Print</button><a class="rb-btn primary rb-pv-dl" download="${esc(res.filename)}" href="${res.url}">⤓ Download PDF</a></span></div><iframe class="rb-pv-frame" title="Report preview" src="${res.url}"></iframe>`;
     modal.appendChild(pv);
     if (ctx && regen) attachCommentEditor(pv, ctx, regen);
-    makePreviewInteractive(modal, pv);
-    pv.querySelector('.rb-pv-back').addEventListener('click', ()=>{ pv.remove(); modal.style.transform=''; try{URL.revokeObjectURL(res.url);}catch(e){} });
+    const restoreModal = makePreviewInteractive(modal, pv);
+    pv.querySelector('.rb-pv-back').addEventListener('click', ()=>{ pv.remove(); restoreModal(); try{URL.revokeObjectURL(res.url);}catch(e){} });
     pv.querySelector('.rb-pv-print').addEventListener('click', ()=>{ try { pv.querySelector('.rb-pv-frame').contentWindow.print(); } catch(e){ window.open(res.url, '_blank'); } });
   }
 
