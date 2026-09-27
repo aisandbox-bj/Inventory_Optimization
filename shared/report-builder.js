@@ -330,7 +330,16 @@
     let n = '';
     try { n = (ctx.analyst && ctx.analyst.getNote) ? (ctx.analyst.getNote(ctx.m.material) || '') : ''; } catch (e) {}
     if (n && n.trim()) return n;
-    try { if (typeof CommentStore !== 'undefined'){ const c = CommentStore.get(ctx.m.material); if (c && c.trim()) return c; } } catch (e) {}
+    // APP-NOTE-HISTORY (2026-09-27) — prints THIS review's note only: the analyst
+    // note, else this review's entry in the durable store (survives deleting the
+    // JSON). Notes from EARLIER reviews show under "Previous notes" in the Canvas
+    // note card (with "Use for this review"); they no longer print automatically.
+    try {
+      if (typeof CommentStore !== 'undefined' && CommentStore.entryFor){
+        const e = CommentStore.entryFor(ctx.m.material, ctx.assessmentName || '');
+        if (e && e.text && e.text.trim()) return e.text;
+      }
+    } catch (e) {}
     return '';
   }
   // One write path: AnalystMarks.setNote persists the per-assessment note (round-trips
@@ -1372,10 +1381,6 @@
         <span class="rb-w-removed"></span>
         <span class="rb-w-saved"></span>
       </div>
-      <div class="rb-cmt-editor rb-w-cmt">
-        <span class="rb-cmt-lab">✎ Comment<span class="rb-cmt-carry rb-w-cmt-mat"></span></span>
-        <textarea class="rb-cmt-ta" rows="2" placeholder="Comment for this material — kept against the material and reloaded next time. Shows in the page's Comment tile."></textarea>
-      </div>
       <div class="rb-stage-wrap">
         <div class="rb-stage"><div class="rb-w-tnc"></div></div>
         <div class="rb-cv-tiles" hidden>
@@ -1384,6 +1389,15 @@
           <div class="rb-cv-tiles-note">Drag a tile to move it · drag its corner to resize · ✕ removes it. Changes apply to every page.</div>
           <div class="rb-cv-tiles-f"><button class="rb-btn ghost rb-cv-auto">Auto-arrange</button></div>
         </div>
+      </div>
+      <div class="rb-note" role="dialog" aria-label="Note for this material">
+        <div class="rb-note-h"><span class="rb-note-t">✎ Note · <b class="rb-note-mat"></b></span><span class="rb-note-state"></span><button type="button" class="rb-note-min" aria-label="Minimise the note card">–</button></div>
+        <div class="rb-note-body">
+          <button type="button" class="rb-note-prevbtn"><span class="rb-note-tri">▸</span> Previous notes <span class="rb-note-n"></span></button>
+          <div class="rb-note-prev" hidden></div>
+          <textarea class="rb-note-ta" placeholder="Note for this review — saves as you type and prints in the page's Comment tile."></textarea>
+        </div>
+        <div class="rb-note-grip" aria-hidden="true"></div>
       </div>`;
     modal.appendChild(pane);
     const stage = pane.querySelector('.rb-stage');
@@ -1478,7 +1492,7 @@
       stage.insertBefore(box, tncEl); boxes.push(b); place(b);
       box.addEventListener('pointerdown', (e) => {
         if (e.target === grip) return;
-        if (!editing){ if (c.id === 'comment') cmtTa.focus(); return; }   // Review: tiles are locked
+        if (!editing){ if (c.id === 'comment') noteFocus(); return; }   // Review: tiles are locked
         e.preventDefault(); box.setPointerCapture(e.pointerId); box.classList.add('drag');
         const r = stage.getBoundingClientRect(); const sx = e.clientX, sy = e.clientY, ox = c.x, oy = c.y;
         let moved = false;
@@ -1611,10 +1625,67 @@
       pane.querySelector('.rb-w-remove').disabled = busy || inc.length <= 1;
     }
 
-    // ── docked comment box (Phase B replaces this with a floating note card) ──
-    const cmtTa  = pane.querySelector('.rb-w-cmt .rb-cmt-ta');
-    const cmtMat = pane.querySelector('.rb-w-cmt-mat');
-    let saver = null;
+    // ── Note card (APP-CANVAS-NOTECARD, 2026-09-27) — floats OVER the page;
+    // move by its header, resize from the corner, minimise to its title bar. Size,
+    // place, minimised and "Previous notes" open/closed are remembered. The text
+    // box is THIS review's note (prints in the Comment tile); "Previous notes" lists
+    // the material's notes from earlier reviews — Use / Edit (overwrite) / Delete.
+    const NOTE_KEY = 'calibre.canvasNoteCard.v1';
+    const noteEl  = pane.querySelector('.rb-note');
+    const noteTa  = noteEl.querySelector('.rb-note-ta');
+    const noteMat = noteEl.querySelector('.rb-note-mat');
+    const noteSt  = noteEl.querySelector('.rb-note-state');
+    const prevBtn = noteEl.querySelector('.rb-note-prevbtn');
+    const prevEl  = noteEl.querySelector('.rb-note-prev');
+    let noteGeo = {};
+    try { noteGeo = JSON.parse(localStorage.getItem(NOTE_KEY) || '{}') || {}; } catch (e) { noteGeo = {}; }
+    const saveGeo = () => { try { localStorage.setItem(NOTE_KEY, JSON.stringify(noteGeo)); } catch (e) {} };
+    function placeNote(){
+      const pw = pane.clientWidth, ph = pane.clientHeight;
+      if (!pw || !ph) return;
+      const w = Math.max(260, Math.min(pw - 16, noteGeo.w || 380));
+      const h = Math.max(150, Math.min(ph - 16, noteGeo.h || 280));
+      const x = Math.max(8, Math.min(pw - w - 8, noteGeo.x != null ? noteGeo.x : pw - w - 24));
+      const y = Math.max(8, Math.min(ph - 44, noteGeo.y != null ? noteGeo.y : (wrap.offsetTop || 100) + 12));   // default: just below the nav bars, over the page
+      noteEl.style.left = x + 'px'; noteEl.style.top = y + 'px'; noteEl.style.width = w + 'px';
+      noteEl.style.height = noteGeo.min ? '' : h + 'px';
+      noteEl.classList.toggle('min', !!noteGeo.min);
+      noteEl.querySelector('.rb-note-min').textContent = noteGeo.min ? '▢' : '–';
+      prevEl.hidden = !noteGeo.prevOpen;
+      noteEl.querySelector('.rb-note-tri').textContent = noteGeo.prevOpen ? '▾' : '▸';
+    }
+    placeNote();
+    const roPane = new ResizeObserver(placeNote); roPane.observe(pane); roPane.observe(wrap);   // wrap moves if the bars above it re-wrap
+    // move by the header
+    noteEl.querySelector('.rb-note-h').addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      e.preventDefault(); const h = e.currentTarget; try { h.setPointerCapture(e.pointerId); } catch (_) {}
+      const sx = e.clientX, sy = e.clientY, ox = noteEl.offsetLeft, oy = noteEl.offsetTop;
+      const mv = (ev) => {
+        noteGeo.x = Math.max(8, Math.min(pane.clientWidth - noteEl.offsetWidth - 8, ox + ev.clientX - sx));
+        noteGeo.y = Math.max(8, Math.min(pane.clientHeight - 44, oy + ev.clientY - sy));
+        noteEl.style.left = noteGeo.x + 'px'; noteEl.style.top = noteGeo.y + 'px';
+      };
+      const up = () => { try { h.releasePointerCapture(e.pointerId); } catch (_) {} h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); saveGeo(); };
+      h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
+    });
+    // resize from the corner
+    noteEl.querySelector('.rb-note-grip').addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation(); const g = e.currentTarget; try { g.setPointerCapture(e.pointerId); } catch (_) {}
+      const sx = e.clientX, sy = e.clientY, ow = noteEl.offsetWidth, oh = noteEl.offsetHeight;
+      const mv = (ev) => {
+        noteGeo.w = Math.max(260, Math.min(pane.clientWidth - noteEl.offsetLeft - 8, ow + ev.clientX - sx));
+        noteGeo.h = Math.max(150, Math.min(pane.clientHeight - noteEl.offsetTop - 8, oh + ev.clientY - sy));
+        noteEl.style.width = noteGeo.w + 'px'; noteEl.style.height = noteGeo.h + 'px';
+      };
+      const up = () => { try { g.releasePointerCapture(e.pointerId); } catch (_) {} g.removeEventListener('pointermove', mv); g.removeEventListener('pointerup', up); saveGeo(); };
+      g.addEventListener('pointermove', mv); g.addEventListener('pointerup', up);
+    });
+    noteEl.querySelector('.rb-note-min').addEventListener('click', () => { noteGeo.min = !noteGeo.min; saveGeo(); placeNote(); });
+    prevBtn.addEventListener('click', () => { noteGeo.prevOpen = !noteGeo.prevOpen; saveGeo(); placeNote(); });
+    function noteFocus(){ if (noteGeo.min){ noteGeo.min = false; saveGeo(); placeNote(); } noteTa.focus(); }
+
+    let saver = null, stT = null;
     function refreshCommentTiles(txt){
       boxes.filter(b => b.c.id === 'comment').forEach(b => {
         const body = b.rec.el.querySelector('.rb-cmt-body'); if (!body) return;
@@ -1622,15 +1693,75 @@
         else body.innerHTML = '<span class="rb-cmt-empty">(no comment yet)</span>';
       });
     }
+    function noteStatus(t){ noteSt.textContent = t; }
+    function markSaving(){ noteStatus('saving…'); clearTimeout(stT); stT = setTimeout(() => noteStatus('saved ✓'), 600); }
+    function fmtDay(iso){ try { return new Date(iso).toLocaleDateString('en-CA', { year:'numeric', month:'short', day:'numeric' }); } catch (e) { return String(iso || '').slice(0, 10); } }
+    // Notes for this material from OTHER reviews (this review's own entry is the text box).
+    function previousNotes(){
+      if (typeof CommentStore === 'undefined' || !CommentStore.history) return [];
+      return CommentStore.history(mat).filter(e => (e.assessment || '') !== name);
+    }
+    // Edit / delete a previous note: route it through that review's own copy when it
+    // has a name, so its analyst note and this store stay in step (edit = overwrite).
+    function writePrev(e, text){
+      if (e.assessment && typeof AnalystMarks !== 'undefined' && AnalystMarks.forAssessment){
+        AnalystMarks.forAssessment(e.assessment).setNote(mat, text);   // mirrors into CommentStore
+      } else if (typeof CommentStore !== 'undefined'){
+        CommentStore.updateEntry(mat, e.id, text);
+      }
+      try { document.dispatchEvent(new CustomEvent('calibre:comments-changed')); } catch (err) {}
+    }
+    function renderPrev(){
+      const list = previousNotes();
+      noteEl.querySelector('.rb-note-n').textContent = list.length ? '(' + list.length + ')' : '(none)';
+      prevBtn.disabled = !list.length;
+      if (!list.length){ prevEl.innerHTML = ''; return; }
+      prevEl.innerHTML = list.map(e => `
+        <div class="rb-np" data-id="${esc(e.id)}">
+          <div class="rb-np-h"><span class="rb-np-meta">${esc(fmtDay(e.updated))}${e.assessment ? ' · ' + esc(e.assessment) : ''}</span>
+            <span class="rb-np-a"><button type="button" data-act="use">Use for this review</button><button type="button" data-act="edit">Edit</button><button type="button" data-act="del">Delete</button></span></div>
+          <div class="rb-np-t">${esc(e.text)}</div>
+        </div>`).join('');
+    }
+    // Two-click confirm on a button (label swaps back after a few seconds).
+    function armed(b, ask, label){
+      if (b.classList.contains('armed')) return true;
+      b.classList.add('armed'); b.textContent = ask;
+      setTimeout(() => { b.classList.remove('armed'); b.textContent = label; }, 3500);
+      return false;
+    }
+    prevEl.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-act]'); if (!b) return;
+      const row = b.closest('.rb-np'); if (!row) return;
+      const e = previousNotes().find(x => x.id === row.dataset.id); if (!e) return;
+      const act = b.dataset.act;
+      if (act === 'use'){
+        if (noteTa.value.trim() && !armed(b, 'Replace this review’s note?', 'Use for this review')) return;
+        noteTa.value = e.text; saver.push(e.text); refreshCommentTiles(e.text); markSaving();
+      } else if (act === 'del'){
+        if (!armed(b, 'Delete — sure?', 'Delete')) return;
+        writePrev(e, ''); renderPrev();
+      } else if (act === 'edit'){
+        const tEl = row.querySelector('.rb-np-t');
+        tEl.innerHTML = `<textarea class="rb-np-ta">${esc(e.text)}</textarea><div class="rb-np-ea"><button type="button" data-act="save">Save</button><button type="button" data-act="cancel">Cancel</button></div>`;
+        row.querySelector('.rb-np-ta').focus();
+      } else if (act === 'save'){
+        writePrev(e, row.querySelector('.rb-np-ta').value); renderPrev();
+      } else if (act === 'cancel'){
+        renderPrev();
+      }
+    });
     function loadCommentEditor(){
       if (saver) saver.flush();
       const p = pctx(mat);
       saver = commentSaver(p);
-      cmtTa.value = noteFor(p, {});
-      cmtMat.textContent = ' · ' + mat;
+      noteTa.value = noteFor(p, {});
+      noteMat.textContent = mat;
+      noteStatus('');
+      renderPrev();
     }
-    cmtTa.addEventListener('input', () => { saver.push(cmtTa.value); refreshCommentTiles(cmtTa.value); });
-    cmtTa.addEventListener('blur', () => saver && saver.flush());
+    noteTa.addEventListener('input', () => { saver.push(noteTa.value); refreshCommentTiles(noteTa.value); markSaving(); });
+    noteTa.addEventListener('blur', () => saver && saver.flush());
 
     async function showMat(m){
       const tok = ++showTok;
@@ -1683,7 +1814,7 @@
       if (saver) saver.flush();
       flushSave();
       document.removeEventListener('keydown', onKey);
-      ro.disconnect(); roWrap.disconnect(); stageHost.remove();
+      ro.disconnect(); roWrap.disconnect(); roPane.disconnect(); stageHost.remove();
       closeAll();
     }
     pane.querySelector('.rb-cv-close').addEventListener('click', teardown);
@@ -1855,18 +1986,16 @@
   // Saves to the material's analyst note (persists like a Trend note); "↻ Update"
   // regenerates the preview with the new comment.
   function attachCommentEditor(pv, ctx, regen){
-    // "Carried from" hint — if this material has a durable comment stored under a
-    // DIFFERENT assessment, show that it was carried across, so the operator sees
-    // their previous note surfaced on reload.
+    // Hint when this review has no note yet but an EARLIER review of the material
+    // does (APP-NOTE-HISTORY: earlier notes no longer print automatically — they
+    // are listed, with "Use for this review", in the Canvas note card).
     let carried = '';
     try {
-      if (typeof CommentStore !== 'undefined'){
-        const meta = CommentStore.getMeta(ctx.m && ctx.m.material);
-        const liveNote = (ctx.analyst && ctx.analyst.getNote) ? (ctx.analyst.getNote(ctx.m.material) || '') : '';
-        if (meta && meta.text && !(liveNote && liveNote.trim())){
-          const when = meta.updated ? String(meta.updated).slice(0,10) : '';
-          const fromOther = meta.assessment && meta.assessment !== (ctx.assessmentName || '');
-          carried = `<span class="rb-cmt-carry">carried forward${when ? ' · '+esc(when) : ''}${fromOther ? ' · from “'+esc(meta.assessment)+'”' : ''}</span>`;
+      if (typeof CommentStore !== 'undefined' && CommentStore.history && !noteFor(ctx, {}).trim()){
+        const prev = CommentStore.history(ctx.m && ctx.m.material).filter(e => (e.assessment || '') !== (ctx.assessmentName || ''));
+        if (prev.length){
+          const e = prev[0], when = e.updated ? String(e.updated).slice(0,10) : '';
+          carried = `<span class="rb-cmt-carry">earlier note${when ? ' · '+esc(when) : ''}${e.assessment ? ' · “'+esc(e.assessment)+'”' : ''} — see Previous notes in the Canvas</span>`;
         }
       }
     } catch (e) {}

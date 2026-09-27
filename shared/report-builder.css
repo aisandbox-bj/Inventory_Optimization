@@ -216,6 +216,48 @@ a.rb-pv-dl{ text-decoration:none; }
 .rb-cv.rb-cv-edit .rb-cardbulb{ display:none; }
 .rb-cv-trend{ border-color:rgba(31,206,216,.55) !important; }
 
+/* Note card (APP-CANVAS-NOTECARD) — floats OVER the page; move by the header,
+   resize from the corner, minimise to the title bar. Nothing else moves. */
+.rb-note{ position:absolute; z-index:28; display:flex; flex-direction:column; min-width:260px;
+  background:rgba(8,30,43,.97); border:1px solid rgba(31,206,216,.55); border-radius:10px;
+  box-shadow:0 16px 40px rgba(0,0,0,.55); overflow:hidden; }
+.rb-note-h{ display:flex; align-items:center; gap:8px; padding:7px 8px 7px 12px; cursor:move; touch-action:none; user-select:none;
+  border-bottom:1px solid rgba(31,206,216,.2); background:linear-gradient(90deg,#081e2b,#0c2d3b); flex:none; }
+.rb-note-t{ flex:1; min-width:0; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.8px; text-transform:uppercase;
+  color:#1FCED8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rb-note-t b{ color:#fff; letter-spacing:.3px; }
+.rb-note-state{ font-family:'JetBrains Mono',monospace; font-size:10px; color:#8aa6ac; min-width:52px; text-align:right; }
+.rb-note-min{ background:transparent; border:1px solid rgba(155,176,182,.35); color:#cfe3e6; border-radius:5px; width:24px; height:22px;
+  line-height:1; cursor:pointer; font-size:13px; padding:0; }
+.rb-note-min:hover{ border-color:#1FCED8; color:#fff; }
+.rb-note-body{ flex:1; min-height:0; display:flex; flex-direction:column; gap:6px; padding:8px 10px 10px; }
+.rb-note.min .rb-note-body, .rb-note.min .rb-note-grip{ display:none; }
+.rb-note-prevbtn{ flex:none; align-self:flex-start; background:none; border:none; padding:0; cursor:pointer;
+  font-family:'Rajdhani',sans-serif; font-weight:600; font-size:13px; color:#cfe3e6; }
+.rb-note-prevbtn:disabled{ color:#6f8c93; cursor:default; }
+.rb-note-tri{ display:inline-block; width:12px; color:#1FCED8; }
+.rb-note-n{ color:#8aa6ac; font-weight:500; }
+.rb-note-prev{ flex:none; max-height:45%; overflow:auto; display:flex; flex-direction:column; gap:6px; }
+.rb-note-prev[hidden]{ display:none; }
+.rb-np{ border:1px solid rgba(155,176,182,.2); border-left:3px solid #8aa6ac; border-radius:6px; padding:6px 8px; background:rgba(255,255,255,.02); }
+.rb-np-h{ display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:3px; }
+.rb-np-meta{ font-family:'JetBrains Mono',monospace; font-size:10px; color:#8aa6ac; }
+.rb-np-a{ display:inline-flex; gap:4px; }
+.rb-np-a button, .rb-np-ea button{ background:transparent; border:1px solid rgba(155,176,182,.35); color:#cfe3e6; border-radius:4px;
+  font-family:'Barlow',sans-serif; font-size:11px; padding:1px 7px; cursor:pointer; }
+.rb-np-a button:hover, .rb-np-ea button:hover{ border-color:#1FCED8; color:#fff; }
+.rb-np-a button.armed{ border-color:#f4c76a; color:#f4c76a; }
+.rb-np-t{ font-size:12.5px; line-height:1.45; color:#dbe7e9; white-space:pre-wrap; }
+.rb-np-ta{ width:100%; box-sizing:border-box; min-height:60px; resize:vertical; background:#081722; color:#eef4f5;
+  border:1px solid rgba(31,206,216,.45); border-radius:5px; padding:5px 7px; font-family:'Barlow',sans-serif; font-size:12.5px; }
+.rb-np-ea{ display:flex; gap:6px; justify-content:flex-end; margin-top:4px; }
+.rb-note-ta{ flex:1; min-height:60px; resize:none; font-family:'Barlow',sans-serif; font-size:13.5px; line-height:1.45; color:#eef4f5;
+  background:#081722; border:1px solid rgba(155,176,182,.28); border-radius:6px; padding:8px 10px; }
+.rb-note-ta:focus{ outline:none; border-color:#1FCED8; box-shadow:0 0 0 2px rgba(31,206,216,.18); }
+.rb-note-grip{ position:absolute; right:2px; bottom:2px; width:16px; height:16px; cursor:nwse-resize; touch-action:none; opacity:.6;
+  background:linear-gradient(135deg, transparent 46%, #1FCED8 46%, #1FCED8 54%, transparent 54%, transparent 66%, #1FCED8 66%, #1FCED8 74%, transparent 74%); }
+.rb-note-grip:hover{ opacity:1; }
+
 /* Tiles panel — floats OVER the stage in Layout mode (moves by its header) */
 .rb-cv-tiles{ position:absolute; left:16px; top:16px; z-index:25; width:290px; max-height:calc(100% - 32px); overflow:auto;
   background:rgba(8,30,43,.96); border:1px solid rgba(31,206,216,.45); border-radius:10px;

@@ -381,6 +381,46 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Canvas note card + note history - 2026-09-27 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-CANVAS-NOTECARD + APP-NOTE-HISTORY</b> (Canvas phase B): the note bar becomes a floating card with a "Previous notes" history — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator ask:</b> "the note bar is still at the top… that has to be a card that I can move and resize", with a rolled-up "Previous notes" panel to expand, edit (overwrite), delete and hide.</li>
+        <li><b>Note card</b> (<code>shared/report-builder.{js,css}</code>) replaces the docked Canvas comment bar.
+          <ul>
+            <li>It floats over the page, so nothing else moves. Drag the title bar to move it, drag the corner to resize it, and "–" minimises it to its title bar.</li>
+            <li>Size, place, minimised and the Previous-notes open/closed state are remembered (<code>calibre.canvasNoteCard.v1</code>). By default it sits just below the nav bars, and it re-places if those bars re-wrap.</li>
+            <li>The text box is this review's note: it saves as you type, with a "saving… / saved ✓" status, and updates the Comment tile live. Clicking the Comment tile opens and focuses the card.</li>
+          </ul></li>
+        <li><b>Note history</b> (<code>shared/comment-store.js</code>, store v2 <code>calibre.comments.v2</code>).
+          <ul>
+            <li>Each material keeps one dated entry per review. Writing again in the same review overwrites it (edit = overwrite, operator decision); a new review adds an entry; blank removes that review's entry only.</li>
+            <li>"Previous notes (N)" lists the other reviews' entries, newest first, with <b>Use for this review</b> (asks before replacing a note you've already typed), <b>Edit</b> (overwrites in place, routed through that review's own copy so both stay in step) and <b>Delete</b> (two clicks).</li>
+            <li>One-time migration: the v1 durable comments plus every note already saved under other reviews in this browser (<code>tune.analyst.*</code>) become history entries.</li>
+            <li>Backup export/import carries the history; v1 backup files still import.</li>
+          </ul></li>
+        <li><b>Behaviour change (flagged):</b> a page now prints only <b>this review's</b> note. Before, the latest note from ANY review printed automatically ("carried forward"). Earlier notes are shown under Previous notes and brought across deliberately with "Use for this review". The Letter preview's comment hint now points to them. Say if you'd rather have the old automatic carry-forward back.</li>
+        <li><b>Verified in the browser</b> (one-material test run):
+          <ul>
+            <li>the old bar is gone and the card renders;</li>
+            <li>migration pulled a v1 comment plus three other reviews' notes into "Previous notes";</li>
+            <li>typing saves, shows in the Comment tile, and is stored as this review's entry;</li>
+            <li>editing an earlier review's note overwrote both that review's copy and the history;</li>
+            <li>Delete needs two clicks and removes only that entry; "Use" asks before replacing;</li>
+            <li>move / resize / minimise are remembered across close and reopen, and the stage size is unchanged underneath;</li>
+            <li>no console errors.</li>
+          </ul></li>
+        <li><b>Not verified:</b> real mouse drags (tested with synthetic pointer events), and the backup export/import of a v2 file (logic reviewed, not click-tested).</li>
+        <li>Also: a <b>TEST LATER</b> operator checklist now heads <code>Backlog.md</code>, covering everything pushed 2026-09-25 → 27 that awaits off-repo testing.</li>
+        <li>Files: <code>shared/comment-store.js</code> (rewritten, same API plus history), <code>shared/report-builder.{js,css}</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Rollback: local <code>_rollback/CANVAS-NOTECARD-pre/</code> + <code>checkpoint/pre-notecard</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Analyst review work stored in the JSON - 2026-09-27 -->
     <article class="roc-entry dev">
       <div class="head">
