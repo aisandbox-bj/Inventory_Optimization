@@ -92,7 +92,7 @@
     // so the Sandbox list, detail and PDF export can show the analyst's work. Read
     // only here — the Sandbox is a what-if surface; editing stays on Trend.
     state.analyst = (typeof AnalystMarks !== 'undefined')
-      ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
+      ? AnalystMarks.forJson(json)   // APP-ANALYST-IN-JSON — review work lives in the JSON, auto-saved
       : null;
 
     try {

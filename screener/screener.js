@@ -166,7 +166,7 @@
     // R2-7 (2026-08-16) — bind the analyst sidecar (For-Action flags + Analyst Rec)
     // so the list, detail and PDF export can show the analyst's work.
     state.analyst = (typeof AnalystMarks !== 'undefined')
-      ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
+      ? AnalystMarks.forJson(json)   // APP-ANALYST-IN-JSON — review work lives in the JSON, auto-saved
       : null;
 
     try {

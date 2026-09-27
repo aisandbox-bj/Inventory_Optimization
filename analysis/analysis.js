@@ -56,7 +56,7 @@
     // `assessmentName` (NOT `name`); the earlier `metadata.name` was undefined,
     // so every assessment collided under the `_unnamed` sidecar key.
     state.analyst = (typeof AnalystMarks !== 'undefined')
-      ? AnalystMarks.forAssessment((json.metadata && json.metadata.assessmentName) || '')
+      ? AnalystMarks.forJson(json)   // APP-ANALYST-IN-JSON — review work lives in the JSON, auto-saved
       : null;
     // APP-TREND-FILTERHOLD — capture any view filters saved before this page was
     // last left (e.g. a Trace round-trip full-page reload). Read NOW, before the
@@ -1667,16 +1667,13 @@
     if (!state.json) { setExportProgress('No analysis loaded'); return; }
     try {
       const json = state.json;
-      // APP-ACT-PERSIST (Phase 1) — co-package the analyst sidecar (For-Action
-      // flags + Analyst Rec + notes) as a top-level `_analystData` block ALONGSIDE
-      // the canonical object (not inside the schema-validated structure → no
-      // SCHEMA_VERSION change, the pipeline ignores it). The Intake JSON-upload
-      // restores it, so the operator's analyst work round-trips in a single file.
+      // APP-ANALYST-IN-JSON (2026-09-27) — the review work (★ For Action, Analyst
+      // Rec, notes) is part of the JSON as the `analyst` block, kept current by
+      // AnalystMarks.forJson; refresh it here so the file has the very latest.
+      // (Replaces the older `_analystData` side-block, which uploads still read.)
       const out = Object.assign({}, json);
-      if (state.analyst) {
-        const raw = state.analyst.raw();
-        if (raw && Object.keys(raw).length) out._analystData = raw;
-      }
+      delete out._analystData;
+      if (state.analyst && state.analyst.block) out.analyst = state.analyst.block();
       const text = JSON.stringify(out, null, 2);
       const safe = s => String(s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
       const name = safe(json?.metadata?.assessmentName || 'assessment');

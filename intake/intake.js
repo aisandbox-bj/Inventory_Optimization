@@ -132,6 +132,8 @@
     psFilters: [],                                   // Parameter-Search filter cards
     alignmentAck: null,                              // APP-E6 · { acknowledgedAt, dimensions } once operator confirms scope alignment
     inventoryMasterDate: null,                       // APP-FIX-SNAPSHOT-ALIGN · SAP extract date of the Inventory Master (yyyy-mm-dd)
+    analystMap:  null,                               // APP-ANALYST-IN-JSON · review work carried in by an uploaded JSON / Reuse (→ json.analyst)
+    analystFrom: null,                               //   … and the name it was filed under in this browser
     duplicates: null                                 // APP-DUP-FLAG · parsed potential-duplicates list { hasFamilies, materials, families } (→ json.duplicates)
   };
 
@@ -2233,6 +2235,18 @@
     }
     // APP-DUP-FLAG — additive, optional top-level block (no SCHEMA_VERSION bump; absent = no list)
     if (state.duplicates && state.duplicates.materials && state.duplicates.materials.length) json.duplicates = state.duplicates;
+    // APP-ANALYST-IN-JSON (2026-09-27) — the review work (★ For Action, Analyst Rec,
+    // notes) goes INTO the JSON under whatever name this run is saved as. Sources,
+    // newest edit per material wins: the work carried in by an uploaded JSON or a
+    // Reuse, the browser copy under the name it came from, and the browser copy
+    // under the current name. Renaming a run can no longer lose it.
+    try {
+      if (typeof AnalystMarks !== 'undefined' && AnalystMarks.mergeMaps) {
+        let map = AnalystMarks.mergeMaps(state.analystMap || {}, state.analystFrom ? AnalystMarks.load(state.analystFrom) : {});
+        map = AnalystMarks.mergeMaps(map, AnalystMarks.load(json.metadata.assessmentName || ''));
+        if (Object.keys(map).length) json.analyst = AnalystMarks.toBlock(map);
+      }
+    } catch (err) { console.warn('APP-ANALYST-IN-JSON (buildJson):', err); }
     json.validation = state.dq ? {
       passed: state.dq.passed,
       issues: state.dq.issues.concat(state.dq.warnings).map(i => ({
@@ -2334,18 +2348,7 @@
       // APP-E3-TRIM — honour the same opt-in for the downloaded file.
       const trimChk = $('#chkTrimScope');
       if (trimChk && trimChk.checked) trimToScope(json);
-      // APP-FIX-ANALYST-DL (2026-08-16) — carry the analyst layer (For-Action
-      // flags, recs, notes) into the downloaded combined file, exactly as the Trend
-      // export does. Without this, a JSON combined here (e.g. + IW39) drops the
-      // operator's analyst work, so re-loading it shows nothing. Top-level
-      // `_analystData` block; the Upload handler strips it before it becomes the
-      // canonical, so the stored dataset stays pure.
-      try {
-        if (typeof AnalystMarks !== 'undefined' && AnalystMarks.load) {
-          const raw = AnalystMarks.load(json.metadata.assessmentName || '');
-          if (raw && Object.keys(raw).length) json._analystData = raw;
-        }
-      } catch (err) { console.warn('APP-FIX-ANALYST-DL embed (download):', err); }
+      // APP-ANALYST-IN-JSON — the review work is already in `json.analyst` (buildJson).
       // APP-E3-MINIFY — compact (no pretty-print whitespace) — ~28% smaller file,
       // zero data loss. The localStorage save (storage.js) was already compact;
       // only this download was pretty-printed. Still valid JSON; the Upload .json
@@ -2366,19 +2369,20 @@
       try {
         const text = await file.text();
         const json = JSON.parse(text);
-        // APP-ACT-PERSIST (Phase 1) — restore co-packaged analyst data (For-Action
-        // flags + Analyst Rec + notes) to the sidecar, then strip it so the
-        // canonical stays clean for validateShape + save. Keyed by assessmentName
-        // (must match the analysis-page binding).
-        if (json._analystData && typeof json._analystData === 'object') {
-          try {
+        // APP-ANALYST-IN-JSON (2026-09-27) — keep the file's review work (the
+        // `analyst` block, or the older `_analystData` block) with this intake, so the
+        // next Save / Download / Open writes it into the JSON under WHATEVER name the
+        // run is saved as. Also merged into the browser copy under the file's name
+        // (as before). The old side-block is removed so the canonical stays clean.
+        try {
+          if (typeof AnalystMarks !== 'undefined' && AnalystMarks.mapFromJson) {
             const nm = (json.metadata && json.metadata.assessmentName) || '';
-            if (typeof AnalystMarks !== 'undefined' && AnalystMarks.restore) {
-              AnalystMarks.restore(nm, json._analystData);
-            }
-          } catch (err) { console.warn('APP-ACT-PERSIST restore:', err); }
-          delete json._analystData;
-        }
+            state.analystMap  = AnalystMarks.mapFromJson(json);
+            state.analystFrom = nm;
+            if (Object.keys(state.analystMap).length) AnalystMarks.restore(nm, state.analystMap);
+          }
+        } catch (err) { console.warn('APP-ANALYST-IN-JSON (upload):', err); }
+        delete json._analystData;
         const v = CanonicalSchema.validateShape(json);
         if (!v.ok) { toast('Invalid JSON: ' + v.errors.join('; '), 'crit'); return; }
         // Repopulate state from the JSON
@@ -2716,6 +2720,14 @@
     // honest proxy we have for "when this dataset entered the system").
     state.uploadedAt = (json.metadata && (json.metadata.uploadedAt || json.metadata.createdAt)) || null;
     state.inventoryMasterDate = (json.metadata && json.metadata.inventoryMasterDate) || state.inventoryMasterDate || null;  // APP-FIX-SNAPSHOT-ALIGN
+    // APP-ANALYST-IN-JSON — carry the source run's review work (★ / Analyst Rec /
+    // notes) into the new run: the typical "same review, fresher SAP data" update.
+    try {
+      if (typeof AnalystMarks !== 'undefined' && AnalystMarks.mapFromJson) {
+        state.analystMap  = AnalystMarks.mapFromJson(json);
+        state.analystFrom = (json.metadata && json.metadata.assessmentName) || sourceName || '';
+      }
+    } catch (err) { console.warn('APP-ANALYST-IN-JSON (reuse):', err); }
     for (const s of sources) {
       const arr = json.data && json.data[s];
       if (Array.isArray(arr) && arr.length > 0) {

@@ -539,13 +539,16 @@
       if (!file) return;
       try {
         const json = JSON.parse(await file.text());
-        if (json._analystData && typeof json._analystData === 'object') {
-          try {
-            const nm = (json.metadata && json.metadata.assessmentName) || '';
-            if (typeof AnalystMarks !== 'undefined' && AnalystMarks.restore) AnalystMarks.restore(nm, json._analystData);
-          } catch (err) { console.warn('analyst restore:', err); }
-          delete json._analystData;
-        }
+        // APP-ANALYST-IN-JSON (2026-09-27) — review work stays IN the JSON as the
+        // `analyst` block (an older file's `_analystData` is converted to it); Trend
+        // merges it with this browser's copy on open.
+        try {
+          if (typeof AnalystMarks !== 'undefined' && AnalystMarks.mapFromJson) {
+            const map = AnalystMarks.mapFromJson(json);
+            if (Object.keys(map).length) json.analyst = AnalystMarks.toBlock(map);
+          }
+        } catch (err) { console.warn('analyst block:', err); }
+        delete json._analystData;
         const v = (typeof CanonicalSchema !== 'undefined' && CanonicalSchema.validateShape)
           ? CanonicalSchema.validateShape(json) : { ok:true, errors:[] };
         if (!v.ok) { alert('That file is not a valid canonical assessment JSON:\n\n' + (v.errors || []).join('\n')); upInput.value = ''; return; }

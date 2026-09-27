@@ -381,6 +381,37 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Analyst review work stored in the JSON - 2026-09-27 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-ANALYST-IN-JSON</b>: ★ For Action flags, Analyst Recommendations and notes now live IN the assessment JSON and auto-save — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>What happened:</b> the operator loaded a month-old JSON into Intake, added fresh IW39 / MB51 / PR / Inventory Master extracts and saved the run under a new name. Every star and Analyst Recommendation was missing on Trend. The work was stored in a browser copy filed under the assessment <b>name</b>, so a renamed run came up empty. Trimming was <b>not</b> involved. Nothing was deleted: re-saving under the old name brought it all back.</li>
+        <li><b>The change</b> (operator decision "store it in the JSON").
+          <ul>
+            <li>Review work is now an additive <code>analyst</code> section of the canonical JSON, keyed by SAP material number, with an edit time on every entry. No SCHEMA_VERSION change; older builds ignore it.</li>
+            <li>Trend, the Canvas page and the Sandbox bind to the JSON (<code>AnalystMarks.forJson</code>). Every change is <b>auto-saved</b> into <code>intake.current</code> and the saved copy of the run (only its review section is replaced) within ~1.2 s, and again when the page is left.</li>
+            <li>Intake's Save / Download / Open in Trend always write the review work into the JSON <b>under whatever name the run gets</b>. It comes from the uploaded file, the browser copy under the file's name and the one under the current name. "Reuse datasets" carries the source run's review work. The Dashboard's Upload JSON keeps it. Trend's "Canonical dataset" download writes it in the new form.</li>
+          </ul></li>
+        <li><b>Merging.</b> The browser copy stays as a fast working copy and safety net. When two copies meet, the <b>most recent edit wins</b> per material. A cleared star or recommendation is kept as a dated "cleared" marker, so an older file can't bring it back. Pre-2026-09-27 files (the old <code>_analystData</code> side-block, no edit times) still load and are converted, using the previous rule (the browser's value first, a star on either side kept).</li>
+        <li><b>Verified in the browser</b> (small test assessment):
+          <ul>
+            <li>star + recommendation + note auto-saved into both the current and the saved copy in under 2 s, with the saved copy's data untouched;</li>
+            <li>un-star writes a cleared marker and the count drops;</li>
+            <li>upload a file → rename to "Run B — September update" → Open in Trend: all review work present under the new name;</li>
+            <li>an August-style file on a browser with no copy of it → rename → work present, old side-block removed;</li>
+            <li>Trend, Canvas and Sandbox boot with no console errors.</li>
+          </ul></li>
+        <li><b>Not verified here:</b> the star click on a full Trend table (the small test file produces no Trend rows). The star button code is unchanged and sits on the tested module. The real Reuse-modal click-through and the Dashboard upload were checked by code reading only.</li>
+        <li><b>Limits:</b> the .json file on disk only updates on Download (browsers can't rewrite local files). Two browser tabs editing the same run at once: the newer edit per material wins on the next load.</li>
+        <li>Files: <code>shared/analyst-marks.js</code> (rewritten, old API kept), <code>intake/intake.js</code>, <code>analysis/analysis.js</code>, <code>screener/screener.js</code>, <code>sandbox/sandbox.js</code>, <code>index.html</code>, <code>user-manual.html</code>. Rollback: local <code>_rollback/ANALYST-IN-JSON-pre/</code> + <code>checkpoint/pre-analyst-json</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Weighted delivery dates + first use + review wording fixes - 2026-09-26 -->
     <article class="roc-entry dev">
       <div class="head">
