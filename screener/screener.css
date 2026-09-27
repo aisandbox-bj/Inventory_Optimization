@@ -309,6 +309,7 @@
 .scr-table .yn.n{ color:var(--text-muted); }
 .scr-table .an-rec{ color:#F2C744; }
 .scr-row-note{ color:var(--accent); font-size:11px; margin-left:5px; }
+.scr-row-rev{ color:#34D399; font-size:11px; font-weight:700; margin-left:5px; }
 .scr-table .scr-row-action{ margin-left:5px; }
 
 /* Quick look — the combined detail, OVER the page */

@@ -381,6 +381,60 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Canvas reviewed tick + review filters + print-notes choice + thinner strikethrough - 2026-09-27 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-CANVAS-REVIEWED + APP-CANVAS-FILTER + APP-CANVAS-PRINTNOTES + APP-FIX-STRIKE-THIN</b>: ✓ Reviewed tick, review-work filters, a "Print notes" choice, and a readable cancelled-PR line — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>✓ Reviewed tick</b> (operator chose "option 3"). Each Canvas page has <b>○ Mark reviewed</b>.
+          <ul>
+            <li>Ticking marks the material done and moves to the next page; it stays in the set. Clicking the green <b>✓ Reviewed · date</b> undoes it and stays on the page.</li>
+            <li>The nav shows <b>N of M reviewed</b> (green when all are done).</li>
+            <li>It's saved with the rest of the review work in the JSON (<code>analyst</code> block, new <code>reviewed</code> = date ticked; <code>shared/analyst-marks.js</code> <code>isReviewed</code> / <code>reviewedOn</code> / <code>setReviewed</code>), so it auto-saves and survives renames, download and upload. Additive — no SCHEMA_VERSION change.</li>
+            <li>"✕ Remove from set" is unchanged: it takes the material out of this canvas only.</li>
+          </ul></li>
+        <li><b>Review-work filters on the Canvas page</b> (<code>screener/screener.js</code>). A new "Review work" group heads the filters:
+          <ul>
+            <li><b>For Action</b> → ★ For Action only;</li>
+            <li><b>Review status</b> → ✓ Reviewed / Not reviewed yet.</li>
+            <li>The cards combine with AND, so "★ and not reviewed yet" works. They read the live ★ and ✓, refreshed on every redraw.</li>
+            <li>New <b>✓ Reviewed</b> column in ⚙ Columns (Analyst group), and a green ✓ beside the material number.</li>
+          </ul></li>
+        <li><b>Print notes: Off · Last · Current session · All</b> (operator ask). A switch on the Canvas nav bar, remembered with the master layout; the default is Current session, which is today's behaviour.
+          <ul>
+            <li><b>Off</b> — the Comment tile doesn't print; it shows dimmed on the canvas.</li>
+            <li><b>Last</b> — the most recently written note for the material, from any review.</li>
+            <li><b>Current session</b> — this review's note only.</li>
+            <li><b>All</b> — every review's note, newest first, each under its date and review name.</li>
+          </ul>
+          The Comment tile on the canvas shows exactly what will print. When the notes don't fit, the tile shows an amber "More notes than fit — enlarge this tile", and the PDF box ends with "… more notes – enlarge the Comment tile". Notes are never cut silently.</li>
+        <li><b>Thinner red line through cancelled PRs.</b>
+          <ul>
+            <li>Canvas / HTML tile: 1 px, semi-transparent, regular weight (was 2 px bold).</li>
+            <li>Letter PDF: 0.12 mm lighter line, regular weight (was 0.35 mm bold).</li>
+            <li>The row tint stays, so cancelled rows still stand out.</li>
+          </ul></li>
+        <li><b>Verified in the browser</b> (the test file cloned to 3 materials):
+          <ul>
+            <li>★ filter shows 2 of 3;</li>
+            <li>tick → next page, "1 of 3 reviewed", <code>reviewed</code> written into <code>intake.current</code>;</li>
+            <li>undo stays on the page;</li>
+            <li>after a reload the Canvas resumed with the tick and the notes choice kept;</li>
+            <li>PDF text captured in all four note modes (Off prints no comment box);</li>
+            <li>the amber "doesn't fit" badge appears;</li>
+            <li>the struck PR rows read clearly at full size;</li>
+            <li>Trend still loads with the new data; no console errors from the app.</li>
+          </ul></li>
+        <li><b>Not verified:</b> the Letter-PDF strikethrough by eye (code changed, not rendered and viewed), and Light work theme contrast of the thinner line. "Print notes" applies to the Canvas pages only — the separate Letter report still prints this review's note.</li>
+        <li><b>Note for next month's review:</b> the ✓ is carried in the JSON, so a run re-saved from this one comes up with the ticks still set. Untick as you go, or ask for a "clear all ticks" button.</li>
+        <li>Files: <code>shared/analyst-marks.js</code>, <code>shared/report-builder.{js,css}</code>, <code>screener/screener.{js,css}</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Rollback: local <code>_rollback/CANVAS-REVIEWED-pre/</code> + <code>checkpoint/pre-reviewed</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Canvas note card + note history - 2026-09-27 -->
     <article class="roc-entry dev">
       <div class="head">

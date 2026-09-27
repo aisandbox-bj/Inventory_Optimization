@@ -531,13 +531,13 @@
       didParseCell:(d)=>{
         if (d.row.section !== 'body') return;
         const canc = /CANCELL/i.test((rows[d.row.index] || [])[15] || '');   // State column
-        if (canc){ d.cell.styles.textColor = [229,57,53]; d.cell.styles.fontStyle = 'bold'; }
+        if (canc){ d.cell.styles.textColor = [200,40,40]; }   // regular weight — bold + a thick line hid the digits (operator 2026-09-27)
         else if (d.column.index === 1){ d.cell.styles.fontStyle = 'bold'; d.cell.styles.textColor = d.cell.raw === 'Manual' ? [186,117,23] : [90,110,120]; }
       },
       didDrawCell:(d)=>{
         if (d.row.section !== 'body') return;
         if (/CANCELL/i.test((rows[d.row.index] || [])[15] || '')){
-          doc.setDrawColor(229,45,45); doc.setLineWidth(0.35);
+          doc.setDrawColor(235,110,110); doc.setLineWidth(0.12);   // thin, lighter line so the dates / numbers stay readable
           const yy = d.cell.y + d.cell.height/2;
           doc.line(d.cell.x + 0.6, yy, d.cell.x + d.cell.width - 0.6, yy);   // strikethrough
         }
@@ -962,7 +962,8 @@
     const body = rows.map((r,ri) => {
       const struck = opts.strike && opts.strike(r);            // cancelled PR → red strikethrough, eye-catching
       const rowBg = struck ? 'background:rgba(239,68,68,.16)' : `background:${ri%2?TH.alt:'transparent'}`;
-      const cellFx = struck ? `color:#ff5a5a;text-decoration:line-through;text-decoration-color:#ff2d2d;text-decoration-thickness:2px;font-weight:700` : `color:${TH.text}`;
+      // thin, semi-transparent line + regular weight so the dates / numbers stay readable (operator 2026-09-27)
+      const cellFx = struck ? `color:#e5484d;text-decoration:line-through;text-decoration-color:rgba(229,72,77,.6);text-decoration-thickness:1px` : `color:${TH.text}`;
       return `<tr style="${rowBg}">${r.map((c,ci)=>{
         const bg = (!struck && opts.cellBg) ? opts.cellBg(ri, ci) : null;   // optional conditional shading
         return `<td style="font-size:10px;padding:3px 5px;border:1px solid ${TH.border};text-align:${(opts.center&&opts.center.includes(ci))?'center':'left'};white-space:nowrap;${cellFx}${bg?';background:'+bg:''}">${esc(c)}</td>`;
@@ -1306,6 +1307,9 @@
     const master = loadMaster() || {};
     let workTheme  = master.workTheme  === 'light' ? 'light' : 'dark';
     let printTheme = master.printTheme === 'dark'  ? 'dark'  : 'light';
+    // Which notes print in the Comment tile (operator 2026-09-27): off · the latest
+    // note from any review · this review's note (the default, as before) · all of them.
+    let printNotes = ['off','last','current','all'].includes(master.printNotes) ? master.printNotes : 'current';
     let layout = Array.isArray(master.layout) ? cloneLayout(master.layout).filter(c => BLOCKS.some(b => b.id === c.id)) : [];
     let keySeq = 1 + layout.reduce((n, c) => Math.max(n, parseInt(String(c.key || '').replace(/\D/g, ''), 10) || 0), 0);
     layout.forEach(c => { c.key = c.key || ('k' + (keySeq++)); c.freeAspect = c.id === 'comment'; });
@@ -1376,9 +1380,12 @@
       </div>
       <div class="rb-w-nav rb-cv-nav">
         <span class="rb-w-navbtns"><button class="rb-btn ghost rb-w-prev">‹ Prev</button><button class="rb-btn ghost rb-w-next">Next ›</button></span>
+        <button type="button" class="rb-btn ghost rb-w-rev" aria-pressed="false">○ Mark reviewed</button>
         <button class="rb-btn ghost rb-w-remove" title="Take this material out of the set and move to the next one">✕ Remove from set</button>
         <span class="rb-w-page"></span>
+        <span class="rb-w-revn"></span>
         <span class="rb-w-removed"></span>
+        <span class="rb-cv-seg rb-cv-notes">Print notes<button data-pn="off">Off</button><button data-pn="last">Last</button><button data-pn="current">Current session</button><button data-pn="all">All</button></span>
         <span class="rb-w-saved"></span>
       </div>
       <div class="rb-stage-wrap">
@@ -1412,6 +1419,7 @@
       tncEl.classList.toggle('dark', workTheme === 'dark');
       pane.querySelectorAll('[data-wt]').forEach(b => b.classList.toggle('on', b.dataset.wt === workTheme));
       pane.querySelectorAll('[data-pt]').forEach(b => b.classList.toggle('on', b.dataset.pt === printTheme));
+      pane.querySelectorAll('[data-pn]').forEach(b => b.classList.toggle('on', b.dataset.pn === printNotes));
     }
     applyTheme();
 
@@ -1438,7 +1446,7 @@
     const missingNote = missing ? `${missing} saved material${missing===1?'':'s'} not in this assessment — skipped · ` : '';
     let saveT = null;
     function persist(){
-      saveMaster({ v:1, layout, workTheme, printTheme, savedAt: new Date().toISOString() });
+      saveMaster({ v:1, layout, workTheme, printTheme, printNotes, savedAt: new Date().toISOString() });
       saveCanvasSession(name, { v:1, savedAt: new Date().toISOString(), order, excluded:[...excluded], pageMat: mat });
     }
     function scheduleSave(){
@@ -1521,7 +1529,7 @@
           if (c.freeAspect) c.h = Math.max(0.06, oh + (ev.clientY - sy) / r.height);
           place(b);
         };
-        const up = () => { try { grip.releasePointerCapture(e.pointerId); } catch (_) {} grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); if (started) scheduleSave(); };
+        const up = () => { try { grip.releasePointerCapture(e.pointerId); } catch (_) {} grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); if (started) scheduleSave(); if (started && c.id === 'comment') refreshCommentTiles(); };
         grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up);
       });
     }
@@ -1623,6 +1631,18 @@
       pane.querySelector('.rb-w-prev').disabled = busy || idx <= 0;
       pane.querySelector('.rb-w-next').disabled = busy || idx >= inc.length - 1;
       pane.querySelector('.rb-w-remove').disabled = busy || inc.length <= 1;
+      // APP-CANVAS-REVIEWED — "✓ Reviewed" tick (kept in the review work in the JSON)
+      const revBtn = pane.querySelector('.rb-w-rev'), revN = pane.querySelector('.rb-w-revn');
+      const an = ctx.analyst && ctx.analyst.isReviewed ? ctx.analyst : null;
+      revBtn.hidden = !an; revN.hidden = !an;
+      if (an){
+        const on = an.isReviewed(mat), nRev = inc.filter(x => an.isReviewed(x)).length;
+        revBtn.classList.toggle('on', on); revBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        revBtn.textContent = on ? '✓ Reviewed · ' + fmtDay(an.reviewedOn(mat)) : '○ Mark reviewed';
+        revBtn.disabled = busy;
+        revN.innerHTML = `<b>${nRev}</b> of ${inc.length} reviewed${nRev === inc.length ? ' ✓' : ''}`;
+        revN.classList.toggle('all', nRev === inc.length);
+      }
     }
 
     // ── Note card (APP-CANVAS-NOTECARD, 2026-09-27) — floats OVER the page;
@@ -1686,11 +1706,38 @@
     function noteFocus(){ if (noteGeo.min){ noteGeo.min = false; saveGeo(); placeNote(); } noteTa.focus(); }
 
     let saver = null, stT = null;
-    function refreshCommentTiles(txt){
+    // What the Comment tile prints for material `m` under the "Print notes" choice:
+    // null (off) · a string (last / current session) · [{meta, text}] (all, newest
+    // first). `live` = the note box's text for the page on screen (maybe not saved yet).
+    function printNoteContent(m, live){
+      if (printNotes === 'off') return null;
+      const cur = (live != null ? live : noteFor(pctx(m), {})) || '';
+      if (printNotes === 'current') return cur;
+      let hist = (typeof CommentStore !== 'undefined' && CommentStore.history) ? CommentStore.history(m) : [];
+      const mine = hist.find(e => (e.assessment || '') === name);
+      hist = hist.filter(e => e !== mine && e.text && e.text.trim());
+      // this review's note with its freshest text (dated now while it's being edited)
+      const own = cur.trim() ? { text: cur, own: true, assessment: name,
+        updated: (mine && mine.text === cur && mine.updated) ? mine.updated : new Date().toISOString() } : null;
+      const all = (own ? [own] : []).concat(hist).sort((a, b) => (Date.parse(b.updated) || 0) - (Date.parse(a.updated) || 0));
+      if (printNotes === 'last') return all.length ? all[0].text : '';
+      return all.map(e => ({ meta: fmtDay(e.updated) + (e.own ? ' · this review' : (e.assessment ? ' · ' + e.assessment : '')), text: e.text }));
+    }
+    function refreshCommentTiles(){
+      const content = printNoteContent(mat, noteTa.value);
       boxes.filter(b => b.c.id === 'comment').forEach(b => {
         const body = b.rec.el.querySelector('.rb-cmt-body'); if (!body) return;
-        if (txt && txt.trim()) body.textContent = txt;
+        b.box.classList.toggle('rb-cmt-off', content === null);
+        if (content === null) body.innerHTML = '<span class="rb-cmt-empty">Notes are not printed (Print notes: Off)</span>';
+        else if (Array.isArray(content)){
+          body.innerHTML = content.length
+            ? content.map(e => `<div class="rb-cmt-item"><div class="rb-cmt-meta">${esc(e.meta)}</div>${esc(e.text)}</div>`).join('')
+            : '<span class="rb-cmt-empty">(no notes yet)</span>';
+        }
+        else if (content.trim()) body.textContent = content;
         else body.innerHTML = '<span class="rb-cmt-empty">(no comment yet)</span>';
+        // flag a tile too small for its notes (they'd be cut on the printed page)
+        b.box.classList.toggle('rb-cmt-over', body.scrollHeight > body.clientHeight + 2);
       });
     }
     function noteStatus(t){ noteSt.textContent = t; }
@@ -1737,16 +1784,16 @@
       const act = b.dataset.act;
       if (act === 'use'){
         if (noteTa.value.trim() && !armed(b, 'Replace this review’s note?', 'Use for this review')) return;
-        noteTa.value = e.text; saver.push(e.text); refreshCommentTiles(e.text); markSaving();
+        noteTa.value = e.text; saver.push(e.text); refreshCommentTiles(); markSaving();
       } else if (act === 'del'){
         if (!armed(b, 'Delete — sure?', 'Delete')) return;
-        writePrev(e, ''); renderPrev();
+        writePrev(e, ''); renderPrev(); refreshCommentTiles();
       } else if (act === 'edit'){
         const tEl = row.querySelector('.rb-np-t');
         tEl.innerHTML = `<textarea class="rb-np-ta">${esc(e.text)}</textarea><div class="rb-np-ea"><button type="button" data-act="save">Save</button><button type="button" data-act="cancel">Cancel</button></div>`;
         row.querySelector('.rb-np-ta').focus();
       } else if (act === 'save'){
-        writePrev(e, row.querySelector('.rb-np-ta').value); renderPrev();
+        writePrev(e, row.querySelector('.rb-np-ta').value); renderPrev(); refreshCommentTiles();
       } else if (act === 'cancel'){
         renderPrev();
       }
@@ -1760,7 +1807,7 @@
       noteStatus('');
       renderPrev();
     }
-    noteTa.addEventListener('input', () => { saver.push(noteTa.value); refreshCommentTiles(noteTa.value); markSaving(); });
+    noteTa.addEventListener('input', () => { saver.push(noteTa.value); refreshCommentTiles(); markSaving(); });
     noteTa.addEventListener('blur', () => saver && saver.flush());
 
     async function showMat(m){
@@ -1776,6 +1823,7 @@
           if (tok !== showTok) return;
           makeBox(c, rec);
         }
+        refreshCommentTiles();
       } finally {
         if (tok === showTok){ busy = false; renderNav(); scheduleSave(); }
       }
@@ -1800,6 +1848,15 @@
       excluded.add(mat);
       showMat(nextMat);
     });
+    // Tick → marked done and on to the next page (the material stays in the set);
+    // untick → stays on this page.
+    pane.querySelector('.rb-w-rev').addEventListener('click', () => {
+      if (busy || !ctx.analyst || !ctx.analyst.setReviewed) return;
+      const on = !ctx.analyst.isReviewed(mat);
+      ctx.analyst.setReviewed(mat, on);
+      const inc = included(), idx = inc.indexOf(mat);
+      if (on && idx < inc.length - 1) showMat(inc[idx + 1]); else renderNav();
+    });
 
     // ── themes ──
     pane.querySelectorAll('[data-wt]').forEach(b => b.addEventListener('click', async () => {
@@ -1808,6 +1865,9 @@
     }));
     pane.querySelectorAll('[data-pt]').forEach(b => b.addEventListener('click', () => {
       printTheme = b.dataset.pt; applyTheme(); scheduleSave();
+    }));
+    pane.querySelectorAll('[data-pn]').forEach(b => b.addEventListener('click', () => {
+      printNotes = b.dataset.pn; applyTheme(); scheduleSave(); refreshCommentTiles();
     }));
 
     function teardown(){
@@ -1861,7 +1921,8 @@
           for (const c of tiles){
             const bx = c.x * g.W, by = c.y * g.H, bw = c.w * g.W;
             if (c.id === 'comment'){
-              drawCommentBox(doc, bx, by, bw, (c.h || c.w * 1.7778 * 0.2) * g.H, noteFor(p, c.opts), printTheme);
+              const content = printNoteContent(m);
+              if (content !== null) drawCommentBox(doc, bx, by, bw, (c.h || c.w * 1.7778 * 0.2) * g.H, content, printTheme);
               continue;
             }
             const rec = await cardFor(m, c, printTheme);
@@ -1977,9 +2038,31 @@
     let ty = y + pad + headPt / PT_PER_MM;
     doc.text('Comments', x + pad, ty);
     ty += lineMm * 1.2;
-    doc.setTextColor(dark ? 220 : 40, dark ? 231 : 48, dark ? 233 : 58); doc.setFont('helvetica','normal'); doc.setFontSize(bodyPt);
-    const lines = doc.splitTextToSize(pdfSafe(text || ''), w - pad * 2);
-    for (const l of lines){ if (ty > y + h - pad * 0.5) break; doc.text(l, x + pad, ty); ty += lineMm; }
+    const body = () => { doc.setTextColor(dark ? 220 : 40, dark ? 231 : 48, dark ? 233 : 58); doc.setFont('helvetica','normal'); doc.setFontSize(bodyPt); };
+    const put = (str) => {
+      for (const l of doc.splitTextToSize(pdfSafe(str || ''), w - pad * 2)){
+        if (ty > y + h - pad * 0.5) return false;
+        doc.text(l, x + pad, ty); ty += lineMm;
+      }
+      return true;
+    };
+    let fits = true;
+    if (Array.isArray(text)){   // "Print notes: All" — each review's note under its date
+      for (let i = 0; i < text.length; i++){
+        const e = text[i];
+        if (ty > y + h - pad * 0.5){ fits = false; break; }
+        doc.setTextColor(dark ? 150 : 100, dark ? 176 : 116, dark ? 182 : 122); doc.setFont('helvetica','bold'); doc.setFontSize(bodyPt * 0.85);
+        doc.text(pdfSafe(e.meta || ''), x + pad, ty); ty += lineMm;
+        body();
+        if (!put(e.text)){ fits = false; break; }
+        ty += lineMm * 0.45;
+      }
+    } else { body(); fits = put(text); }
+    // Never cut notes silently: say so in the box when they don't all fit.
+    if (!fits){
+      doc.setTextColor(200, 120, 20); doc.setFont('helvetica','bold'); doc.setFontSize(Math.max(5, bodyPt * 0.8));
+      doc.text('... more notes - enlarge the Comment tile', x + w - pad, y + h - pad * 0.35, { align:'right' });
+    }
   }
 
   // Live comment editor docked in the preview — write while you see the report.

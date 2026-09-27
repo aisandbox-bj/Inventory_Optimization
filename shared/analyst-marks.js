@@ -9,7 +9,9 @@
    IN THE ASSESSMENT JSON as an additive top-level block, keyed by SAP material:
        json.analyst = { v:1, updatedAt, materials: { "<material>": {
                           forAction, rec:{ mrpType, min, max, safety }, note,
-                          updatedAt, cleared } } }
+                          reviewed, updatedAt, cleared } } }
+   `reviewed` (APP-CANVAS-REVIEWED, 2026-09-27) = the date the material was ticked
+   "✓ Reviewed" on its Canvas page (ISO string); absent = not reviewed yet.
    so Save / Download / Upload / Reuse all carry it and RENAMING a run no longer
    loses it. (It used to sit only in a browser store keyed by the assessment NAME;
    a run saved under a new name came up empty — operator lost a month's stars,
@@ -32,7 +34,7 @@
         default saver; default = intake.current + the saved copy of this run).
      AnalystMarks.forAssessment(name) → handle bound by name only (no JSON sync).
         Handle: .isAction .toggleAction .setAction .getRec .setRec .getNote
-                .setNote .hasNote .actionMaterials .actionCount .noteMaterials
+                .setNote .hasNote .isReviewed .reviewedOn .setReviewed .actionMaterials .actionCount .noteMaterials
                 .noteCount .raw() .block() .flush()
      AnalystMarks.load(name)            → the browser copy's map (read-only use)
      AnalystMarks.restore(name, map)    → merge a map into the browser copy (newest wins)
@@ -67,7 +69,7 @@
     return !!(r.mrpType || r.min || r.max || r.safety);
   }
   function noteHasContent(o){ return !!(o && o.note && String(o.note).trim()); }
-  function hasAnyContent(o){ return !!(o && (o.forAction || recHasContent(o) || noteHasContent(o))); }
+  function hasAnyContent(o){ return !!(o && (o.forAction || o.reviewed || recHasContent(o) || noteHasContent(o))); }
   function ts(e){ const t = (e && e.updatedAt) ? Date.parse(e.updatedAt) : 0; return Number.isFinite(t) ? t : 0; }
 
   // Keep only the known shape (a hand-edited file can't inject junk).
@@ -81,6 +83,7 @@
       if (rec.mrpType || rec.min || rec.max || rec.safety) out.rec = rec;
     }
     if (e.note && String(e.note).trim()) out.note = String(e.note);
+    if (e.reviewed) out.reviewed = (typeof e.reviewed === 'string' && Number.isFinite(Date.parse(e.reviewed))) ? e.reviewed : nowIso();
     if (e.updatedAt && Number.isFinite(Date.parse(e.updatedAt))) out.updatedAt = String(e.updatedAt);
     if (e.cleared && !hasAnyContent(out)) out.cleared = true;
     if (!hasAnyContent(out) && !out.cleared) return null;
@@ -106,6 +109,7 @@
     const note = (cur.note && String(cur.note).trim()) ? String(cur.note)
                : (inc.note && String(inc.note).trim()) ? String(inc.note) : '';
     if (note) out.note = note;
+    if (cur.reviewed || inc.reviewed) out.reviewed = cur.reviewed || inc.reviewed;   // union, like ★
     return out;
   }
 
@@ -233,6 +237,17 @@
         try { if (typeof CommentStore !== 'undefined') CommentStore.set(material, text, name || ''); } catch (e2) {}
       },
       hasNote(material){ return noteHasContent(live(material)); },
+
+      /* ─── APP-CANVAS-REVIEWED — "✓ Reviewed" tick per Canvas page ─── */
+      isReviewed(material){ const e = live(material); return !!(e && e.reviewed); },
+      reviewedOn(material){ const e = live(material); return (e && e.reviewed) ? String(e.reviewed) : ''; },
+      setReviewed(material, on){
+        const e = entry(material);
+        if (on){ if (!e.reviewed) e.reviewed = nowIso(); } else delete e.reviewed;
+        finish(material);
+        changed();
+      },
+      reviewedMaterials(){ return Object.keys(data).filter(m => live(m) && data[m].reviewed); },
 
       actionMaterials(){ return Object.keys(data).filter(m => live(m) && data[m].forAction); },
       actionCount(){ return this.actionMaterials().length; },

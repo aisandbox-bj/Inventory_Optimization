@@ -62,6 +62,16 @@
     ]},
     { id:'minBelowLT', l:'Min below lead-time cover', need:'pr',  combine:'or', flags:[
         { k:'minBelowLT', l:'Min < P2 × avg lead-time (mo)' }
+    ]},
+    // APP-CANVAS-FILTER (2026-09-27) — the review work (★ from Trend, ✓ from the
+    // Canvas). Values refresh on every draw (visibleRows), so a star or tick set
+    // elsewhere shows straight away. The two cards AND, e.g. "★ and not reviewed".
+    { id:'anActionCard', l:'For Action',    need:'analyst', grp:'review', combine:'or', flags:[
+        { k:'anIsAction', l:'★ For Action only' }
+    ]},
+    { id:'anReviewCard', l:'Review status', need:'analyst', grp:'review', combine:'or', flags:[
+        { k:'anIsReviewed',  l:'✓ Reviewed' },
+        { k:'anNotReviewed', l:'Not reviewed yet' }
     ]}
   ];
   const FLAG_LABELS = {};
@@ -86,8 +96,8 @@
     { k:'material', l:'Material', g:'Identity', lock:true, left:true, val:m => m.material,
       cell:m => {
         const a = state.analyst;
-        const act = a && a.isAction(m.material), note = a && a.hasNote(m.material);
-        return `<span class="mono">${escapeHtml(m.material)}</span>${act ? '<span class="scr-row-action" title="Flagged For Action">★</span>' : ''}${note ? '<span class="scr-row-note" title="Has a note">✎</span>' : ''}`;
+        const act = a && a.isAction(m.material), note = a && a.hasNote(m.material), rev = a && a.isReviewed && a.isReviewed(m.material);
+        return `<span class="mono">${escapeHtml(m.material)}</span>${act ? '<span class="scr-row-action" title="Flagged For Action">★</span>' : ''}${note ? '<span class="scr-row-note" title="Has a note">✎</span>' : ''}${rev ? '<span class="scr-row-rev" title="Reviewed in the Canvas">✓</span>' : ''}`;
       } },
     { k:'description', l:'Description', g:'Identity', left:true, wide:true, val:m => m.description || '',
       cell:m => `<span class="desc" title="${escapeAttr(m.description || '')}">${escapeHtml(m.description || '')}</span>` },
@@ -130,6 +140,8 @@
     // Analyst (from the Trend sidecar — read-only here)
     { k:'anAction', l:'★ Action', g:'Analyst', val:m => (state.analyst && state.analyst.isAction(m.material)) ? 1 : 0,
       cell:m => (state.analyst && state.analyst.isAction(m.material)) ? '<span class="scr-row-action">★</span>' : '' },
+    { k:'anReviewed', l:'✓ Reviewed', g:'Analyst', val:m => (state.analyst && state.analyst.reviewedOn) ? state.analyst.reviewedOn(m.material) : '',
+      cell:m => { const d = (state.analyst && state.analyst.reviewedOn) ? state.analyst.reviewedOn(m.material) : ''; return d ? `<span class="scr-row-rev">✓</span> <span class="muted">${escapeHtml(d.slice(0, 10))}</span>` : DASH; } },
     { k:'anMinMax', l:'Analyst Min / Max', g:'Analyst', val:m => { const r = state.analyst ? state.analyst.getRec(m.material) : {}; return (r && (r.min || r.max)) ? String(r.min || '') + '/' + String(r.max || '') : ''; },
       cell:m => { const r = state.analyst ? state.analyst.getRec(m.material) : {}; return (r && (r.min || r.max)) ? `<span class="an-rec">${escapeHtml(r.min || '—')} / ${escapeHtml(r.max || '—')}</span>` : DASH; } }
   ];
@@ -468,7 +480,17 @@
   function numify(v){ if (v == null || v === '') return null; const n = (typeof v === 'number') ? v : parseFloat(v); return Number.isFinite(n) ? n : null; }
 
   function activeSetFields(){ return state.hasPr ? SET_FIELDS.concat(PR_SET_FIELDS) : SET_FIELDS.slice(); }
-  function activeFlagCards(){ return FLAG_CARDS.filter(c => c.need !== 'pr' || state.hasPr); }
+  function activeFlagCards(){ return FLAG_CARDS.filter(c => c.need === 'analyst' ? !!state.analyst : (c.need !== 'pr' || state.hasPr)); }
+  // Refresh the review-work flags the filter cards read ('Y' / 'N').
+  function refreshAnalystFlags(){
+    const a = state.analyst; if (!a) return;
+    for (const e of state.materials){
+      const m = e.m, rev = !!(a.isReviewed && a.isReviewed(m.material));
+      m.anIsAction = a.isAction(m.material) ? 'Y' : 'N';
+      m.anIsReviewed = rev ? 'Y' : 'N';
+      m.anNotReviewed = rev ? 'N' : 'Y';
+    }
+  }
 
   // APP-FIX-SCR-EXCL — the same filter object Trace uses, for one material, so
   // completed-chain stats here match the Trace page. Year is always 'All' (the
@@ -628,6 +650,7 @@
 
   // The rows the table shows: filters + search, in the current sort.
   function visibleRows(){
+    refreshAnalystFlags();
     let rows = state.materials.filter(e => passesBands(e.m, state.bands));
     if (state.search) {
       const q = state.search.toLowerCase();
@@ -1033,8 +1056,8 @@
         </div>`;
     }).join('');
 
-    const flagCards = activeFlagCards();
-    const flagHtml = flagCards.map(card => {
+    const allCards = activeFlagCards();
+    const flagCardHtml = (card) => {
       const band = state.bands[card.id];
       const checkedSet = (band && band.type === 'flag') ? new Set(band.flags) : null;
       return `
@@ -1047,9 +1070,14 @@
             }).join('')}
           </div>
         </div>`;
-    }).join('');
+    };
+    const reviewCards = allCards.filter(c => c.grp === 'review');
+    const flagCards = allCards.filter(c => c.grp !== 'review');
+    const flagHtml = flagCards.map(flagCardHtml).join('');
+    const reviewHtml = reviewCards.map(flagCardHtml).join('');
 
     $('#bandsBody').innerHTML = `
+      ${reviewCards.length ? `<div class="band-group-lab">Review work</div><div class="band-grid">${reviewHtml}</div>` : ''}
       ${flagCards.length ? `<div class="band-group-lab">Risk flags</div><div class="band-grid">${flagHtml}</div>` : ''}
       <div class="band-group-lab">Categories</div>
       <div class="band-grid">${setHtml}</div>

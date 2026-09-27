@@ -286,3 +286,16 @@ a.rb-pv-dl{ text-decoration:none; }
 .rb-choice-h{ font-family:'Rajdhani',sans-serif; font-weight:600; font-size:16px; color:#fff; margin-bottom:6px; }
 .rb-choice-b{ font-size:12.5px; color:#a7bcc2; line-height:1.5; margin-bottom:14px; }
 .rb-choice-a{ display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+
+/* ─── APP-CANVAS-REVIEWED + print-notes choice (2026-09-27) ─── */
+.rb-w-rev{ flex:none; }
+.rb-w-rev.on{ background:rgba(52,211,153,.16) !important; border-color:#34D399 !important; color:#8ff0c6 !important; }
+.rb-w-revn{ flex:none; font-size:11.5px; color:#9bb0b6; font-family:'JetBrains Mono',monospace; }
+.rb-w-revn b{ color:#dbe7e9; }
+.rb-w-revn.all, .rb-w-revn.all b{ color:#34D399; }
+.rb-cv-notes{ flex:none; }
+.rb-cardbox.rb-cmt-off{ opacity:.45; }
+.rb-cmt-item + .rb-cmt-item{ margin-top:8px; }
+.rb-cmt-meta{ font-size:11px; font-weight:700; opacity:.7; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rb-cardbox.rb-cmt-over::after{ content:'More notes than fit — enlarge this tile'; position:absolute; right:6px; bottom:6px; z-index:5;
+  background:#c87814; color:#fff; font:600 10.5px/1.3 'Barlow',sans-serif; padding:2px 7px; border-radius:4px; pointer-events:none; }
