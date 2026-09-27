@@ -34,7 +34,7 @@
         default saver; default = intake.current + the saved copy of this run).
      AnalystMarks.forAssessment(name) → handle bound by name only (no JSON sync).
         Handle: .isAction .toggleAction .setAction .getRec .setRec .getNote
-                .setNote .hasNote .isReviewed .reviewedOn .setReviewed .actionMaterials .actionCount .noteMaterials
+                .setNote .hasNote .isReviewed .reviewedOn .setReviewed .clearReviewed .actionMaterials .actionCount .noteMaterials
                 .noteCount .raw() .block() .flush()
      AnalystMarks.load(name)            → the browser copy's map (read-only use)
      AnalystMarks.restore(name, map)    → merge a map into the browser copy (newest wins)
@@ -248,6 +248,14 @@
         changed();
       },
       reviewedMaterials(){ return Object.keys(data).filter(m => live(m) && data[m].reviewed); },
+      // Clear the ✓ on the given materials (default: every material) in one save —
+      // e.g. to start next month's review from a run re-saved from this one.
+      clearReviewed(materials){
+        const list = (materials || this.reviewedMaterials()).filter(m => this.isReviewed(m));
+        list.forEach(m => { delete data[m].reviewed; finish(m); });
+        if (list.length) changed();
+        return list.length;
+      },
 
       actionMaterials(){ return Object.keys(data).filter(m => live(m) && data[m].forAction); },
       actionCount(){ return this.actionMaterials().length; },

@@ -358,6 +358,21 @@
     const body = $('#bandsBody');
     let t = null;
     body.addEventListener('change', () => { if (t) { clearTimeout(t); t = null; } applyBands(); });
+    // APP-CANVAS-REVIEWED — clear every ✓ in this run (e.g. starting next month's
+    // review from a run re-saved from this one). Two clicks; stars and notes stay.
+    body.addEventListener('click', (e) => {
+      const b = e.target.closest('#btnClearReviewed'); if (!b || !state.analyst || !state.analyst.clearReviewed) return;
+      const n = state.analyst.reviewedMaterials().length; if (!n) return;
+      if (!b.classList.contains('armed')) {
+        b.classList.add('armed'); b.textContent = `Clear ${n} tick${n === 1 ? '' : 's'} — sure?`;
+        setTimeout(() => { b.classList.remove('armed'); updateClearReviewedBtn(); }, 3500);
+        return;
+      }
+      b.classList.remove('armed');
+      const k = state.analyst.clearReviewed();
+      toast(`Cleared ${k} ✓ Reviewed tick${k === 1 ? '' : 's'} — stars and notes are unchanged.`);
+      renderTable();
+    });
     body.addEventListener('input', (e) => {
       if (e.target.type !== 'number') return;
       if (t) clearTimeout(t);
@@ -661,7 +676,14 @@
   // (name kept for the Quick-look Prev/Next below)
   function filteredMaterials(){ return visibleRows(); }
 
+  function updateClearReviewedBtn(){
+    const b = $('#btnClearReviewed'); if (!b || b.classList.contains('armed')) return;
+    const n = (state.analyst && state.analyst.reviewedMaterials) ? state.analyst.reviewedMaterials().length : 0;
+    b.textContent = n ? `Clear all ✓ ticks (${n})` : 'Clear all ✓ ticks';
+    b.disabled = !n;
+  }
   function renderTable(){
+    updateClearReviewedBtn();
     const wrap = $('#scrTableWrap');
     const keepTop = wrap.scrollTop, keepLeft = wrap.scrollLeft;   // re-draws never jump the table
     const rows = visibleRows();
@@ -1077,7 +1099,7 @@
     const reviewHtml = reviewCards.map(flagCardHtml).join('');
 
     $('#bandsBody').innerHTML = `
-      ${reviewCards.length ? `<div class="band-group-lab">Review work</div><div class="band-grid">${reviewHtml}</div>` : ''}
+      ${reviewCards.length ? `<div class="band-group-lab">Review work</div><div class="band-grid">${reviewHtml}</div><div class="band-rev-act"><button type="button" class="ghost scr-mini" id="btnClearReviewed">Clear all ✓ ticks</button></div>` : ''}
       ${flagCards.length ? `<div class="band-group-lab">Risk flags</div><div class="band-grid">${flagHtml}</div>` : ''}
       <div class="band-group-lab">Categories</div>
       <div class="band-grid">${setHtml}</div>

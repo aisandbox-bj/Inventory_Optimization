@@ -1640,7 +1640,7 @@
         revBtn.classList.toggle('on', on); revBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
         revBtn.textContent = on ? '✓ Reviewed · ' + fmtDay(an.reviewedOn(mat)) : '○ Mark reviewed';
         revBtn.disabled = busy;
-        revN.innerHTML = `<b>${nRev}</b> of ${inc.length} reviewed${nRev === inc.length ? ' ✓' : ''}`;
+        revN.innerHTML = `<b>${nRev}</b> of ${inc.length} reviewed${nRev === inc.length ? ' ✓' : ''}${nRev ? ' · <a href="#" class="rb-w-revclr">clear ticks</a>' : ''}`;
         revN.classList.toggle('all', nRev === inc.length);
       }
     }
@@ -1847,6 +1847,15 @@
       const nextMat = inc[idx + 1] || inc[idx - 1];
       excluded.add(mat);
       showMat(nextMat);
+    });
+    // "clear ticks" — untick every page in this canvas (two clicks).
+    pane.querySelector('.rb-w-revn').addEventListener('click', (e) => {
+      const a = e.target.closest('.rb-w-revclr'); if (!a) return;
+      e.preventDefault();
+      if (busy || !ctx.analyst || !ctx.analyst.clearReviewed) return;
+      if (!armed(a, 'clear all ticks in this canvas — sure?', 'clear ticks')) return;
+      ctx.analyst.clearReviewed(included());
+      renderNav();
     });
     // Tick → marked done and on to the next page (the material stays in the set);
     // untick → stays on this page.

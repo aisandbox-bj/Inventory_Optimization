@@ -387,3 +387,7 @@
 .scr-cmt-item:hover{ background:rgba(31,206,216,.10); }
 .scr-cmt-item[disabled]{ opacity:.4; cursor:default; }
 .scr-cmt-item[disabled]:hover{ background:none; }
+/* APP-CANVAS-REVIEWED — clear all ✓ ticks */
+.band-rev-act{ margin:6px 0 2px; }
+#btnClearReviewed.armed{ border-color:#f4c76a; color:#f4c76a; }
+#btnClearReviewed:disabled{ opacity:.45; cursor:default; }
