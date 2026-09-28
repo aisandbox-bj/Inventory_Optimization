@@ -393,7 +393,7 @@
     const { drawn } = drawnChains(ctx);
     if (drawn.length < 2){ thinNote(P, `Only ${drawn.length} complete chain(s) reached Site WH — need at least 2.`); return; }
     const PK = TracePhase.PHASE_KEYS, PL = TracePhase.PHASE_LABELS, COLORS = TracePhase.PHASE_COLORS;
-    const pstats = PK.map(ph => ({ key:ph, label:PL[ph], s:TracePhase.boxStats(drawn.map(c => c[ph])) }));
+    const pstats = PK.map(ph => ({ key:ph, label:PL[ph], s:TracePhase.boxStats(TracePhase.phaseVals(drawn, ph)) }));
     const flowMean = TracePhase.totalToSiteMean(drawn);
     const ePh = pstats.find(x => x.key==='E'); const eMean = (ePh && ePh.s) ? ePh.s.mean : 0;
     // chevron (A–D proportional) + total-to-site readout
@@ -456,9 +456,9 @@
     // shared scale = max total-to-site across years
     const yearStats = years.map(yr => {
       const cs = byYear.get(yr);
-      const means = PK.map(ph => { const s = TracePhase.boxStats(cs.map(c => c[ph])); return s ? s.mean : 0; });
+      const means = PK.map(ph => { const s = TracePhase.boxStats(TracePhase.phaseVals(cs, ph)); return s ? s.mean : 0; });
       const toSite = means[0]+means[1]+means[2]+means[3];
-      const sE = TracePhase.boxStats(cs.map(c => c.E));
+      const sE = TracePhase.boxStats(TracePhase.phaseVals(cs, 'E'));
       return { yr, n:cs.length, means, toSite, shelf: sE ? sE.mean : null };   // null = no chain used yet that year
     });
     const maxToSite = Math.max(1, ...yearStats.map(s => s.toSite));
@@ -1055,7 +1055,7 @@
         if (drawn.length < 2){ inner += `<div style="color:${TH.sub};font-size:12px">Fewer than 2 complete chains.</div>`; }
         else {
           const PK=TracePhase.PHASE_KEYS, PL=TracePhase.PHASE_LABELS, CO=TracePhase.PHASE_COLORS;
-          const ps = PK.map(ph=>({key:ph,label:PL[ph],s:TracePhase.boxStats(drawn.map(c=>c[ph]))}));
+          const ps = PK.map(ph=>({key:ph,label:PL[ph],s:TracePhase.boxStats(TracePhase.phaseVals(drawn,ph))}));
           const flowMean = TracePhase.totalToSiteMean(drawn);
           const flow = ps.filter(x=>x.key!=='E');
           const bar = flow.map((p,i)=>{ const frac=flowMean>0?((p.s?p.s.mean:0)/flowMean):0; return `<div style="flex:${Math.max(frac,0.02)};background:${CO[i]};color:#0f1620;font-size:9px;font-weight:700;padding:6px 3px;text-align:center;overflow:hidden">${p.label.split(' ')[0]}<br>${p.s?p.s.mean.toFixed(1):'—'}d</div>`; }).join('');
@@ -1076,7 +1076,7 @@
         const PK=TracePhase.PHASE_KEYS, CO=TracePhase.PHASE_COLORS;
         const byYear=new Map(); drawn.forEach(c=>{const y=(c.prDate||'').slice(0,4);if(!y)return;(byYear.get(y)||byYear.set(y,[]).get(y)).push(c);});
         const years=[...byYear.keys()].sort().reverse();   // newest year on top (latest → oldest, like every other table)
-        const stats=years.map(y=>{const cs=byYear.get(y);const mn=PK.map(ph=>{const s=TracePhase.boxStats(cs.map(c=>c[ph]));return s?s.mean:0;});return {y,n:cs.length,mn,toSite:mn[0]+mn[1]+mn[2]+mn[3]};});
+        const stats=years.map(y=>{const cs=byYear.get(y);const mn=PK.map(ph=>{const s=TracePhase.boxStats(TracePhase.phaseVals(cs,ph));return s?s.mean:0;});return {y,n:cs.length,mn,toSite:mn[0]+mn[1]+mn[2]+mn[3]};});
         const mx=Math.max(1,...stats.map(s=>s.toSite));
         inner += stats.map(s=>{
           const segs=s.mn.slice(0,4).map((v,i)=>v>0?`<div style="width:${(v/s.toSite*100)*(s.toSite/mx)}%;background:${CO[i]};min-width:3px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;color:#0f1620;overflow:hidden;white-space:nowrap">${v.toFixed(1)}d</div>`:'').join('');

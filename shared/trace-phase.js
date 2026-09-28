@@ -118,13 +118,38 @@
       .map(r => parseISO(r.postingDate))
       .filter(Boolean)
       .sort((a, b) => a - b);
-    // How many PRs of THIS material sit on each PO (a PO can combine several PRs).
+    // APP-TRACE-PRLINES (operator 2026-09-27) — one requisition can carry the same
+    // material on several lines, all converted to the same PO (e.g. PR 10003789 →
+    // PO 9600006236, up to 8 lines). That is ONE order with ONE delivery, so its
+    // lines become one chain (qty = the lines added up, `lines` = how many).
+    // Lines with no PO yet stay separate. Every chain gets an `id` = PR/line, so an
+    // exclude acts on that line only (it used to key off the PR number alone).
+    const units = [], byPrPo = new Map(), seenPr = new Map();
+    for (const r of prRows) {
+      const pr = String(r.pr || '').trim(), po = String(r.purchaseOrder || '').trim();
+      const k = pr + '|' + po;
+      if (po && byPrPo.has(k)) { byPrPo.get(k).push(r); continue; }
+      const u = [r]; units.push(u); if (po) byPrPo.set(k, u);
+    }
+    // How many DIFFERENT PRs of this material sit on each PO (buyers bundle
+    // requisitions — mostly 2, sometimes more than 5, operator 2026-09-27).
     const prsPerPo = new Map();
-    for (const r of prRows) { const po = String(r.purchaseOrder || '').trim(); if (po) prsPerPo.set(po, (prsPerPo.get(po) || 0) + 1); }
+    for (const r of prRows) {
+      const po = String(r.purchaseOrder || '').trim(); if (!po) continue;
+      if (!prsPerPo.has(po)) prsPerPo.set(po, new Set());
+      prsPerPo.get(po).add(String(r.pr || '').trim());
+    }
+    const itemNum = (x) => { const n = parseInt(String(x == null ? '' : x).trim(), 10); return Number.isFinite(n) ? n : Infinity; };
 
-    return prRows.map(r => {
+    return units.map(lines => {
+      lines = lines.slice().sort((a, b) => itemNum(a.prItem) - itemNum(b.prItem));
+      const r         = lines.reduce((a, b) => (String(b.prDate || '') < String(a.prDate || '') ? b : a), lines[0]);   // earliest-dated line
       const pr        = String(r.pr || '').trim();
       const po        = String(r.purchaseOrder || '').trim();
+      const items     = lines.map(x => String(x.prItem == null ? '' : x.prItem).trim()).filter(Boolean);
+      const occ       = (seenPr.get(pr) || 0) + 1; seenPr.set(pr, occ);
+      const id        = pr + '/' + (items[0] || ('#' + occ));
+      const qtyReq    = lines.reduce((s, x) => s + numOr(x.qtyRequested, 0), 0);
       const prDate    = parseISO(r.prDate);
       const relDate   = parseISO(r.releaseDate);
       const poDate    = parseISO(r.poDate);
@@ -139,12 +164,15 @@
       // Qty: total received at site on this PO. When several PRs of this material
       // share the PO, the PO's total would repeat on each — show the PR's own
       // requested qty instead (shared-PO handling of phases is pending, see RoC).
-      const sharedPo  = !!po && (prsPerPo.get(po) || 0) > 1;
+      const prsOnPo   = po ? ((prsPerPo.get(po) || new Set()).size || 1) : 0;
+      const sharedPo  = prsOnPo > 1;
       const qtyAtWH   = (a109 && !sharedPo) ? a109.sumQ : 0;
 
-      // APP-FIX-T-04c — cancellation = deletion flag AND processingStatus 'N'.
-      const cancelled = String(r.deletionIndicator || '').toLowerCase() === 'true'
-                     && String(r.processingStatus || '').trim().toUpperCase() === 'N';
+      // APP-FIX-T-04c — cancellation = deletion flag AND processingStatus 'N'
+      // (a merged order is cancelled only when every one of its lines is).
+      const lineCancelled = (x) => String(x.deletionIndicator || '').toLowerCase() === 'true'
+                     && String(x.processingStatus || '').trim().toUpperCase() === 'N';
+      const cancelled = lines.every(lineCancelled);
 
       // APP-FIX-REL-DATE (2026-06-26) — a PR's release must fall between the PR
       // date and the PO date. A missing release, one dated before the PR, or one
@@ -178,7 +206,10 @@
       const adminCancelled = !!po && cancelled;
 
       return {
-        pr, po,
+        id, pr, po,
+        prItem:   items.join('+'),
+        lines:    lines.length,          // PR lines merged into this chain (same PR, same PO)
+        prsOnPo,                         // different PRs of this material bundled on the PO
         prDate:   fmtISO(prDate),
         relDate:  fmtISO(relDate),
         poDate:   fmtISO(poDate),
@@ -187,7 +218,7 @@
         c261:     fmtISO(c261),
         A, B, C, D, E, total, totalToSite,
         releaseBad,
-        qty:      qtyAtWH || numOr(r.qtyRequested, 0),
+        qty:      qtyAtWH || qtyReq,
         qtySource: qtyAtWH ? 'MB51-109' : 'PR-requested',
         // APP-TRACE-WEIGHTED — split-delivery transparency (n lines, first → last)
         split107: a107 && a107.n > 1 ? { n: a107.n, first: fmtISO(a107.first), last: fmtISO(a107.last), qty: a107.sumQ } : null,
@@ -206,6 +237,10 @@
        filters = { yearFilter: 'All'|year, sigmaLimit: null|3|2|1.5, manualExcl: Set<pr> }
   ═════════════════════════════════════════════════════════════════════════ */
   function getChainYear(c){ return (c.prDate || '').substring(0, 4); }
+
+  // Is chain `c` in an exclude set? Sets hold chain ids (PR/line); a plain PR
+  // number (saved before 2026-09-27) still excludes every line of that PR.
+  function exclHas(set, c){ return !!set && !!c && (set.has(c.id) || set.has(c.pr)); }
 
   function getYearsForChains(chains){
     const yrs = new Set();
@@ -235,7 +270,7 @@
     const manualExcl = (filters && filters.manualExcl) || new Set();
     if (!sigmaLimit) return new Set();
     const inYear = chains.filter(c => yearFilter === 'All' || getChainYear(c) === yearFilter);
-    const drawn  = inYear.filter(c => !!c.siteWH && !manualExcl.has(c.pr));
+    const drawn  = inYear.filter(c => !!c.siteWH && !exclHas(manualExcl, c));
     if (drawn.length < 4) return new Set();
     const totals = drawn.map(c => c.totalToSite).sort((a, b) => a - b);
     const med    = quantile(totals, 0.5);
@@ -245,7 +280,7 @@
     if (spread <= 0) return new Set();                       // fully degenerate — don't trim
     const threshold = med + sigmaLimit * spread;
     const excl = new Set();
-    drawn.forEach(c => { if (c.totalToSite > threshold) excl.add(c.pr); });
+    drawn.forEach(c => { if (c.totalToSite > threshold) excl.add(c.id); });
     return excl;
   }
 
@@ -256,7 +291,7 @@
     const ex = new Set([...manualExcl, ...sig]);
     return chains.filter(c =>
       (yearFilter === 'All' || getChainYear(c) === yearFilter)
-      && !ex.has(c.pr)
+      && !exclHas(ex, c)
     );
   }
 
@@ -303,11 +338,36 @@
      the per-chain total and drag the simple mean below the phase-decomposition
      headline. Summing per-phase means (each over only the chains where that phase
      is dated) is the figure the operator sees on Trace. */
+  /* APP-TRACE-POBUNDLE (operator decision 2026-09-27, option 2) — the values that
+     go into a step's statistics. Buyers often bundle several requisitions for the
+     same material into one PO. Approval (A) and buying (B) are each requisition's
+     own wait, so they count once per requisition. Supplier (C), 3PL (D) and shelf
+     time (E) belong to the PO's delivery, which is the same for every requisition
+     on it, so they count ONCE PER PO (the mean of that PO's values — they are
+     normally identical). Only the chains passed in are grouped, so excluding one
+     requisition leaves the PO's delivery counted once through the others. */
+  const PER_PO_PHASES = { C: true, D: true, E: true };
+  function phaseVals(chains, ph){
+    chains = chains || [];
+    if (!PER_PO_PHASES[ph]) return chains.map(c => c[ph]);
+    const out = [], byPo = new Map();
+    for (const c of chains){
+      if (!c.po || !(c.prsOnPo > 1)) { out.push(c[ph]); continue; }
+      if (!byPo.has(c.po)) byPo.set(c.po, []);
+      byPo.get(c.po).push(c[ph]);
+    }
+    for (const vs of byPo.values()){
+      const f = vs.filter(v => v != null && Number.isFinite(v));
+      out.push(f.length ? f.reduce((s, v) => s + v, 0) / f.length : null);
+    }
+    return out;
+  }
+
   function totalToSiteMean(drawn){
     let sum = 0;
     for (const ph of PHASE_KEYS){
       if (ph === 'E') continue;                 // E = time-to-first-use (shelf), not "to site"
-      const s = boxStats((drawn || []).map(c => c[ph]));
+      const s = boxStats(phaseVals(drawn, ph));
       if (s) sum += s.mean;
     }
     return sum;
@@ -471,13 +531,13 @@
   function renderPhaseVisual(drawn){
     // ── Per-phase stats ───────────────────────────────────────────────────
     const phaseStats = PHASE_KEYS.map(ph => {
-      const vals = drawn.map(c => c[ph]).filter(v => v != null && Number.isFinite(v));
+      const vals = phaseVals(drawn, ph).filter(v => v != null && Number.isFinite(v));
       return {
         key:   ph,
         label: PHASE_LABELS[ph],
         color: PHASE_COLORS[PHASE_KEYS.indexOf(ph)],
         vals,                              // APP-E-PD-RESTYLE — raw durations for jittered points
-        stats: boxStats(drawn.map(c => c[ph]))
+        stats: boxStats(phaseVals(drawn, ph))
       };
     });
 
@@ -648,7 +708,7 @@
   }
 
   window.TracePhase = {
-    PHASE_KEYS, PHASE_LABELS, PHASE_COLORS,
+    PHASE_KEYS, PHASE_LABELS, PHASE_COLORS, phaseVals, exclHas,
     computeChains,
     boxStats,
     getChainYear,

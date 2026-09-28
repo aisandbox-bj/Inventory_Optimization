@@ -381,6 +381,59 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Bundled POs (option 2) + PR lines - 2026-09-27 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-27</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-TRACE-POBUNDLE + APP-TRACE-PRLINES</b>: requisitions bundled onto one PO count the delivery once; several lines of one requisition on one PO are one order; exclude works per line — <b>browser-verified on the June data; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator confirmed:</b> several requisitions for the same material are often bundled into one PO (mostly 2, sometimes more than 5). The operator chose <b>option 2</b>:
+          <ul>
+            <li>approval (A) and buying (B) count <b>per requisition</b>;</li>
+            <li>supplier (C), 3PL (D) and shelf time (E) count <b>once per PO</b>.</li>
+          </ul>
+          Before, each requisition carried the PO's delivery legs, so a bundled delivery counted 2–4 times in the averages.</li>
+        <li><b>How</b> (<code>shared/trace-phase.js</code>): new <code>TracePhase.phaseVals(chains, step)</code>. For C / D / E it groups the requisitions that share a PO into one value (the mean of that PO's values, which are normally identical). It feeds every step statistic:
+          <ul>
+            <li><code>totalToSiteMean</code>, so the lead time on Trend / Canvas / Trace ties as before;</li>
+            <li>Phase Distribution;</li>
+            <li>Year-on-Year (Trace + report tile);</li>
+            <li>Canvas / Sandbox phase tables;</li>
+            <li>report blocks.</li>
+          </ul>
+          Only the chains passed in are grouped, so excluding one requisition still leaves the PO's delivery counted once. The sigma trim and the end-to-end spread still use each requisition's own total, since that is its real journey.</li>
+        <li><b>Several lines of one requisition on the same PO</b> (normal in SAP, operator 2026-09-27) are merged into one order. Qty = received at site (or the lines added up when the PO also carries other requisitions); the order is cancelled only if every line is; Raw Data tags it "n lines". Lines without a PO stay separate.</li>
+        <li><b>Exclude per line.</b> Every chain now has an id (requisition / line). The Raw Data exclude button and the sigma trim act on that line only; before, they keyed off the requisition number and so hit every line of it. Excludes saved before this change (plain requisition numbers) still apply. Clicking one re-includes just that line and keeps the requisition's other lines excluded.</li>
+        <li><b>Raw Data tags:</b> "1 of 3 on PO" (bundled) and "8 lines" (merged).</li>
+        <li><b>Effect on the June data</b> (276 materials; old engine vs new, no excludes):
+          <ul>
+            <li>258 unchanged or without a lead time;</li>
+            <li>exactly the <b>18 materials with bundled POs</b> moved, most by under 3 days. Largest: 1003376 62.9 → 53.0 d, 1002984 60.2 → 52.5, 2004641 44.9 → 48.2, 1011045 24.3 → 27.5, 1002777 39.2 → 41.8, 1006208 32.1 → 29.5;</li>
+            <li>the <b>10 merged-line materials</b> (PR 10003789 → PO 9600006236, 1021775–1021789) now show 1 order instead of 3–8. Their lead time is unchanged because that is their only order; the merge changes the lead time when such a material also has other orders.</li>
+          </ul></li>
+        <li><b>Correction to an earlier figure:</b> the "23 POs with more than one requisition for the same material" (2026-09-26) included PO 9600006236, which is one requisition over many lines. The bundled count is <b>22 POs / 27 PO-material pairs / 18 materials</b>: 24 pairs carry 2 requisitions, 2 carry 3, 1 carries 4. The requisitions on one PO were raised a median 3 days apart (max 51).</li>
+        <li><b>Verified in the browser:</b>
+          <ul>
+            <li>the June comparison above;</li>
+            <li>Trace Raw Data tags on 2004641 (three requisitions on PO 9600009053 show identical C / D);</li>
+            <li>per-line exclude hits one row only; an old requisition-number exclude still applies and clears;</li>
+            <li>all six Trace views render;</li>
+            <li>lead time for 2004641 reads 48.2 d on Trace, Canvas and Trend alike;</li>
+            <li>no console errors.</li>
+          </ul></li>
+        <li><b>Not covered:</b>
+          <ul>
+            <li>MB51 records only the PO number, not the PO line, so when one PO's lines arrive at different times the delivery date still covers the whole PO.</li>
+            <li>The "different lines of one requisition on different POs" case has no example in the June extract, so it's tested only by logic: those lines stay separate chains with their own POs.</li>
+            <li><b>Calibre Mirror</b> uses a copy of this engine and must be updated to match — a heads-up was given to the operator to pass on.</li>
+          </ul></li>
+        <li>Files: <code>shared/trace-phase.js</code>, <code>trace/trace.{js,css}</code>, <code>shared/report-builder.js</code>, <code>screener/screener.js</code>, <code>sandbox/sandbox.js</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Rollback: <code>_rollback/PO-BUNDLE-pre/</code> + <code>checkpoint/pre-pobundle</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Clear all reviewed ticks - 2026-09-27 -->
     <article class="roc-entry dev">
       <div class="head">

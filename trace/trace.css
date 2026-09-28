@@ -1174,3 +1174,7 @@
   color:#FBBF24; border:1px solid rgba(251,191,36,.5); }
 .chain-table .split-sub{ font-size:9.5px; color:var(--text-muted,#9BABA8); margin-top:2px; white-space:nowrap; }
 .raw-data-note{ margin:8px 2px 0; font-family:var(--font-body,'Barlow'),sans-serif; font-size:11.5px; line-height:1.45; color:var(--text-muted,#9BABA8); }
+/* APP-TRACE-PRLINES / -POBUNDLE — PR-cell tags (merged lines · bundled on one PO) */
+.pr-tag{ display:inline-block; margin-left:4px; padding:0 5px; border-radius:3px; font-size:9.5px; line-height:15px;
+  font-family:'Barlow',sans-serif; background:rgba(155,176,182,.16); color:#b8c9cc; white-space:nowrap; vertical-align:1px; }
+.pr-tag.bundle{ background:rgba(167,139,250,.18); color:#cbbcfb; }

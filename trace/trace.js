@@ -1915,7 +1915,7 @@
     // Previously this used every non-excluded chain incl. PR-only / cancelled /
     // in-flight, whose un-happened phases compute as 0 days — that dragged every
     // mean toward zero and made the per-year "n" count PRs, not POs.
-    const acAll  = state.chains.filter(c => !ex.has(c.pr) && !!c.siteWH);   // completed only; ignore yearFilter; respect manual + sigma
+    const acAll  = state.chains.filter(c => !TracePhase.exclHas(ex, c) && !!c.siteWH);   // completed only; ignore yearFilter; respect manual + sigma
 
     // Shared filter toolbar (same construction as the other views). Year buttons
     // are shown for consistency but DON'T change this view — noted in the sub.
@@ -1969,7 +1969,7 @@
     const palette = ['#4FC2D7', '#F87171', '#FBBF24', '#A78BFA', '#5AB69D', '#FB923C'];
     const yrColor = {}; yrNums.forEach((y, i) => { yrColor[y] = palette[i % palette.length]; });
     const PK = TracePhase.PHASE_KEYS, PL = TracePhase.PHASE_LABELS, PC = TracePhase.PHASE_COLORS;
-    const meanPh = (chs, ph) => { const v = chs.map(c => c[ph]).filter(x => x != null && Number.isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; };
+    const meanPh = (chs, ph) => { const v = TracePhase.phaseVals(chs, ph).filter(x => x != null && Number.isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; };
     const yrData = yrNums.map(yr => {
       const cc = acAll.filter(c => Number(getChainYear(c)) === yr);
       const m = {}; PK.forEach(ph => { m[ph] = meanPh(cc, ph); });
@@ -2049,8 +2049,8 @@
 
     // Per (phase, year): the raw values (for jitter/outliers) + box stats.
     const phYr = phases.map(ph => yrNums.map(yr => {
-      const vals = acAll.filter(c => Number(getChainYear(c)) === yr)
-                        .map(c => c[ph]).filter(v => v != null && Number.isFinite(v));
+      const vals = TracePhase.phaseVals(acAll.filter(c => Number(getChainYear(c)) === yr), ph)
+                        .filter(v => v != null && Number.isFinite(v));
       return { vals, s: vals.length ? TracePhase.boxStats(vals) : null };
     }));
 
@@ -2067,7 +2067,7 @@
     // the scale IS the average total). Boxes/whiskers above this clip and flag
     // as ↑ off-chart.
     const pooledMean = phases.map(ph => {
-      const vs = acAll.map(c => c[ph]).filter(v => v != null && Number.isFinite(v));
+      const vs = TracePhase.phaseVals(acAll, ph).filter(v => v != null && Number.isFinite(v));
       return vs.length ? vs.reduce((s, v) => s + v, 0) / vs.length : 0;
     });
     const totalMean = pooledMean.reduce((s, v) => s + v, 0);
@@ -2546,12 +2546,12 @@
     const ex = allExcl(chains, material);
     return chains.filter(c =>
       (state.yearFilter === 'All' || getChainYear(c) === state.yearFilter)
-      && !ex.has(c.pr)
+      && !TracePhase.exclHas(ex, c)
     );
   }
 
   function isExcluded(chain, material){
-    return allExcl(state.chains, material).has(chain.pr);
+    return TracePhase.exclHas(allExcl(state.chains, material), chain);
   }
 
   function clearManualExcl(material){
@@ -2560,9 +2560,18 @@
     }
   }
 
-  function toggleManualExcl(material, pr){
+  // Toggle one chain (by its PR/line id). A plain PR number saved before
+  // 2026-09-27 excluded every line of that PR: re-including one line keeps the
+  // PR's other lines excluded, now by their own ids.
+  function toggleManualExcl(material, id){
     const set = getManualExcl(material);
-    if (set.has(pr)) set.delete(pr); else set.add(pr);
+    const c = (state.chains || []).find(x => x.id === id);
+    if (c && c.pr && set.has(c.pr)) {
+      set.delete(c.pr);
+      state.chains.filter(x => x.pr === c.pr && x.id !== id).forEach(x => set.add(x.id));
+      return;
+    }
+    if (set.has(id)) set.delete(id); else set.add(id);
   }
 
   function renderSwimlane(material){
@@ -2589,7 +2598,7 @@
     );
     const drawn = yearFiltered.filter(c => !!c.siteWH);
     const exclSet = allExcl(state.chains, mat);
-    const isExcl = (c) => exclSet.has(c.pr);
+    const isExcl = (c) => TracePhase.exclHas(exclSet, c);
     const labels = drawn.map(c => `${c.pr}${c.po ? ' → ' + c.po : ''}`);
 
     // Colour helpers — fold the cancelled / excluded / normal logic into
@@ -2693,9 +2702,9 @@
                 if (isExcl(c)) {
                   const manualSet = getManualExcl(mat);
                   const sigSet    = sigmaExcl(state.chains);
-                  const how = manualSet.has(c.pr)
+                  const how = TracePhase.exclHas(manualSet, c)
                     ? 'manual'
-                    : sigSet.has(c.pr) ? `sigma-trim (${state.sigmaLimit}σ)` : 'excluded';
+                    : TracePhase.exclHas(sigSet, c) ? `sigma-trim (${state.sigmaLimit}σ)` : 'excluded';
                   lines.push(`Excluded: ${how}`);
                 }
                 if (c.releaseBad) lines.push('Release date invalid - PR Approval / Internal Processing not counted');
@@ -2852,6 +2861,15 @@
     return `<span class="split-tag">×${s.n}</span><div class="split-sub">${escapeHtml(s.first)} → ${escapeHtml(s.last)}</div>`;
   }
 
+  // APP-TRACE-PRLINES / -POBUNDLE — small tags on the PR cell: lines of this PR
+  // merged into one order, and other PRs bundled onto the same PO.
+  function prTags(c){
+    let t = '';
+    if (c.lines > 1) t += ` <span class="pr-tag" title="${c.lines} lines of this PR on the same PO — counted as one order">${c.lines} lines</span>`;
+    if (c.prsOnPo > 1) t += ` <span class="pr-tag bundle" title="This PO carries ${c.prsOnPo} different PRs for this material — its supplier / 3PL / shelf time counts once">1 of ${c.prsOnPo} on PO</span>`;
+    return t;
+  }
+
   function renderChainTable(){
     // APP-V03-PORT-1 (2026-05-24) — row tint follows STATE, not raw cancellation
     // flag. adminCancelled chains (PR cancel-flag set AFTER PO raised) keep
@@ -2863,8 +2881,8 @@
     const manualSet = getManualExcl(mat);
     const sigmaSet  = sigmaExcl(state.chains);
     const rows = state.chains.map(c => {
-      const isManual = manualSet.has(c.pr);
-      const isSigma  = sigmaSet.has(c.pr);
+      const isManual = TracePhase.exclHas(manualSet, c);
+      const isSigma  = TracePhase.exclHas(sigmaSet, c);
       const excluded = isManual || isSigma;
       const trCls    = [
         c.state === 'CANCELLED' ? 'cancelled' : '',
@@ -2872,14 +2890,14 @@
       ].filter(Boolean).join(' ');
       const togBtn = isSigma
         ? `<span class="tr-excl-tog sigma" title="Sigma-trimmed (robust: median + ${state.sigmaLimit}·MAD on processing time to site, A–D). Adjust via toolbar.">σ</span>`
-        : `<button class="tr-excl-tog ${isManual ? 'on' : ''}" data-toggle-excl="${escapeAttr(c.pr)}" data-sigma="0" title="${isManual ? 'Click to include this chain in stats / chart' : 'Click to exclude this chain from stats / chart'}">${isManual ? '✕' : '·'}</button>`;
+        : `<button class="tr-excl-tog ${isManual ? 'on' : ''}" data-toggle-excl="${escapeAttr(c.id)}" data-sigma="0" title="${isManual ? 'Click to include this chain in stats / chart' : 'Click to exclude this chain from stats / chart'}">${isManual ? '✕' : '·'}</button>`;
       const stateLabel = excluded
         ? `<span class="state-excluded" title="Excluded: ${isSigma ? 'sigma-trim' : 'manual'}">EXCL · ${c.state.replace(/_/g, ' ')}</span>`
         : c.state.replace(/_/g, ' ');
       return `
         <tr class="${trCls}">
           <td class="tog-cell">${togBtn}</td>
-          <td class="mono">${escapeHtml(c.pr)}</td>
+          <td class="mono">${escapeHtml(c.pr)}${prTags(c)}</td>
           <td class="trig ${isMrpChain(c) ? 'trig-mrp' : 'trig-manual'}">${isMrpChain(c) ? 'MRP' : 'Manual'}</td>
           <td class="mono">${escapeHtml(c.prDate || '—')}</td>
           <td class="mono">${escapeHtml(c.po || '—')}</td>

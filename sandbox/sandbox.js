@@ -1021,7 +1021,7 @@
       return;
     }
     const PK = TracePhase.PHASE_KEYS, PL = TracePhase.PHASE_LABELS;
-    const pstats = PK.map(ph => ({ key: ph, label: PL[ph], s: TracePhase.boxStats(drawn.map(c => c[ph])) }));
+    const pstats = PK.map(ph => ({ key: ph, label: PL[ph], s: TracePhase.boxStats(TracePhase.phaseVals(drawn, ph)) }));
     const flowMean = TracePhase.totalToSiteMean(drawn);   // #22-tie — shared corrected calc (= Σ phase means A–D)
     const ePh = pstats.find(x => x.key === 'E');
     const eMean = (ePh && ePh.s) ? ePh.s.mean : 0;
