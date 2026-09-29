@@ -112,6 +112,7 @@
     const json = await AppStorage.get('intake.current');
     if (!json) { showEmptyState(renderNoIntake()); return; }
     state.json = json;
+    if (window.MaterialCard) MaterialCard.setSource(json);   // APP-MAT-CARD
 
     const prHistory = (json.data && json.data.prHistory) || [];
     if (prHistory.length === 0) { showEmptyState(renderNoPrHistory()); return; }
@@ -599,6 +600,9 @@
           <span class="banner-lab">Source data</span>
           <div class="banner-stats">${(counts.prHistory || 0).toLocaleString()} PR · ${(counts.mb51 || 0).toLocaleString()} MB51 · ${(counts.inventoryMaster || 0).toLocaleString()} master</div>
         </div>`;
+      // APP-MAT-CARD — the material number opens its Inventory Master card
+      const idEl = document.querySelector('#contentBanner .banner-id');
+      if (idEl && window.MaterialCard) MaterialCard.wire(idEl, mat.material);
     } else {
       const matched = computeMultiScope().materials;
       $('#contentBanner').innerHTML = `

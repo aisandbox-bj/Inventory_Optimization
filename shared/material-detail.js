@@ -556,6 +556,10 @@
       if (llmBtnV) llmBtnV.addEventListener('click', () => runLlmReview(hostEl, mat, opts, 'v'));
     }
 
+    // APP-MAT-CARD — the material number opens its Inventory Master card.
+    const matNumEl = hostEl.querySelector('.detail-head .mat');
+    if (matNumEl && window.MaterialCard) MaterialCard.wire(matNumEl, mat.material);
+
     // APP-E26 — material-number copy button (async Clipboard API + fallback).
     const copyBtn = hostEl.querySelector('#btnCopyMat');
     if (copyBtn && !copyBtn._wired) {

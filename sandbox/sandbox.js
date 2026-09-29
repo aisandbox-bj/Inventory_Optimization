@@ -87,6 +87,7 @@
     const json = await AppStorage.get('intake.current');
     if (!json) { renderEmpty(); return; }
     state.json  = json;
+    if (window.MaterialCard) MaterialCard.setSource(json);   // APP-MAT-CARD
     state.hasPr = !!(json.data && json.data.prHistory && json.data.prHistory.length);
     // #24 (2026-08-16) — bind the analyst sidecar (For-Action flags + Analyst Rec)
     // so the Sandbox list, detail and PDF export can show the analyst's work. Read

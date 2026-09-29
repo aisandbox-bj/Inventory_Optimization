@@ -81,7 +81,7 @@
       movingAvgPrice:     ['Moving price', 'Moving Avg Price', 'Moving Average Price', 'mov_ave_cost', 'Moving Avg', 'MAP'],
       /* APP-T-01 — high-value carry-through aliases (per audit §8) */
       materialGroupDesc:  ['Material Group Desc.', 'Material Group Description', 'Mat Group Desc'],
-      mfgPartNo:          ['Manufacturer Part No.', 'Mfg Part No', 'MPN', 'Manufacturer Part Number'],
+      mfgPartNo:          ['Manufacturer Part No.', 'Mfg Part No', 'MPN', 'Manufacturer Part Number', 'VPN', 'Vendor Part No.', 'Vendor Part Number'],
       storageLocation:    ['Storage Location', 'Sloc', 'Stor. Loc.', 'StorLoc'],
       mrpController:      ['MRP Controller'],
       mrpControllerName:  ['MRP controller name', 'MRP Controller Name'],

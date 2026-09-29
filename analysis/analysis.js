@@ -50,6 +50,7 @@
       return;
     }
     state.json = json;
+    if (window.MaterialCard) MaterialCard.setSource(json);   // APP-MAT-CARD
     // APP-ACT-01 — bind the analyst sidecar (For Action flags + Analyst Rec +
     // notes) to this assessment by name. Kept out of the canonical JSON by design.
     // APP-FIX-ANALYST-KEY (Phase 1) — the canonical metadata field is
