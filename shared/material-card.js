@@ -5,14 +5,15 @@
    Click the material number in a chart header (Trend / Canvas quick look /
    Sandbox detail, and the Trace banner) → a small card with that material's
    Inventory Master details: SAP # and VPN (manufacturer part no., both with a
-   copy button), description, manufacturer, material group, unit, plant and
-   storage location, stock (unrestricted / blocked / in transit / total), value
-   and price, MRP settings, open PO, reservations, MRP controller and buyer group.
+   copy button), description, manufacturer, unit, plant and storage location,
+   stock (unrestricted / in transit), value and price, MRP settings, open PO and
+   reservations. (Material group, blocked, total stock, MRP controller and buyer
+   group were taken off at the operator's request, 2026-09-29.)
 
    Read-only: it shows what the loaded Inventory Master says, nothing computed.
    A material with several Inventory Master rows (split valuation / plants): the
    stock quantities and value are added up; plant-level figures that SAP repeats
-   on every row (blocked, in transit, open PO, reservations) are taken once; the
+   on every row (in transit, open PO, reservations) are taken once; the
    card says how many rows there are. Blank values show "—", never a guess.
 
    The card floats over the page (nothing moves); ✕, Esc or a click outside closes it.
@@ -92,25 +93,21 @@
       '<div class="mc-sec">Identification</div><div class="mc-g">' +
         kv('VPN', (has(vpn) ? esc(vpn) + ' <button type="button" class="mc-cp" data-copy="' + esc(vpn) + '" aria-label="Copy VPN">⧉</button>' : '—'), true) +
         kv('Manufacturer', txt(first(R, 'manufacturer')), true) +
-        kv('Material group', both(first(R, 'materialGroup'), first(R, 'materialGroupDesc')), true) +
         kv('Unit', txt(first(R, 'uom'))) + kv('Plant', txt(uniqJoin(R, 'plant'))) +
         kv('Storage loc.', txt(uniqJoin(R, 'storageLocation')), true) +
       '</div>' +
       '<div class="mc-sec">Stock</div><div class="mc-g">' +
-        kv('Unrestricted', num(sum(R, 'totQtyOh'))) + kv('Blocked', num(first(R, 'blockedStock'))) +
-        kv('In transit', num(first(R, 'inTransit'))) + kv('Total stock', num(sum(R, 'totalStock'))) +
+        kv('Unrestricted', num(sum(R, 'totQtyOh'))) + kv('In transit', num(first(R, 'inTransit'))) +
         kv('Stock value', cad(sum(R, 'totValueOh'))) + kv('Moving avg', cad(first(R, 'movingAvgPrice'))) +
       '</div>' +
-      '<div class="mc-sec">MRP & purchasing</div><div class="mc-g">' +
+      '<div class="mc-sec">MRP</div><div class="mc-g">' +
         kv('MRP type', txt(first(R, 'mrpInd'))) + kv('Safety stock', num(first(R, 'safetyStock'))) +
         kv('Min', num(first(R, 'mrpMin'))) + kv('Max', num(first(R, 'mrpMax'))) +
         kv('Open PO qty', num(first(R, 'openPO'))) + kv('Reserved', num(first(R, 'totalReservation'))) +
         (res ? kv('Reservations', res, true) : '') +
-        kv('MRP controller', both(first(R, 'mrpController'), first(R, 'mrpControllerName')), true) +
-        kv('Buyer group', both(first(R, 'purchasingGroup'), first(R, 'purchasingGroupDesc')), true) +
       '</div>' +
       '<div class="mc-note">From the loaded Inventory Master' + (imDate ? ' (extract ' + esc(imDate) + ')' : '') + '.' +
-        (n > 1 ? ' <span class="mc-warn">' + n + ' Inventory Master rows for this material (split valuation or plants): stock and value are added up; blocked, in transit, open PO and reservations are shown once.</span>' : '') +
+        (n > 1 ? ' <span class="mc-warn">' + n + ' Inventory Master rows for this material (split valuation or plants): stock and value are added up; in transit, open PO and reservations are shown once.</span>' : '') +
       '</div>';
   }
 
