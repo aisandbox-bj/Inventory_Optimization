@@ -338,6 +338,64 @@
     }
     syncInventoryMasterDateInput();
     setupDuplicateDrop();   // APP-DUP-FLAG
+    setupClearButtons();    // APP-INT-CLEAR
+  }
+
+  /* APP-INT-CLEAR (operator 2026-09-29) — a small ✕ at the top right of every
+     loaded upload tile clears that dataset (you could load over one, but never
+     remove it). Two clicks (the first asks "Clear?") so a stray click can't throw
+     away a big file. Clearing re-runs the mapping + data-quality checks, so no
+     stale result (e.g. "passed" from before MB51 was removed) is left showing. */
+  function setupClearButtons(){
+    const sources = REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES).concat(['duplicateList']);
+    sources.forEach(source => {
+      const drop = document.querySelector(`.drop[data-source="${source}"]`);
+      if (!drop || drop.querySelector('.drop-clear')) return;
+      const fileEl = drop.querySelector('.file');
+      drop.dataset.emptyLabel = fileEl ? fileEl.textContent : '';
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'drop-clear';
+      btn.setAttribute('aria-label', 'Clear this dataset');
+      btn.textContent = '✕';
+      let armT = null;
+      btn.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();          // don't open the file picker
+        if (!btn.classList.contains('armed')) {
+          btn.classList.add('armed'); btn.textContent = 'Clear?';
+          clearTimeout(armT); armT = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = '✕'; }, 3500);
+          return;
+        }
+        clearTimeout(armT); btn.classList.remove('armed'); btn.textContent = '✕';
+        clearDataset(source);
+      });
+      drop.appendChild(btn);
+    });
+  }
+  function clearDataset(source){
+    const drop = document.querySelector(`.drop[data-source="${source}"]`);
+    if (source === 'duplicateList') {
+      state.duplicates = null;
+      showDuplicateTile(drop ? drop.dataset.emptyLabel : '');
+      renderJsonPreview();
+      toast('Duplicate list cleared.', 'ok');
+      return;
+    }
+    const name = drop ? (drop.querySelector('.name')?.textContent || source) : source;
+    delete state.parsed[source];
+    delete state.files[source];
+    if (drop) {
+      drop.classList.remove('loaded');
+      const fileEl = drop.querySelector('.file'); if (fileEl) fileEl.textContent = drop.dataset.emptyLabel || '';
+      const inp = drop.querySelector('input[type="file"]'); if (inp) inp.value = '';   // the same file can be picked again
+      const stats = drop.querySelector('.drop-stats'); if (stats) stats.innerHTML = '';
+    }
+    if (source === 'inventoryMaster') syncInventoryMasterDateInput();
+    renderAllDropStats();            // cross-file chips on the other tiles
+    onParseUpdated();                // mapping step
+    if (state.dq) runDqGate();       // data-quality result reflects what's loaded now
+    try { renderScopePreview(); } catch (e) {}
+    renderJsonPreview();
+    toast(`${name} cleared.`, 'ok');
   }
 
   /* APP-DUP-FLAG — the potential-duplicates worklist. Deliberately NOT one of the
@@ -418,10 +476,14 @@
   }
 
   async function handleFile(source, file){
+    const prevFile = state.files[source], hadPrev = !!state.parsed[source];
     state.files[source] = file;
     const drop = document.querySelector(`.drop[data-source="${source}"]`);
     drop.classList.add('loaded');
     drop.querySelector('.file').textContent = `${file.name} · parsing…`;
+    // Empty the old file's stat boxes while the new one parses (operator 2026-09-29:
+    // they hid the "parsing…" text and read as if they belonged to the new file).
+    const oldStats = drop.querySelector('.drop-stats'); if (oldStats) oldStats.innerHTML = '';
 
     try {
       const result = await AppParsers.parseAndMap(file, source, state.aliases);
@@ -440,8 +502,15 @@
       onParseUpdated();
     } catch (e) {
       console.error(e);
-      drop.classList.remove('loaded');
-      drop.querySelector('.file').textContent = `${file.name} · ERROR: ${e.message || e}`;
+      if (hadPrev) {
+        // The earlier file's data is still what the run uses — say so, don't hide it.
+        state.files[source] = prevFile;
+        drop.querySelector('.file').textContent = `${file.name} · ERROR: ${e.message || e} — the previous file is still loaded`;
+        renderDropStats(source);
+      } else {
+        drop.classList.remove('loaded');
+        drop.querySelector('.file').textContent = `${file.name} · ERROR: ${e.message || e}`;
+      }
       toast('Parse failed: ' + (e.message || e), 'crit');
     }
   }

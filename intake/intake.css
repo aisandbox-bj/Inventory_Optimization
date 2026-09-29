@@ -1225,3 +1225,14 @@ body.intake-gated #reuseOpen{ pointer-events:none; opacity:.45; }
 /* APP-INT-DATE — dataset date + staleness flag in the reuse source list */
 .reuse-date{ font-size:11px; color:var(--text-muted); margin-bottom:8px; font-family:var(--font-mono); }
 .reuse-date.stale{ color:#f4c14a; }
+
+/* ─── APP-INT-CLEAR — ✕ on a loaded upload tile clears that dataset ─── */
+.drop .drop-clear{
+  display:none; position:absolute; top:6px; right:6px; z-index:3;
+  min-width:22px; height:22px; padding:0 6px; border-radius:11px;
+  border:1px solid var(--border-strong,rgba(31,206,216,.45)); background:var(--bg-panel,#0C2D3B);
+  color:var(--text-sec,#D6DFDE); font:600 11px/20px var(--font-body,'Barlow',sans-serif); cursor:pointer;
+}
+.drop.loaded .drop-clear{ display:block; }
+.drop .drop-clear:hover{ border-color:var(--status-crit,#EF4444); color:#fff; background:rgba(239,68,68,.25); }
+.drop .drop-clear.armed{ border-color:var(--status-crit,#EF4444); background:var(--status-crit,#EF4444); color:#fff; }

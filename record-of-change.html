@@ -381,6 +381,38 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Clear an Intake dataset + tidy re-parse - 2026-09-29 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-29</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-INT-CLEAR</b>: a ✕ on each Intake upload card clears that dataset; a new file's card empties while it reads — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator ask:</b> "a little x (top right) on the Intake input file blocks so that I can clear a dataset … I can load over an old one but cannot delete the data". Plus: when parsing a new file over old data, the stat boxes should empty so the "parsing" text is visible.</li>
+        <li><b>✕ on each loaded card</b> (all source cards plus the Duplicate list). It shows only when the card holds data.
+          <ul>
+            <li>The first click turns it into <b>Clear?</b> for 3.5 s, so a stray click can't throw away a big file; the second click clears.</li>
+            <li>It removes that dataset from the run, resets the card, and updates the other cards' cross-file figures.</li>
+            <li>It re-runs the column mapping and, if it had already run, the data-quality check, so a stale "passed" can't survive removing MB51.</li>
+            <li>The same file can be picked again straight after.</li>
+          </ul></li>
+        <li><b>Re-parse tidy:</b> dropping a new file on a loaded card empties that card's figures while "parsing…" shows.</li>
+        <li><b>Also fixed while there:</b> if the new file failed to read, the card showed the error and looked empty, but the previous file's data silently stayed in the run. Now the card stays marked loaded and says <em>"the previous file is still loaded"</em>, with its figures back.</li>
+        <li><b>Seen in testing, not changed:</b> a non-spreadsheet saved as <code>.xlsx</code> is read by the spreadsheet library as an empty sheet, not as an error. It replaces the dataset with 0 rows, and the card says "0 rows".</li>
+        <li><b>Verified in the browser</b> with real IW39 + Fleet Master exports:
+          <ul>
+            <li>the ✕ is hidden on empty cards and shown on loaded ones;</li>
+            <li>first click shows "Clear?", second clears the card, its mapping block and figures, with Fleet Master untouched;</li>
+            <li>the same file reloads afterwards;</li>
+            <li>figures empty during a re-parse and return after;</li>
+            <li>no new console errors.</li>
+          </ul></li>
+        <li>Files: <code>intake/intake.{js,css}</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Rollback: <code>_rollback/INTAKE-CLEAR-pre/</code> + <code>checkpoint/pre-intakeclear</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Paste a material list into the search boxes - 2026-09-29 -->
     <article class="roc-entry dev">
       <div class="head">
