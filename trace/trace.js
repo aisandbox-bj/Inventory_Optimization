@@ -376,7 +376,8 @@
       });
     });
 
-    // Single — search box
+    // Single — search box (APP-LIST-SEARCH: text, or a pasted list of up to 20 materials)
+    ListSearch.attach($('#matSearch'), { universe: () => state.materials.map(m => m.material) });
     $('#matSearch').addEventListener('input', (e) => {
       state.matSearch = e.target.value;
       renderMatListCompact();
@@ -472,9 +473,9 @@
   }
 
   function renderMatListCompact(){
-    const q = state.matSearch.trim().toLowerCase();
+    const q = state.matSearch.trim();
     const filtered = q
-      ? state.materials.filter(m => m.material.toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q))
+      ? state.materials.filter(m => ListSearch.test(q, m.material, m.description))
       : state.materials;
     const max = 60;
     const shown = filtered.slice(0, max);

@@ -645,10 +645,8 @@
     const dup = state.dupIdx;
     if (state.filterDup === 'all' && dup && dup.loaded) rows = rows.filter(m => dup.isDuplicate(m.material));
     if (state.filterDup === 'families' && dup && dup.hasFamilies) rows = rows.filter(m => dup.familyOf(m.material));
-    if (state.searchText) {
-      const q = state.searchText.toLowerCase();
-      rows = rows.filter(m => (m.material || '').toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q));
-    }
+    // APP-LIST-SEARCH — text, or a pasted list of up to 20 material numbers
+    if (state.searchText) rows = rows.filter(m => ListSearch.test(state.searchText, m.material, m.description));
     rows = rows.filter(passesColFilters);
     const k = state.sortKey, dir = state.sortDir;
     rows.sort((a, b) => {
@@ -1041,6 +1039,7 @@
   }
 
   function bindToolbar(){
+    ListSearch.attach($('#listSearch'), { universe: () => { const b = currentBucket(); return b ? b.materials.map(m => m.material) : []; } });
     $('#listSearch').addEventListener('input', (e) => {
       state.searchText = e.target.value;
       renderList();

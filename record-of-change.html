@@ -381,6 +381,36 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Paste a material list into the search boxes - 2026-09-29 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-29</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-LIST-SEARCH</b>: paste up to 20 material numbers into the Trend, Trace and Canvas search boxes — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator ask:</b> "paste lists in there of up to 20 materials (warn me … that I will lose the rest)".</li>
+        <li><b>How it works</b> (new shared <code>shared/list-search.js</code>, one behaviour on all three pages):
+          <ul>
+            <li>Ordinary text still finds the material number or description as before.</li>
+            <li>Two or more material numbers (one per line, or separated by spaces, commas or semicolons) show exactly those materials. Leading zeros are ignored.</li>
+            <li>Only the first 20 are kept. A pasted list longer than that keeps 20, and a note floating under the box (nothing on the page moves) names the dropped ones.</li>
+            <li>The same note names pasted numbers that aren't in the list being searched.</li>
+            <li>The note closes after 14 s, with ✕, or when the box is cleared.</li>
+          </ul></li>
+        <li><b>Limit:</b> list mode recognises numeric material numbers (3–18 digits), which is how this site's numbers look. A paste with any word in it is treated as ordinary text.</li>
+        <li><b>Verified in the browser</b> on the June assessment:
+          <ul>
+            <li><b>Trend:</b> a 25-number paste (with 3 unknown and one zero-padded) kept 20, showed the 18 real ones, and named the 5 dropped and the 2 not in the list.</li>
+            <li><b>Trace:</b> a 4-number paste showed 3 and named 1 not in the list.</li>
+            <li><b>Canvas page:</b> a 30-number paste showed 20 and named the 10 dropped.</li>
+            <li>Ordinary text searches unchanged; clearing restores the full list; no console errors.</li>
+          </ul></li>
+        <li>Files: <code>shared/list-search.js</code> (new), <code>analysis/analysis.{html,js}</code>, <code>trace/trace.{html,js}</code>, <code>screener/screener.{html,js}</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Rollback: <code>_rollback/LIST-SEARCH-pre/</code> + <code>checkpoint/pre-listsearch</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - MB51 stock check page (diagnostic) - 2026-09-28 -->
     <article class="roc-entry dev">
       <div class="head">

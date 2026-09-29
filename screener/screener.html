@@ -79,7 +79,7 @@
 
       <section class="scr-tablepane">
         <div class="scr-table-tools">
-          <input type="text" id="scrSearch" class="scr-search" placeholder="Search material or description…" autocomplete="off" />
+          <input type="text" id="scrSearch" class="scr-search" placeholder="Search material or description — or paste up to 20 material numbers…" autocomplete="off" />
           <button id="btnSelShown" class="ghost scr-mini" title="Tick every material the table shows now">☑ Select all shown</button>
           <button id="btnUnselShown" class="ghost scr-mini" title="Untick every material the table shows now">☐ Unselect shown</button>
           <button id="btnSelClear" class="ghost scr-mini" title="Untick everything, including ticks hidden by the filters">Clear selection</button>
@@ -116,6 +116,7 @@
 <!-- Chart.js (MRP-run cadence report block) is lazy-loaded by report-builder.js on first use. -->
 <script src="../shared/mrp-cadence.js"></script><!-- APP-SCR-REPORT-CADENCE — shared static cadence renderer -->
 <script src="../shared/report-builder.js"></script><!-- APP-SCR-REPORT — customisable per-material report -->
+<script src="../shared/list-search.js"></script><!-- APP-LIST-SEARCH — paste up to 20 material numbers into the search box -->
 <script src="screener.js"></script>
 
 </body>

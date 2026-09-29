@@ -323,6 +323,7 @@
      TOOLBAR
   ═════════════════════════════════════════════════════════════════════════ */
   function bindToolbar(){
+    ListSearch.attach($('#scrSearch'), { universe: () => state.materials.map(e => e.m.material) });   // APP-LIST-SEARCH
     $('#scrSearch').addEventListener('input', (e) => { state.search = e.target.value; renderTable(); });
     $('#btnClearBands').addEventListener('click', async () => {
       state.bands = {};
@@ -667,10 +668,8 @@
   function visibleRows(){
     refreshAnalystFlags();
     let rows = state.materials.filter(e => passesBands(e.m, state.bands));
-    if (state.search) {
-      const q = state.search.toLowerCase();
-      rows = rows.filter(e => (e.m.material || '').toLowerCase().includes(q) || (e.m.description || '').toLowerCase().includes(q));
-    }
+    // APP-LIST-SEARCH — text, or a pasted list of up to 20 material numbers
+    if (state.search) rows = rows.filter(e => ListSearch.test(state.search, e.m.material, e.m.description));
     return sortRows(rows);
   }
   // (name kept for the Quick-look Prev/Next below)
