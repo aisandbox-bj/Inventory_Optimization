@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MB51 Stock Check</title>
+<!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════════
+  Calibre Tune · tools/mb51-check.html · v2.2.0-dev · APP-MB51-CHECK (2026-09-28)
+
+  A DIAGNOSTIC page (changes nothing in the app). It answers: "does the way Trend
+  reads MB51 rebuild the stock on the Inventory Master?" — part by part, from SAP
+  go-live — and compares Trend's rule with the storage-location rule found by the
+  WO Readiness work (2026-09-28) and the old MB51-skill exclusion list.
+
+  Rules (each sums MB51 forward from go-live, per material, vs INV_MSTR Unrestricted):
+    R1 Storage-location rule: every row WITH a storage location, less project stock
+       (by movement text), signed as SAP gives it; 561 included.
+    R2 Old skill list: every row except 107 108 641 411 561 562 309.
+    R3 Trend today: Trend's own movement table (InventoryBackCalc.MVT_SIGN, fixed
+       sign × |qty|; 309/310/411/412 by the row's sign) + the 561/562 opening
+       balance (Trend walks back from today, which lands on that balance).
+    R4 = R3, but a 109 / 110 with NO storage location is left out (bought for an
+       order / cost centre / project — used on arrival, never shelf stock).
+    R5 = R4, plus 101 / 102 and 641 / 642 rows that HAVE a storage location (real
+       receipts from / outflows to another plant).
+
+  Files are read in this browser only — nothing is uploaded or sent anywhere.
+  Output: one JSON file (calibre-mb51-check-<date>.json) for review.
+═════════════════════════════════════════════════════════════════════════════-->
+<link rel="stylesheet" href="../shared/brand-tokens.css" />
+<style>
+  .wrap{ max-width:980px; margin:0 auto; padding:28px 18px 60px; }
+  .eyebrow{ font-family:var(--font-mono); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); opacity:.8; }
+  h1{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:32px; margin:4px 0 6px; color:var(--text-pri); }
+  p{ color:var(--text-sec); line-height:1.55; margin:6px 0; }
+  .card{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:6px; padding:16px 18px; margin:16px 0; }
+  .card h2{ font-family:var(--font-heading); font-weight:600; font-size:18px; margin:0 0 10px; color:var(--text-pri); }
+  .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+  .row label.lab{ width:190px; color:var(--text-sec); font-weight:600; }
+  .row .hint{ color:var(--text-muted); font-size:13px; }
+  input[type=file], input[type=date]{ color:var(--text-sec); font-family:var(--font-body); }
+  input[type=date]{ background:var(--bg-panel-2); border:1px solid var(--border); padding:5px 8px; border-radius:4px; color:var(--text-pri); }
+  button{ font-family:var(--font-heading); font-weight:600; font-size:15px; padding:8px 18px; border-radius:4px; cursor:pointer; border:1px solid var(--accent); }
+  button.primary{ background:var(--accent); color:#062028; }
+  button.ghost{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.45; cursor:default; }
+  .note{ font-size:13px; color:var(--text-muted); }
+  .privacy{ border-left:3px solid var(--accent-green); padding:6px 12px; background:rgba(90,182,157,.08); color:var(--text-sec); font-size:13.5px; }
+  #status{ font-family:var(--font-mono); font-size:13px; color:var(--text-sec); white-space:pre-wrap; min-height:20px; }
+  #status.err{ color:var(--status-crit); }
+  table{ border-collapse:collapse; width:100%; margin-top:8px; font-size:13.5px; }
+  th{ background:var(--bg-elevated); color:var(--text-pri); font-family:var(--font-heading); font-weight:600; text-align:left; padding:6px 8px; }
+  td{ padding:6px 8px; border-bottom:1px solid var(--border); color:var(--text-sec); }
+  td.num{ text-align:right; font-family:var(--font-mono); }
+  .warn{ color:var(--status-warn); }
+  .cols{ font-family:var(--font-mono); font-size:12px; color:var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Calibre Tune · diagnostic</div>
+  <h1>MB51 stock check</h1>
+  <p>Tests whether the way <b>Trend</b> reads MB51 rebuilds the stock on the Inventory Master, part by part, from SAP go-live. It runs Trend's rule next to the storage-location rule and the old movement list, and saves one results file to send back for review. It changes nothing in the app or your saved runs.</p>
+  <div class="privacy">Your files are read in this browser only — nothing is uploaded or sent anywhere. The results file holds material numbers, quantities and, for parts that don't reconcile, their descriptions: treat it as client data.</div>
+
+  <div class="card">
+    <h2>1 · Files</h2>
+    <div class="row"><label class="lab" for="fMb51">MB51 (one or more)</label><input type="file" id="fMb51" accept=".xlsx,.xls,.csv" multiple>
+      <span class="hint">From go-live to today, with the <b>Storage Location</b>, <b>Movement Type Text</b> and <b>Batch</b> columns. If you pull it twice (by work order and by material), add both — rows in both are counted once.</span></div>
+    <div class="row"><label class="lab" for="fInv">Inventory Master</label><input type="file" id="fInv" accept=".xlsx,.xls,.csv">
+      <span class="hint">Pulled the same day as the MB51, with <b>Material</b> and <b>Unrestricted</b> (and Plant / Valuation Type if you have them).</span></div>
+    <div class="row"><label class="lab" for="fSnap">Inventory Master date</label><input type="date" id="fSnap">
+      <span class="hint">The day it was pulled. Postings that day may not be in it yet, so a part also passes if it matches without them.</span></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Run</h2>
+    <div class="row"><button class="primary" id="btnRun" disabled>Run the check</button><button class="ghost" id="btnDl" disabled>⤓ Download results file</button></div>
+    <div id="status" aria-live="polite"></div>
+    <div id="result"></div>
+  </div>
+
+  <p class="note">What the rules are: R1 counts every MB51 row that has a storage location (less project stock). R2 is the old list (all but 107 108 641 411 561 562 309). R3 is Trend today. R4 is Trend without receipts bought straight for an order / cost centre (a 109 with no storage location). R5 is R4 plus transfers from / to another plant that land in a storage location (101 / 641).</p>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="../shared/inventory-back-calc.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const TOOL_VERSION = 'APP-MB51-CHECK 2026-09-28 (Tune v2.2.0-dev)';
+
+  // Column names seen in SAP exports (exact, case-insensitive; no guessing).
+  const ALIAS = {
+    mb51: {
+      material: ['Material'], mvt: ['Movement Type', 'Movement type', 'MvT'],
+      text: ['Movement Type Text', 'Movement type text', 'Mvt Type Text', 'Movement Type Description'],
+      qty: ['Quantity'], qtyE: ['Qty in unit of entry', 'Qty in Un. of Entry', 'Quantity in unit of entry', 'Qty in UnE'],
+      posting: ['Posting Date', 'Posting date', 'Pstng Date'],
+      sloc: ['Storage Location', 'Storage location', 'SLoc', 'Stor. Loc.', 'Stor. Location'],
+      plant: ['Plant'], doc: ['Material Document', 'Mat. Doc.', 'Material Doc.'],
+      item: ['Material Doc.Item', 'Material Document Item', 'Mat. Doc. Item', 'Item'],
+      year: ['Material Doc. Year', 'Material Document Year', 'Mat. Doc. Year'],
+      order: ['Order'], costCenter: ['Cost Center', 'Cost Centre'], wbs: ['WBS Element', 'WBS element'],
+      batch: ['Batch'], po: ['Purchase order', 'Purchase Order', 'Purchasing Document'],
+      entryDate: ['Entry Date'], entryTime: ['Time of Entry'], res: ['Reservation'],
+      desc: ['Material Description', 'Material description']
+    },
+    inv: {
+      material: ['Material'], unr: ['Unrestricted', 'Unrestricted Stock', 'Unrestricted-Use Stock', 'Tot_Qty_OH', 'Tot Qty OH'],
+      plant: ['Plant'], valType: ['Valuation Type', 'Valuation type'], desc: ['Material Description', 'Description', 'Material description']
+    }
+  };
+  const PROJECT_TEXTS = new Set(['GR fr Val.BlStk Proj', 'GI acct ass.fm proj.', 'TF proj. to proj.', 'GI InvDiff:whse/proj']);
+  const OLD_EXCL = new Set(['107', '108', '641', '411', '561', '562', '309']);
+  const BC = window.InventoryBackCalc;
+
+  let results = null;
+  const files = { mb51: [], inv: null };
+  function refresh(){ $('#btnRun').disabled = !(files.mb51.length && files.inv); }
+  $('#fMb51').addEventListener('change', (e) => { files.mb51 = [...e.target.files]; refresh(); });
+  $('#fInv').addEventListener('change', (e) => { files.inv = e.target.files[0] || null; refresh(); });
+
+  function status(msg, err){ const s = $('#status'); s.textContent = msg; s.classList.toggle('err', !!err); }
+  const tick = () => new Promise(r => setTimeout(r, 0));
+
+  // ── value helpers ──
+  function id(v){
+    if (v == null) return '';
+    let s = String(v).trim().replace(/\.0+$/, '');
+    if (/^\d+$/.test(s)) s = s.replace(/^0+(?=\d)/, '');   // SAP pads material numbers with zeros in some exports
+    return s;
+  }
+  function num(v){
+    if (typeof v === 'number') return v;
+    if (v == null || v === '') return 0;
+    let s = String(v).trim().replace(/,/g, '');
+    let neg = false;
+    if (/-$/.test(s)) { neg = true; s = s.slice(0, -1); }   // SAP "5-" style
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? (neg ? -n : n) : 0;
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  function iso(v){
+    if (v instanceof Date && !isNaN(v)) return v.getFullYear() + '-' + pad(v.getMonth() + 1) + '-' + pad(v.getDate());
+    if (typeof v === 'number') { const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+    const s = String(v || '').trim(); let m;
+    if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return m[1] + '-' + m[2] + '-' + m[3];
+    if ((m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/))) return m[3] + '-' + pad(m[2]) + '-' + pad(m[1]);   // dd.mm.yyyy
+    if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return m[3] + '-' + pad(m[1]) + '-' + pad(m[2]);   // mm/dd/yyyy
+    return '';
+  }
+
+  // ── read a sheet: find the header row, map the columns ──
+  async function readTable(file, alias, mustKeys){
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true, dense: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    const norm = (x) => String(x == null ? '' : x).trim().toLowerCase();
+    for (let h = 0; h < Math.min(12, aoa.length); h++){
+      const hdr = (aoa[h] || []).map(norm);
+      const map = {};
+      for (const [k, names] of Object.entries(alias)){
+        for (const n of names){ const i = hdr.indexOf(n.toLowerCase()); if (i >= 0){ map[k] = i; break; } }
+      }
+      if (mustKeys.every(k => map[k] != null)){
+        const header = (aoa[h] || []).map(x => String(x == null ? '' : x).trim());
+        return { map, header, rows: aoa.slice(h + 1).filter(r => r && r.some(v => v != null && v !== '')), sheet: wb.SheetNames[0] };
+      }
+    }
+    throw new Error(`${file.name}: couldn't find a header row with ${mustKeys.map(k => '"' + alias[k][0] + '"').join(' + ')} in the first sheet.`);
+  }
+
+  $('#btnRun').addEventListener('click', async () => {
+    $('#btnRun').disabled = true; $('#btnDl').disabled = true; $('#result').innerHTML = ''; results = null;
+    try { await run(); }
+    catch (e){ console.error(e); status('Stopped: ' + (e && e.message ? e.message : e), true); }
+    refresh();
+  });
+
+  async function run(){
+    if (!BC || !BC.MVT_SIGN) throw new Error("Trend's movement table (shared/inventory-back-calc.js) didn't load.");
+    const snapshot = $('#fSnap').value || '';
+
+    // ── MB51 ──
+    const rows = [], kept = new Map(), fileInfo = [];
+    let unparsedDates = 0;
+    for (const f of files.mb51){
+      status(`Reading ${f.name}…`); await tick();
+      const t = await readTable(f, ALIAS.mb51, ['material', 'mvt', 'qty', 'posting']);
+      const g = (r, k) => t.map[k] != null ? r[t.map[k]] : null;
+      const seen = new Map(); let n = 0, dup = 0;
+      for (const r of t.rows){
+        const o = {
+          material: id(g(r, 'material')), mvt: id(g(r, 'mvt')), text: String(g(r, 'text') || '').trim(),
+          qty: num(g(r, 'qty')), qtyE: num(g(r, 'qtyE')), posting: iso(g(r, 'posting')),
+          sloc: id(g(r, 'sloc')), plant: id(g(r, 'plant')), doc: id(g(r, 'doc')), item: id(g(r, 'item')), year: id(g(r, 'year')),
+          order: id(g(r, 'order')), cc: id(g(r, 'costCenter')), wbs: id(g(r, 'wbs')), batch: String(g(r, 'batch') || '').trim(),
+          po: id(g(r, 'po')), desc: String(g(r, 'desc') || '').trim(),
+          entry: String(g(r, 'entryDate') == null ? '' : g(r, 'entryDate')) + ' ' + String(g(r, 'entryTime') == null ? '' : g(r, 'entryTime')), res: id(g(r, 'res'))
+        };
+        if (!o.material || !o.mvt) continue;
+        if (!o.posting) unparsedDates++;
+        // same row in two files = same document line; exports without an item column fall back on entry time + reservation
+        const k = [o.doc, o.item, o.year, o.mvt, o.material, o.order, o.qty, o.qtyE, o.posting, o.sloc, o.po, o.batch, o.entry, o.res].join('|');
+        const c = (seen.get(k) || 0) + 1; seen.set(k, c);
+        if (c <= (kept.get(k) || 0)) { dup++; continue; }   // already held by an earlier file
+        kept.set(k, (kept.get(k) || 0) + 1);
+        rows.push(o); n++;
+      }
+      fileInfo.push({ file: f.name, sheet: t.sheet, rowsRead: t.rows.length, rowsKept: n, duplicatesOfEarlierFile: dup,
+        columnsFound: Object.fromEntries(Object.keys(ALIAS.mb51).map(k => [k, t.map[k] != null ? t.header[t.map[k]] : null])) });
+    }
+    const hasSloc = fileInfo.every(f => f.columnsFound.sloc);
+    const hasText = fileInfo.every(f => f.columnsFound.text);
+
+    // ── Inventory Master ──
+    status(`Reading ${files.inv.name}…`); await tick();
+    const ti = await readTable(files.inv, ALIAS.inv, ['material', 'unr']);
+    const gi = (r, k) => ti.map[k] != null ? r[ti.map[k]] : null;
+    const mbPlants = new Set(rows.map(r => r.plant).filter(Boolean));
+    const U = new Map(), invRows = new Map(), invDesc = new Map(), valTypes = new Map();
+    let invSkippedPlant = 0;
+    for (const r of ti.rows){
+      const m = id(gi(r, 'material')); if (!m) continue;
+      const p = id(gi(r, 'plant'));
+      if (p && mbPlants.size && !mbPlants.has(p)) { invSkippedPlant++; continue; }
+      U.set(m, (U.get(m) || 0) + num(gi(r, 'unr')));
+      invRows.set(m, (invRows.get(m) || 0) + 1);
+      if (!invDesc.has(m)) invDesc.set(m, String(gi(r, 'desc') || '').trim());
+      const vt = String(gi(r, 'valType') || '').trim();
+      if (vt){ if (!valTypes.has(m)) valTypes.set(m, {}); const o = valTypes.get(m); o[vt] = (o[vt] || 0) + num(gi(r, 'unr')); }
+    }
+
+    // ── the rules: signed contribution of one row to unrestricted stock ──
+    const MS = BC.MVT_SIGN, DIR = BC.DIRECTIONAL_MVTS;
+    function trend(r){
+      if (DIR.has(r.mvt)) return r.qty;
+      if (r.mvt === '561' || r.mvt === '562') return r.qty;         // opening balance (Trend lands on it walking back)
+      const s = MS[r.mvt]; return s == null ? 0 : s * Math.abs(r.qty);
+    }
+    const RULES = [
+      { id: 'R1', name: 'Storage-location rule (rows with a storage location, less project stock)', need: 'sloc',
+        f: (r) => (r.sloc && !PROJECT_TEXTS.has(r.text)) ? r.qty : 0 },
+      { id: 'R2', name: 'Old skill list (all but 107 108 641 411 561 562 309)', f: (r) => OLD_EXCL.has(r.mvt) ? 0 : r.qty },
+      { id: 'R3', name: "Trend today (Trend's movement table + go-live balance)", f: trend },
+      { id: 'R4', name: 'Trend, less 109/110 with no storage location (bought for an order / cost centre)', need: 'sloc',
+        f: (r) => ((r.mvt === '109' || r.mvt === '110') && !r.sloc) ? 0 : trend(r) },
+      { id: 'R5', name: 'R4 plus 101/102 and 641/642 rows with a storage location (plant-to-plant)', need: 'sloc',
+        f: (r) => {
+          if ((r.mvt === '109' || r.mvt === '110') && !r.sloc) return 0;
+          if (['101', '102', '641', '642'].includes(r.mvt)) return r.sloc ? r.qty : 0;
+          return trend(r);
+        } }
+    ].filter(R => R.need !== 'sloc' || hasSloc);
+
+    status('Checking each material…'); await tick();
+    const byM = new Map();
+    for (const r of rows) { if (U.has(r.material)) { if (!byM.has(r.material)) byM.set(r.material, []); byM.get(r.material).push(r); } }
+    const mats = [...byM.keys()].sort();
+    const first = rows.reduce((a, r) => (r.posting && (!a || r.posting < a)) ? r.posting : a, '');
+    const last  = rows.reduce((a, r) => (r.posting && r.posting > a) ? r.posting : a, '');
+    const EPS = 1e-6;
+    const per = new Map();   // material → { u, sums:{R:[all, beforeSnap]}, pass:{R:'exact'|'snapshot'|'miss'} }
+    const summary = RULES.map(R => ({ id: R.id, name: R.name, exact: 0, snapshotDay: 0, miss: 0 }));
+    for (const m of mats){
+      const L = byM.get(m), u = U.get(m), rec = { u, sums: {}, pass: {} };
+      RULES.forEach((R, i) => {
+        let s = 0, s2 = 0;
+        for (const r of L){ const d = R.f(r); s += d; if (!snapshot || (r.posting && r.posting < snapshot)) s2 += d; }
+        rec.sums[R.id] = [round(s), round(s2)];
+        if (Math.abs(s - u) < EPS) { rec.pass[R.id] = 'exact'; summary[i].exact++; }
+        else if (snapshot && Math.abs(s2 - u) < EPS) { rec.pass[R.id] = 'snapshot'; summary[i].snapshotDay++; }
+        else { rec.pass[R.id] = 'miss'; summary[i].miss++; }
+      });
+      per.set(m, rec);
+    }
+    summary.forEach(s => { s.pct = mats.length ? round(100 * (s.exact + s.snapshotDay) / mats.length, 1) : 0; });
+
+    // ── what makes Trend differ from the storage-location rule (group by movement / text / storage location) ──
+    const groupKey = (r) => `${r.mvt} · ${r.text || '(no text)'} · ${r.sloc ? 'with SLoc' : 'no SLoc'}`;
+    const diffGroups = new Map();
+    if (hasSloc){
+      const R1 = RULES.find(R => R.id === 'R1').f;
+      for (const m of mats){
+        if (per.get(m).pass.R3 === 'miss') for (const r of byM.get(m)){
+          const d = trend(r) - R1(r); if (Math.abs(d) < EPS) continue;
+          const k = groupKey(r); const g = diffGroups.get(k) || { group: k, rows: 0, materials: new Set(), netQtyTrendMinusR1: 0 };
+          g.rows++; g.materials.add(m); g.netQtyTrendMinusR1 += d; diffGroups.set(k, g);
+        }
+      }
+    }
+
+    // ── movement dictionary for this site (what each row type is) ──
+    const dict = new Map();
+    for (const r of rows){
+      const k = groupKey(r); const g = dict.get(k) || { group: k, rows: 0, materials: new Set(), plusRows: 0, minusRows: 0, sumQty: 0, withOrder: 0, withCostCenter: 0, withWbs: 0, textItems: 0 };
+      g.rows++; g.materials.add(r.material); g.sumQty += r.qty; if (r.qty > 0) g.plusRows++; else if (r.qty < 0) g.minusRows++;
+      if (r.order) g.withOrder++; if (r.cc) g.withCostCenter++; if (r.wbs) g.withWbs++; if (!r.qty && r.qtyE) g.textItems++;
+      dict.set(k, g);
+    }
+
+    // ── split-valued parts: per-batch balances (storage-location rule) ──
+    const batchBal = [];
+    if (hasSloc){
+      for (const m of mats){
+        const b = {};
+        for (const r of byM.get(m)) { const k = (r.batch || '').toUpperCase(); if (!/^(NEW|REBUILT|DEFECTIVE)$/.test(k)) continue; if (r.sloc && !PROJECT_TEXTS.has(r.text)) b[k] = round((b[k] || 0) + r.qty); }
+        if (Object.keys(b).length) batchBal.push({ material: m, mb51PerBatch: b, invUnrestricted: U.get(m), invPerValuationType: valTypes.get(m) || null });
+      }
+    }
+
+    // ── Trend misses, part by part ──
+    const trendMisses = [];
+    for (const m of mats){
+      const rec = per.get(m); if (rec.pass.R3 !== 'miss') continue;
+      const L = byM.get(m);
+      const acc109 = L.filter(r => (r.mvt === '109' || r.mvt === '110') && hasSloc && !r.sloc);
+      const pp = L.filter(r => ['101', '102', '641', '642'].includes(r.mvt) && r.sloc);
+      trendMisses.push({
+        material: m, description: invDesc.get(m) || (L.find(r => r.desc) || {}).desc || '',
+        invUnrestricted: rec.u, invRows: invRows.get(m) || 0,
+        sums: rec.sums, pass: rec.pass, trendMinusInv: round(rec.sums.R3[0] - rec.u),
+        receiptsNoSloc109: { rows: acc109.length, qty: round(acc109.reduce((s, r) => s + r.qty, 0)),
+          sample: acc109.slice(0, 3).map(r => ({ doc: r.doc, posting: r.posting, qty: r.qty, order: r.order, costCenter: r.cc, wbs: r.wbs, text: r.text })) },
+        plantToPlantWithSloc: { rows: pp.length, qty: round(pp.reduce((s, r) => s + r.qty, 0)) },
+        firstPosting: L.reduce((a, r) => (r.posting && (!a || r.posting < a)) ? r.posting : a, ''),
+        has561: L.some(r => r.mvt === '561')
+      });
+    }
+    trendMisses.sort((a, b) => Math.abs(b.trendMinusInv) - Math.abs(a.trendMinusInv));
+    const MAX_LISTED = 1500;   // keeps the results file small enough to send; the counts above cover every part
+
+    const invNoMb51 = [...U.keys()].filter(m => !byM.has(m));
+    results = {
+      tool: TOOL_VERSION, runAt: new Date().toISOString(),
+      inputs: { mb51Files: fileInfo, inventoryMaster: { file: files.inv.name, sheet: ti.sheet, rowsRead: ti.rows.length, rowsSkippedOtherPlant: invSkippedPlant,
+                  columnsFound: Object.fromEntries(Object.keys(ALIAS.inv).map(k => [k, ti.map[k] != null ? ti.header[ti.map[k]] : null])) },
+                snapshotDate: snapshot || null },
+      mb51: { rows: rows.length, firstPosting: first, lastPosting: last, plants: [...mbPlants], unparsedDates,
+              openingBalanceRows561: rows.filter(r => r.mvt === '561').length, hasStorageLocation: hasSloc, hasMovementText: hasText },
+      trendMovementTable: { signs: MS, rowSigned: [...DIR], leftOut: [...(BC.DELIBERATELY_EXCLUDED || [])] },
+      materials: { tested: mats.length, inInventoryMasterWithoutMb51: invNoMb51.length,
+                   inInventoryMasterWithoutMb51_nonZeroStock: invNoMb51.filter(m => Math.abs(U.get(m)) > EPS).length },
+      summary,
+      whatMakesTrendDiffer: [...diffGroups.values()].map(g => ({ group: g.group, rows: g.rows, materials: g.materials.size, netQtyTrendMinusR1: round(g.netQtyTrendMinusR1) }))
+        .sort((a, b) => b.materials - a.materials),
+      movementDictionary: [...dict.values()].map(g => ({ group: g.group, rows: g.rows, materials: g.materials.size, plusRows: g.plusRows, minusRows: g.minusRows,
+        sumQty: round(g.sumQty), withOrder: g.withOrder, withCostCenter: g.withCostCenter, withWbs: g.withWbs, textItems: g.textItems })).sort((a, b) => b.rows - a.rows),
+      splitValuedParts: batchBal,
+      trendMissesTotal: trendMisses.length,
+      trendMisses: trendMisses.slice(0, MAX_LISTED),   // largest differences first
+      otherRuleMisses: Object.fromEntries(RULES.filter(R => R.id !== 'R3').map(R => [R.id,
+        mats.filter(m => per.get(m).pass[R.id] === 'miss').slice(0, 200).map(m => ({ material: m, inv: per.get(m).u, sum: per.get(m).sums[R.id][0] }))]))
+    };
+    render(results);
+    $('#btnDl').disabled = false;
+    status(`Done — ${mats.length.toLocaleString()} materials tested from ${rows.length.toLocaleString()} MB51 rows. Download the results file and send it over.`);
+  }
+
+  function round(v, d){ const p = Math.pow(10, d == null ? 3 : d); return Math.round(v * p) / p; }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function render(R){
+    const w = [];
+    if (!R.mb51.hasStorageLocation) w.push('The MB51 has no <b>Storage Location</b> column, so the storage-location rules (R1, R4, R5) were skipped. Please re-pull with that column.');
+    if (!R.mb51.hasMovementText) w.push('The MB51 has no <b>Movement Type Text</b> column, so project stock can\'t be told apart.');
+    if (!R.mb51.openingBalanceRows561) w.push('No 561 opening balances: the MB51 doesn\'t start at go-live, so parts with older stock can\'t reconcile.');
+    if (R.mb51.unparsedDates) w.push(`${R.mb51.unparsedDates.toLocaleString()} MB51 rows had a posting date that couldn't be read.`);
+    $('#result').innerHTML =
+      (w.length ? `<p class="warn">${w.join('<br>')}</p>` : '') +
+      `<table><thead><tr><th>Rule</th><th>Exact</th><th>+ snapshot day</th><th>Reconciles</th><th>Miss</th></tr></thead><tbody>` +
+      R.summary.map(s => `<tr><td><b>${s.id}</b> ${esc(s.name)}</td><td class="num">${s.exact.toLocaleString()}</td><td class="num">${s.snapshotDay.toLocaleString()}</td><td class="num">${s.pct}%</td><td class="num">${s.miss.toLocaleString()}</td></tr>`).join('') +
+      `</tbody></table>` +
+      `<p class="cols">MB51 ${R.mb51.rows.toLocaleString()} rows · ${esc(R.mb51.firstPosting)} → ${esc(R.mb51.lastPosting)} · plant ${esc(R.mb51.plants.join(', ') || '—')} · ${R.materials.tested.toLocaleString()} materials tested · ${R.materials.inInventoryMasterWithoutMb51_nonZeroStock.toLocaleString()} Inventory Master parts with stock but no MB51 rows</p>`;
+  }
+
+  $('#btnDl').addEventListener('click', () => {
+    if (!results) return;
+    const blob = new Blob([JSON.stringify(results, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `calibre-mb51-check-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  });
+})();
+</script>
+</body>
+</html>

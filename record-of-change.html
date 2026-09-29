@@ -381,6 +381,46 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - MB51 stock check page (diagnostic) - 2026-09-28 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-28</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-MB51-CHECK</b>: a diagnostic page that tests whether Trend's stock back-calculation rebuilds the Inventory Master — <b>diagnostic only; changes nothing in the app</b></h4>
+      <ul>
+        <li><b>Why:</b> the WO Readiness work (2026-09-28) found that, for the same site, summing only the MB51 rows that carry a storage location rebuilds the Inventory Master's Unrestricted stock for every part. The old movement-type list managed 64%. Trend's back-calc uses its own movement list and drops the storage location at intake. Two suspected gaps:
+          <ul>
+            <li>site receipts bought straight for an order / cost centre (109 with no storage location), which are used on arrival but counted by Trend as stock;</li>
+            <li>plant-to-plant receipts (101 into a storage location), which Trend leaves out.</li>
+          </ul>
+          The operator asked for a test to run on the live files.</li>
+        <li><b>The page:</b> <code>tools/mb51-check.html</code>. Load MB51 (one or more files; rows held in two files count once), the Inventory Master pulled the same day, and its date. The files are read in the browser only.
+          <ul>
+            <li>Per material, from go-live, it compares five rules with Unrestricted: R1 the storage-location rule (less project stock); R2 the old list; R3 Trend today (Trend's own movement table, loaded from <code>shared/inventory-back-calc.js</code>, plus the go-live balance); R4 Trend less 109s with no storage location; R5 R4 plus 101 / 641 rows with a storage location.</li>
+            <li>A part also passes if it matches once the snapshot-day postings are left out.</li>
+            <li>It downloads <code>calibre-mb51-check-&lt;date&gt;.json</code>, which holds:
+              <ul>
+                <li>the match rate per rule;</li>
+                <li>which movement / text / storage-location groups make Trend differ, and on how many parts;</li>
+                <li>a movement dictionary for the site;</li>
+                <li>per-batch balances for split-valued parts;</li>
+                <li>the parts Trend misses, largest first (up to 1,500 listed; every part counted), with their order-bought receipts.</li>
+              </ul></li>
+          </ul></li>
+        <li><b>Verified:</b>
+          <ul>
+            <li>a made-up MB51 + Inventory Master where each rule's answer is known: all five came out as built, including the cross-file duplicate, zero-padded material numbers, another plant's row, the snapshot day, two lines of one document, and the split-valued part;</li>
+            <li>a real 50,648-row SAP export read in about 2 minutes with every column found; results file about 1 MB;</li>
+            <li>no console errors.</li>
+          </ul>
+          That older export doesn't start at go-live (no 561 balances) and the two files weren't pulled the same day, so its low match rate is expected. The page says so, and it proves nothing about the rules.</li>
+        <li><b>Next:</b> the operator runs it on live files pulled the same day, from go-live; the results decide any change to Trend's back-calc. Such a change would keep the storage location at intake (an additional field, no SCHEMA_VERSION change) and would need a re-run of intake.</li>
+        <li>Files: <code>tools/mb51-check.html</code> (new), <code>Backlog.md</code>. Not linked from the app menus; open it directly.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Bundled POs (option 2) + PR lines - 2026-09-27 -->
     <article class="roc-entry dev">
       <div class="head">
