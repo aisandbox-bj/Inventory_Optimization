@@ -381,6 +381,24 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Stock-line hover: hide transfers that cancel out - 2026-09-29 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-29</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-HOVER-XFER</b>: the purple stock-line hover card no longer lists transfers that cancel out (309 / 411) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator ask:</b> "what is the purpose of showing 309? Don't they just offset? If so, don't show them."</li>
+        <li><b>Checked on the June data:</b> of 1,134 material-days with 309/310 rows, 1,132 add up to exactly zero (one row out, one back in: batch relabel). The other 2 are a single leg — stock transferred in from another material number (1000510 on 2026-05-06, +6; 1006878 on 2025-09-10, +8). Those really change the stock.</li>
+        <li><b>Change</b> (<code>shared/movement-detail.js</code>, the hover list only): on a day where a material's 309/310 rows net to zero they're left off. The same rule applies to 411/412 storage-location moves, which also post out-and-back-in. A day that doesn't net to zero still shows its transfer rows. A day with nothing left to show gets no hover dot.</li>
+        <li><b>The purple line itself is unchanged</b> — cancelling rows never moved it; this only tidies the list.</li>
+        <li><b>Verified:</b> on June, 309/310 hover rows 2,494 → 2 (the two real transfers kept), 411/412 90 → 0, every other movement row unchanged; Trend loads and 1000510's 2026-05-06 dot is still there; no console errors.</li>
+        <li>Files: <code>shared/movement-detail.js</code>, <code>user-manual.html</code>. Rollback: <code>_rollback/HOVER-309-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Material card on the material number - 2026-09-29 -->
     <article class="roc-entry dev">
       <div class="head">

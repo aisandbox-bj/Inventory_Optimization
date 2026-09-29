@@ -14,6 +14,13 @@
    Quantities are ABSOLUTE (operator decision 2026-06-27); the movement-type
    description carries the direction (GI = out, GR = in, reversal = back).
 
+   Transfers that cancel out are left off the stock list (operator 2026-09-29):
+   309/310 (batch relabel / material-to-material) and 411/412 (storage location)
+   post one row out and one row back in, so on a day where a material's rows of
+   that kind add up to zero they don't move the stock line and aren't shown. A day
+   where they DON'T add up to zero (e.g. stock transferred in from another material
+   number) still shows them — that transfer really changed the stock.
+
    Public API:
      MovementDetail.forMaterial(json, material) -> { consumption:[], stock:[] }
          each row: { date, mt, mtDesc, qty (absolute), order }
@@ -76,6 +83,8 @@
     const mat   = String(material == null ? '' : material).trim();
     const consumption = [];
     const stock = [];
+    const XFER = { '309': 'mm', '310': 'mm', '411': 'sl', '412': 'sl' };   // transfer groups
+    const xferNet = new Map();   // date|group → net signed qty for this material
     for (const r of mb51){
       if (String(r.material || '').trim() !== mat) continue;
       const date = String(r.postingDate || '').trim();
@@ -87,10 +96,15 @@
       }
       const sd = stockSignedDelta(r);
       if (sd !== 0){
-        stock.push({ date, mt, mtDesc: describe(mt), qty: Math.abs(sd), order });
+        const grp = XFER[mt] || null;
+        if (grp) { const k = date + '|' + grp; xferNet.set(k, (xferNet.get(k) || 0) + sd); }
+        stock.push({ date, mt, mtDesc: describe(mt), qty: Math.abs(sd), order, _grp: grp });
       }
     }
-    return { consumption, stock };
+    // Drop transfer rows whose day nets to zero (they cancel out on the line).
+    const kept = stock.filter(mv => !(mv._grp && Math.abs(xferNet.get(mv.date + '|' + mv._grp)) < 1e-9));
+    kept.forEach(mv => { delete mv._grp; });
+    return { consumption, stock: kept };
   }
 
   global.MovementDetail = { forMaterial, describe };
