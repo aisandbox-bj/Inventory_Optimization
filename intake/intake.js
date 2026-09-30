@@ -2403,7 +2403,8 @@
         name,
         uploadedAt: json.metadata.uploadedAt,
         createdAt:  json.metadata.createdAt,
-        mode:       json.scope.mode
+        mode:       json.scope.mode,
+        size:       result.size            // APP-DASH-SIZE — shown on the Dashboard
       });
       await AppStorage.set('intakes.index', idxClean.slice(0, 50));
       // also save as "current" for analysis engine handoff

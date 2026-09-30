@@ -20,6 +20,7 @@
     dupIdx:          null,        // APP-DUP-FLAG — DuplicateList.index(json.duplicates) (null-safe lookups)
     filterDup:       null,        // APP-DUP-FLAG — null | 'all' (All duplicates) | 'families' (Duplicate families)
     dupOpen:         new Set(),   // APP-DUP-FLAG — family reference materials currently expanded
+    dupFamSel:       new Set(),   // APP-DUP-FINDER — families picked in the finder (empty = all families)
     selectedFleets:  new Set(),   // APP-ACT-02b — buckets ticked for the "Selected fleets" exports
     traceExcl:       { manualByMat:{}, sigmaLimit:null },  // APP-FIX-TREND-LT-SUPPRESS — Trace outlier suppression (from trace.viewState)
     sortKey:         'totalNet',
@@ -105,7 +106,8 @@
         s:   state.searchText   || '',
         tl:  state.filterTl     || 'ALL',
         act: !!state.filterAction,
-        dup: state.filterDup || null     // APP-DUP-FLAG
+        dup: state.filterDup || null,    // APP-DUP-FLAG
+        fams: [...state.dupFamSel]       // APP-DUP-FINDER
       }));
     } catch (e) { /* private mode / quota / no sessionStorage — non-fatal */ }
   }
@@ -119,7 +121,8 @@
         s:   typeof o.s  === 'string' ? o.s  : '',
         tl:  typeof o.tl === 'string' ? o.tl : 'ALL',
         act: !!o.act,
-        dup: (o.dup === 'all' || o.dup === 'families') ? o.dup : null
+        dup: (o.dup === 'all' || o.dup === 'families') ? o.dup : null,
+        fams: Array.isArray(o.fams) ? o.fams.map(String) : []
       };
     } catch (e) { return null; }
   }
@@ -133,6 +136,12 @@
     // APP-DUP-FLAG — only re-apply a Duplicates view this assessment can actually show
     state.filterDup    = (f.dup === 'all' && state.dupIdx && state.dupIdx.loaded) ? 'all'
                        : (f.dup === 'families' && state.dupIdx && state.dupIdx.hasFamilies) ? 'families' : null;
+    // APP-DUP-FINDER — re-apply the picked families that still exist in this list
+    if (state.filterDup === 'families' && f.fams && f.fams.length) {
+      const refs = new Set(state.dupIdx.families().map(x => x.ref));
+      state.dupFamSel = new Set(f.fams.filter(r => refs.has(r)));
+      state.dupFamSel.forEach(r => state.dupOpen.add(r));
+    }
     const inp = $('#listSearch');
     if (inp) inp.value = f.s;
     renderFilterButtons();
@@ -510,7 +519,8 @@
       : '';
     // APP-DUP-FLAG — "Classification ▾" filter tab (operator 2026-09-25). Its menu opens
     // OVER the page (no layout shift). Label shows the active choice + a ✕ to clear it.
-    const dupLab = state.filterDup === 'all' ? 'All duplicates' : state.filterDup === 'families' ? 'Duplicate families' : '';
+    const dupLab = state.filterDup === 'all' ? 'All duplicates'
+                 : state.filterDup === 'families' ? ('Duplicate families' + (state.dupFamSel.size ? ` (${state.dupFamSel.size} picked)` : '')) : '';
     const clsHtml = `<button data-cls="1" class="cls-filter${state.filterDup ? ' active' : ''}">Classification${dupLab ? `: ${dupLab}` : ''} ▾</button>`
       + (state.filterDup ? `<button data-clsclear="1" class="cls-clear" aria-label="Clear classification filter">✕</button>` : '')
       + `<span class="tl-sep"></span>`;
@@ -530,6 +540,7 @@
   // list was loaded at Intake; "Duplicate families" only when that list has groups.
   function setDupFilter(v){
     state.filterDup = v;
+    state.dupFamSel = new Set();   // choosing from the menu shows every family; the finder picks some
     renderFilterButtons(); renderList(); persistFilters();
   }
   function openClassificationMenu(btn){
@@ -542,6 +553,7 @@
       `<div class="cls-h">Duplicates${idx.loaded ? ` <span class="cls-n">${idx.count().toLocaleString()} flagged${idx.hasFamilies ? ` · ${idx.familyCount().toLocaleString()} families` : ''}</span>` : ''}</div>`
       + item('all', 'All duplicates', idx.loaded, 'load a duplicate list in Intake')
       + item('families', 'Duplicate families', idx.hasFamilies, idx.loaded ? 'your list has no groups' : 'load a duplicate list in Intake')
+      + item('finder', '🔎 Find a duplicate family…', idx.hasFamilies, idx.loaded ? 'your list has no groups' : 'load a duplicate list in Intake')
       + (state.filterDup ? `<button class="cls-item cls-off" data-v="">Show all materials (clear)</button>` : '');
     const r = btn.getBoundingClientRect();
     menu.style.left = Math.max(8, r.left) + 'px';
@@ -550,7 +562,147 @@
     const close = () => { menu.remove(); document.removeEventListener('click', off, true); };
     const off = (ev) => { if (!menu.contains(ev.target)) close(); };
     setTimeout(() => document.addEventListener('click', off, true), 0);
-    menu.querySelectorAll('.cls-item:not([disabled])').forEach(b => b.addEventListener('click', () => { close(); setDupFilter(b.dataset.v || null); }));
+    menu.querySelectorAll('.cls-item:not([disabled])').forEach(b => b.addEventListener('click', () => {
+      close();
+      if (b.dataset.v === 'finder') openFamilyFinder({}); else setDupFilter(b.dataset.v || null);
+    }));
+  }
+
+  /* ─── APP-DUP-FINDER (operator 2026-09-30) ────────────────────────────────
+     Find duplicate families by any part number, family number or description,
+     see every member's description and SAP settings side by side, and filter
+     Trend to the families you pick. Opened from Classification ▾ or by clicking
+     a DUP / REF tag (that material's family is highlighted). Floats over the page. */
+  const _famSets = new WeakMap();
+  function famSet(f){ let s = _famSets.get(f); if (!s){ s = new Set(f.members); _famSets.set(f, s); } return s; }
+  let _famNoMap = null, _famNoFor = null;
+  function famNo(f){
+    const fams = state.dupIdx.families();
+    if (_famNoFor !== fams){ _famNoMap = new Map(fams.map((x, i) => [x.ref, i + 1])); _famNoFor = fams; }
+    return _famNoMap.get(f.ref) || '?';
+  }
+  function famSelMembers(){
+    const out = new Set();
+    for (const f of state.dupIdx.families()) if (state.dupFamSel.has(f.ref)) f.members.forEach(m => out.add(m));
+    return out;
+  }
+  // Inventory Master row per material (first row) — SAP settings for members not in this analysis.
+  let _imRow = null, _imRowFor = null;
+  function imRow(mat){
+    const im = (state.json && state.json.data && state.json.data.inventoryMaster) || [];
+    if (_imRowFor !== im){ _imRow = new Map(); for (const x of im){ const k = String(x.material || '').trim(); if (k && !_imRow.has(k)) _imRow.set(k, x); } _imRowFor = im; }
+    return _imRow.get(String(mat)) || null;
+  }
+  const numOrNull = (v) => (v == null || v === '' || !isFinite(+v)) ? null : +v;
+  // One member's figures: from the analysis when it's in it, else from the Inventory Master.
+  function famMember(mat, rowByMat){
+    const r = rowByMat && rowByMat.get(mat), im = imRow(mat);
+    if (r) return { mat, inRun: true, desc: r.description || '', mrp: r.mrpType || '', min: numOrNull(r.cmin), max: numOrNull(r.cmax), ss: numOrNull(r.safetyStock),
+                    soh: numOrNull(r.stock), p2: r.p2Flag === 'OK' ? r.p2Rate : null };
+    return { mat, inRun: false, desc: (im && im.description) || descFor(mat) || '', mrp: (im && im.mrpInd) || '', min: numOrNull(im && im.mrpMin), max: numOrNull(im && im.mrpMax),
+             ss: numOrNull(im && im.safetyStock), soh: numOrNull(im && im.totQtyOh), p2: null };
+  }
+  function famTotals(f, rowByMat){
+    let p2 = null, soh = null, set = 0;
+    for (const mat of f.members){
+      const x = famMember(mat, rowByMat);
+      if (x.p2 != null) p2 = (p2 || 0) + x.p2;
+      if (x.soh != null) soh = (soh || 0) + x.soh;
+      if ((x.min || 0) > 0 || (x.max || 0) > 0 || (x.ss || 0) > 0) set++;
+    }
+    return { p2, soh, set };
+  }
+  // A family member that isn't in this analysis — still show its SAP MRP settings.
+  function missingRowHtml(mat, isRef){
+    const x = famMember(mat, null), dash = '<span style="color:var(--text-muted)">—</span>';
+    return `<tr class="fam-member fam-missing"><td></td>
+      <td class="mat">${escapeHtml(mat)}${isRef ? '<span class="mark-badges"><span class="dup-tag ref">REF</span></span>' : ''}</td>
+      <td class="desc">${escapeHtml(x.desc)} <span class="fam-na">— not in this analysis (no consumption in the window, or out of scope)</span></td>
+      <td class="num">${dash}</td><td class="num">${dash}</td><td class="num">${dash}</td>
+      <td class="num fam-sap">${escapeHtml(x.mrp || '—')}</td>
+      <td class="num fam-sap">${dash}${x.min != null ? ` <span class="cur-brk">(${x.min})</span>` : ''}</td>
+      <td class="num fam-sap">${dash}${x.max != null ? ` <span class="cur-brk">(${x.max})</span>` : ''}</td>
+      <td class="num">${dash}</td><td class="num">${dash}</td><td class="num">${dash}</td></tr>`;
+  }
+
+  function openFamilyFinder(opts){
+    opts = opts || {};
+    const dup = state.dupIdx;
+    if (!dup || !dup.hasFamilies) { toast('No duplicate families are loaded — add a duplicate list with families in Intake.', 'warn'); return; }
+    const focusFam = opts.focus ? dup.families().find(f => famSet(f).has(String(opts.focus))) : null;
+    if (opts.focus && !focusFam) { toast(`${opts.focus} is on the duplicate list but isn't in a family.`, 'warn'); return; }
+    document.querySelector('.ff-panel')?.remove();
+    const bucket = currentBucket();
+    const rowByMat = new Map(((bucket && bucket.materials) || []).map(m => [m.material, m]));
+    const picked = new Set(state.dupFamSel);
+    const fams = dup.families();
+    const panel = document.createElement('div');
+    panel.className = 'ff-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Find a duplicate family');
+    panel.innerHTML = `
+      <div class="ff-h"><span class="ff-t">Duplicate families <span class="ff-cnt">${fams.length.toLocaleString()} families</span></span><button type="button" class="ff-x" aria-label="Close">✕</button></div>
+      <div class="ff-s"><input type="text" class="ff-q" placeholder="Part number, family number or description (e.g. seal)…" autocomplete="off"></div>
+      <div class="ff-list"></div>
+      <div class="ff-f"><span class="ff-sel"></span><button type="button" class="ff-clear">Clear picks</button><button type="button" class="ff-all">Show all families</button><button type="button" class="ff-go">Show picked families</button></div>`;
+    document.body.appendChild(panel);
+    const listEl = panel.querySelector('.ff-list'), q = panel.querySelector('.ff-q');
+    const num = (v) => v == null ? '—' : v.toLocaleString();
+    const normNum = (s) => String(s).trim().replace(/^0+(?=\d)/, '');
+    function matches(f, t){
+      if (!t) return true;
+      const n = famNo(f), tl = t.toLowerCase(), tn = normNum(t);
+      if (/^(f|family)?\s*#?\d+$/i.test(t) && String(n) === t.replace(/\D/g, '')) return true;
+      return f.members.some(m => normNum(m).includes(tn) || famMember(m, rowByMat).desc.toLowerCase().includes(tl));
+    }
+    function famHtml(f){
+      const tot = famTotals(f, rowByMat), foc = focusFam === f;
+      const mem = f.members.map(m => {
+        const x = famMember(m, rowByMat);
+        return `<tr class="${String(opts.focus) === m ? 'ff-hit' : ''}${x.inRun ? '' : ' ff-out'}"><td class="ff-m">${escapeHtml(m)}${m === f.ref ? ' <span class="dup-tag ref">REF</span>' : ''}</td>
+          <td class="ff-d">${escapeHtml(x.desc || '—')}</td><td>${escapeHtml(x.mrp || '—')}</td><td>${num(x.min)}</td><td>${num(x.max)}</td><td>${num(x.ss)}</td><td>${num(x.soh)}</td>
+          <td>${x.p2 != null ? x.p2.toFixed(1) : (x.inRun ? '—' : '<span class="ff-na">not in run</span>')}</td></tr>`;
+      }).join('');
+      return `<div class="ff-fam${foc ? ' ff-focus' : ''}${picked.has(f.ref) ? ' ff-on' : ''}" data-ref="${escapeAttr(f.ref)}">
+        <div class="ff-fh"><label><input type="checkbox" ${picked.has(f.ref) ? 'checked' : ''}> <span class="ff-no">Family ${famNo(f)}</span> <b>${escapeHtml(descFor(f.ref, rowByMat) || '(no description)')}</b> <span class="ff-ref">${escapeHtml(f.ref)}</span></label>
+          <span class="ff-tot">P2 ${tot.p2 != null ? tot.p2.toFixed(1) : '—'}/mo · SoH ${num(tot.soh)} · Min/Max set on <b class="${tot.set > 1 ? 'fam-warn' : ''}">${tot.set} of ${f.members.length}</b></span>
+          <button type="button" class="ff-only">Show just this family</button></div>
+        <table class="ff-mt"><thead><tr><th>Material</th><th>Description</th><th>MRP</th><th>Min</th><th>Max</th><th>SS</th><th>SoH</th><th>P2/mo</th></tr></thead><tbody>${mem}</tbody></table></div>`;
+    }
+    function draw(){
+      const t = q.value.trim();
+      const shown = fams.filter(f => matches(f, t));
+      listEl.innerHTML = shown.length ? shown.slice(0, 200).map(famHtml).join('')
+        + (shown.length > 200 ? `<div class="ff-more">${(shown.length - 200).toLocaleString()} more — narrow the search</div>` : '')
+        : '<div class="ff-empty">No family matches that search.</div>';
+      panel.querySelector('.ff-sel').textContent = picked.size ? `${picked.size} famil${picked.size === 1 ? 'y' : 'ies'} picked` : 'Tick families to show them together';
+      panel.querySelector('.ff-go').disabled = !picked.size;
+    }
+    function apply(refs){
+      state.filterDup = 'families';
+      state.dupFamSel = new Set(refs);
+      refs.forEach(r => state.dupOpen.add(r));
+      close(); renderFilterButtons(); renderList(); persistFilters();
+      document.querySelector('#listTableWrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function close(){ panel.remove(); document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onOut, true); }
+    function onKey(e){ if (e.key === 'Escape') close(); }
+    function onOut(e){ if (!panel.contains(e.target)) close(); }
+    listEl.addEventListener('change', (e) => {
+      const cb = e.target.closest('.ff-fh input[type=checkbox]'); if (!cb) return;
+      const ref = cb.closest('.ff-fam').dataset.ref;
+      if (cb.checked) picked.add(ref); else picked.delete(ref);
+      cb.closest('.ff-fam').classList.toggle('ff-on', cb.checked);
+      draw();
+    });
+    listEl.addEventListener('click', (e) => { const b = e.target.closest('.ff-only'); if (b) apply([b.closest('.ff-fam').dataset.ref]); });
+    q.addEventListener('input', draw);
+    panel.querySelector('.ff-x').addEventListener('click', close);
+    panel.querySelector('.ff-clear').addEventListener('click', () => { picked.clear(); draw(); });
+    panel.querySelector('.ff-all').addEventListener('click', () => apply([]));
+    panel.querySelector('.ff-go').addEventListener('click', () => apply([...picked]));
+    draw();
+    setTimeout(() => { document.addEventListener('keydown', onKey); document.addEventListener('pointerdown', onOut, true); }, 0);
+    const foc = listEl.querySelector('.ff-focus');
+    if (foc) foc.scrollIntoView({ block: 'center' }); else q.focus();
   }
   // Description for any material (analysed row first, else Inventory Master) — used for
   // family headers and for family members that aren't in this analysis.
@@ -645,7 +797,11 @@
     // APP-DUP-FLAG — Classification: All duplicates / Duplicate families (ANDed with the rest)
     const dup = state.dupIdx;
     if (state.filterDup === 'all' && dup && dup.loaded) rows = rows.filter(m => dup.isDuplicate(m.material));
-    if (state.filterDup === 'families' && dup && dup.hasFamilies) rows = rows.filter(m => dup.familyOf(m.material));
+    if (state.filterDup === 'families' && dup && dup.hasFamilies) {
+      rows = rows.filter(m => dup.familyOf(m.material));
+      // APP-DUP-FINDER — only the families picked in the finder
+      if (state.dupFamSel.size) { const allow = famSelMembers(); rows = rows.filter(m => allow.has(m.material)); }
+    }
     // APP-LIST-SEARCH — text, or a pasted list of up to 20 material numbers
     if (state.searchText) rows = rows.filter(m => ListSearch.test(state.searchText, m.material, m.description));
     rows = rows.filter(passesColFilters);
@@ -667,9 +823,11 @@
   function familyGroups(rows){
     const dup = state.dupIdx, byMat = new Map(rows.map(m => [m.material, m]));
     const placed = new Set(), out = [];
-    for (const f of dup.families()){
+    const fams = dup.families().filter(f => !state.dupFamSel.size || state.dupFamSel.has(f.ref));   // APP-DUP-FINDER
+    for (const f of fams){
       const ref = byMat.get(f.ref);
-      const members = rows.filter(m => m.material !== f.ref && !placed.has(m.material) && dup.familyOf(m.material) === f);
+      const inFam = famSet(f);
+      const members = rows.filter(m => m.material !== f.ref && !placed.has(m.material) && inFam.has(m.material));
       const grp = (ref && !placed.has(f.ref) ? [ref] : []).concat(members);
       grp.forEach(m => placed.add(m.material));
       out.push({ fam: f, rows: grp });
@@ -726,8 +884,10 @@
       const isAction = !!(state.analyst && state.analyst.isAction(m.material));   // APP-ACT-01
       const isNote   = !!(state.analyst && state.analyst.hasNote(m.material));    // APP-TREND-NOTES
       // APP-DUP-FLAG — REF on a family's reference row (families view), DUP on any flagged duplicate
-      const dupTag = (extra && extra.ref) ? '<span class="dup-tag ref">REF</span>'
-                   : (dupIdx && dupIdx.isDuplicate(m.material)) ? '<span class="dup-tag">DUP</span>' : '';
+      // APP-DUP-FINDER — the tag is a button: it opens the family finder on this material
+      const dupAttr = `data-dupmat="${escapeAttr(m.material)}" role="button" tabindex="0" aria-label="Show the duplicate family of ${escapeAttr(m.material)}"`;
+      const dupTag = (extra && extra.ref) ? `<span class="dup-tag ref" ${dupAttr}>REF</span>`
+                   : (dupIdx && dupIdx.isDuplicate(m.material)) ? `<span class="dup-tag" ${dupAttr}>DUP</span>` : '';
       const rowClasses = [
         state.selectedMaterial === m.material ? 'selected' : '',
         (isReview || isAction || isNote) ? 'marked-any' : '',
@@ -774,15 +934,18 @@
         if (!g.rows.length && !missing.length) return '';
         famCount++;
         const open = state.dupOpen.has(f.ref);
+        const tot = famTotals(f, rowByMat);   // APP-DUP-FINDER — the whole family at a glance
         const head = `<tr class="fam-row${open ? ' open' : ''}" data-fam="${escapeAttr(f.ref)}"><td colspan="${NC}">
             <span class="fam-caret">${open ? '▾' : '▸'}</span>
+            <span class="fam-no">Family ${famNo(f)}</span>
             <b class="fam-desc">${escapeHtml(descFor(f.ref, rowByMat) || '(no description)')}</b>
             <span class="fam-ref">${escapeHtml(f.ref)} (reference)</span>
             <span class="fam-n">${f.members.length} material${f.members.length === 1 ? '' : 's'}${g.rows.length !== f.members.length ? ` · ${g.rows.length} in this view` : ''}</span>
+            <span class="fam-tot">Family total · P2 <b>${tot.p2 != null ? tot.p2.toFixed(1) : '—'}</b>/mo · SoH <b>${tot.soh != null ? tot.soh.toLocaleString() : '—'}</b> · Min/Max set on <b class="${tot.set > 1 ? 'fam-warn' : ''}">${tot.set} of ${f.members.length}</b></span>
           </td></tr>`;
         if (!open) return head;
         const body = g.rows.map(m => rowHtml(m, { fam: true, ref: m.material === f.ref })).join('')
-          + missing.map(x => `<tr class="fam-member fam-missing"><td></td><td class="mat">${escapeHtml(x)}${x === f.ref ? '<span class="mark-badges"><span class="dup-tag ref">REF</span></span>' : ''}</td><td class="desc" colspan="${NC - 2}">${escapeHtml(descFor(x) || '')} <span class="fam-na">— not in this analysis (no consumption in the window, or out of scope)</span></td></tr>`).join('');
+          + missing.map(x => missingRowHtml(x, x === f.ref)).join('');
         return head + body;
       }).join('');
       if (!famCount) { tbl.innerHTML = `<div class="list-empty">no duplicate families match the current filter</div>`; return; }
@@ -791,6 +954,12 @@
                      <div class="list-meta" style="padding:8px 14px;font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted);letter-spacing:.5px;">
                        ${rows.length.toLocaleString()} of ${bucket.materials.length.toLocaleString()} materials shown${famMode ? ` · ${famCount.toLocaleString()} famil${famCount === 1 ? 'y' : 'ies'} — click a family to open it` : ''}
                      </div>`;
+    // APP-DUP-FINDER — DUP / REF tag → the family finder, focused on this material
+    $$('#listTableWrap .dup-tag[data-dupmat]').forEach(t => {
+      const go = (e) => { e.stopPropagation(); e.preventDefault(); openFamilyFinder({ focus: t.dataset.dupmat }); };
+      t.addEventListener('click', go);
+      t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(e); });
+    });
     // APP-DUP-FLAG — open / close a family
     $$('#listTableWrap tr.fam-row').forEach(tr => tr.addEventListener('click', () => {
       const ref = tr.dataset.fam;

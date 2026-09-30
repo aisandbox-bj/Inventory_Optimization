@@ -381,6 +381,61 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Dashboard intake size + download; duplicate family finder - 2026-09-30 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-30</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-DASH-SIZE</b> (size + Download on the Dashboard's recent intakes) and <b>APP-DUP-FINDER</b> (find duplicate families, click DUP to jump, family totals) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>APP-DASH-SIZE — operator ask:</b> "Size shown for each intake" and "download JSON from here (Load – Download – Delete)".
+          <ul>
+            <li>A new <b>Size</b> column shows each run, with the total under the table; runs over 50 MB show amber.</li>
+            <li>Intake now records the size when it saves.</li>
+            <li>Runs saved earlier are measured once, one at a time (loaded, measured, released), and the size is remembered in the list, so later visits don't reload them.</li>
+            <li><b>Download</b> between Load and Delete saves that run's JSON as stored, including its stars / recs / notes.</li>
+          </ul></li>
+        <li><b>Why the Dashboard tab showed 678 MB</b> (operator photo):
+          <ul>
+            <li>The Dashboard itself only reads the list of saved runs and the storage key names. It loads a run only on Load or Download (and the current one on Delete).</li>
+            <li>So the memory is most likely the Trend page's data (the assessment + charts) still held from earlier in that same tab, or a browser process shared with another aisandbox-bj.github.io tab.</li>
+            <li>Not measured on the operator's machine. Closing and reopening the tab frees it.</li>
+          </ul></li>
+        <li><b>APP-DUP-FINDER — operator ask:</b> find duplicate families by part number, family or description, filter Trend to the chosen families, and click the D tag to get to that material's family, so MRP settings aren't put on several duplicates from one member's consumption.
+          <ul>
+            <li><b>Finder:</b> Classification ▾ → "🔎 Find a duplicate family…". It floats over the page.
+              <ul>
+                <li>Search by any part number (leading zeros ignored), family number ("family 12" / "12") or description text.</li>
+                <li>Every member shows description, MRP type, Min, Max, safety stock, stock on hand and P2/mo; members not in the analysis show their Inventory Master settings.</li>
+                <li>Tick families → "Show picked families", "Show just this family", or "Show all families". The filter button reads "Duplicate families (N picked)", and the picks survive a Trace round-trip.</li>
+              </ul></li>
+            <li><b>DUP / REF tags are buttons:</b> clicking one opens the finder with that material's family highlighted and scrolled into view. It doesn't change the selected row; material only on a flat list (no family) → a note says so.</li>
+            <li><b>Family totals</b> on every family header: combined P2/mo, stock on hand and "Min/Max set on k of n" (amber when more than one member carries settings).</li>
+            <li>Not-in-analysis members in the families view now show their MRP type and current Min/Max.</li>
+            <li>Families are numbered in list order.</li>
+          </ul></li>
+        <li><b>Verified in the browser:</b>
+          <ul>
+            <li><b>Dashboard:</b> an old-style entry was measured (34 MB) and remembered in the list; a new entry showed its recorded 278 KB; the total showed; Download produced that run's JSON; no console errors.</li>
+            <li><b>Finder</b> (June data + three test families):
+              <ul>
+                <li>the DUP tag on 1003376 opened Family 1, highlighted, without changing the selected row;</li>
+                <li>search by "breather", "family 2", "9999777" and "0001002984" each found the right family;</li>
+                <li>two families picked → only those listed, label "(2 picked)", totals shown, the Inventory-Master-only member showed V1 with its Min/Max.</li>
+              </ul></li>
+          </ul></li>
+        <li><b>Not verified:</b>
+          <ul>
+            <li>the operator's own duplicate list;</li>
+            <li>the family totals' P2 figure on live data — the June test data has no P2 today, so it showed "—";</li>
+            <li>a screenshot of the finder (the preview pane didn't render in time; checked through the page contents instead).</li>
+          </ul></li>
+        <li>Files: <code>index.html</code>, <code>intake/intake.js</code>, <code>analysis/analysis.{js,css}</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Rollback: <code>_rollback/DASH-SIZE-pre/</code>, <code>_rollback/DUP-FINDER-pre/</code> + <code>checkpoint/pre-dashsize</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Stock-line hover: hide transfers that cancel out - 2026-09-29 -->
     <article class="roc-entry dev">
       <div class="head">

@@ -1427,3 +1427,49 @@ main.shell{ position:relative; }
   position:absolute; right:2px; bottom:2px; width:16px; height:16px; cursor:nwse-resize; opacity:.6;
   background:linear-gradient(135deg, transparent 55%, var(--text-muted) 55%, var(--text-muted) 63%, transparent 63%, transparent 74%, var(--text-muted) 74%, var(--text-muted) 82%, transparent 82%);
 }
+
+/* ─── APP-DUP-FINDER — family finder, clickable DUP/REF tags, family totals ─── */
+.list-table .dup-tag[data-dupmat]{ cursor:pointer; }
+.list-table .dup-tag[data-dupmat]:hover{ outline:1px solid #86D6CF; }
+.list-table tr.fam-row .fam-no{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-muted); margin-right:8px; }
+.list-table tr.fam-row .fam-tot{ float:right; font-family:var(--font-mono); font-size:10.5px; color:var(--text-sec); }
+.list-table tr.fam-row .fam-tot b{ color:var(--text-pri); }
+.fam-warn{ color:var(--status-warn,#FBBF24) !important; }
+.list-table tr.fam-missing td.fam-sap{ font-style:normal; color:var(--text-sec); }
+.ff-panel{ position:fixed; z-index:1400; left:50%; top:8vh; transform:translateX(-50%); width:min(900px,94vw); max-height:84vh;
+  display:flex; flex-direction:column; background:#0C2D3B; border:1px solid rgba(134,214,207,.45); border-radius:8px;
+  box-shadow:0 18px 44px rgba(0,0,0,.55); font-family:var(--font-body); color:var(--text-pri); }
+.ff-h{ display:flex; align-items:center; padding:11px 14px; border-bottom:1px solid rgba(134,214,207,.2); background:#091F2D; border-radius:8px 8px 0 0; }
+.ff-t{ flex:1; font-family:var(--font-heading); font-weight:600; font-size:17px; }
+.ff-cnt{ font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-left:8px; font-weight:400; }
+.ff-x{ background:none; border:none; color:var(--text-muted); font-size:16px; cursor:pointer; }
+.ff-x:hover{ color:#fff; }
+.ff-s{ padding:10px 14px; }
+.ff-q{ width:100%; box-sizing:border-box; padding:8px 10px; background:var(--bg-panel-2,#091F2D); border:1px solid var(--border); border-radius:5px; color:var(--text-pri); font-size:14px; }
+.ff-list{ flex:1; overflow:auto; padding:0 14px 8px; }
+.ff-fam{ border:1px solid var(--border); border-radius:6px; margin:0 0 10px; }
+.ff-fam.ff-on{ border-color:#86D6CF; }
+.ff-fam.ff-focus{ border-color:#1FCED8; box-shadow:0 0 0 2px rgba(31,206,216,.35); }
+.ff-fh{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:8px 10px; background:rgba(134,214,207,.07); border-radius:6px 6px 0 0; }
+.ff-fh label{ flex:1 1 360px; cursor:pointer; }
+.ff-fh input{ accent-color:#1FCED8; margin-right:4px; }
+.ff-no{ font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
+.ff-ref{ font-family:var(--font-mono); font-size:11.5px; color:#86D6CF; }
+.ff-tot{ font-family:var(--font-mono); font-size:11px; color:var(--text-sec); }
+.ff-only{ background:transparent; border:1px solid rgba(134,214,207,.45); color:#86D6CF; border-radius:4px; padding:2px 8px; font-size:12px; cursor:pointer; }
+.ff-only:hover{ background:rgba(134,214,207,.15); }
+.ff-mt{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.ff-mt th{ text-align:left; font-weight:600; color:var(--text-muted); font-size:11px; padding:4px 8px; border-bottom:1px solid var(--border); }
+.ff-mt td{ padding:4px 8px; border-bottom:1px solid rgba(155,176,182,.1); font-family:var(--font-mono); font-size:12px; }
+.ff-mt td.ff-d{ font-family:var(--font-body); font-size:12.5px; }
+.ff-mt tr.ff-hit td{ background:rgba(31,206,216,.16); color:#fff; }
+.ff-mt tr.ff-out td{ color:var(--text-muted); }
+.ff-mt .dup-tag{ display:inline-block; padding:0 4px; border-radius:3px; font-size:9.5px; background:#F0F4F3; color:#0c2d3b; }
+.ff-na{ font-family:var(--font-body); font-style:italic; font-size:11px; }
+.ff-empty, .ff-more{ padding:14px; color:var(--text-muted); text-align:center; }
+.ff-f{ display:flex; align-items:center; gap:8px; padding:10px 14px; border-top:1px solid rgba(134,214,207,.2); }
+.ff-sel{ flex:1; font-size:12.5px; color:var(--text-sec); }
+.ff-f button{ font-family:var(--font-heading); font-weight:600; font-size:13.5px; padding:6px 12px; border-radius:4px; cursor:pointer;
+  background:transparent; border:1px solid var(--border); color:var(--text-sec); }
+.ff-f .ff-go{ background:#1FCED8; border-color:#1FCED8; color:#062028; }
+.ff-f .ff-go:disabled{ opacity:.45; cursor:default; }

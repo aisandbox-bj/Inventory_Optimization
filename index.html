@@ -254,6 +254,15 @@
   text-transform:uppercase;
 }
 .recent td .open:hover{ color:var(--accent-glow); }
+/* APP-DASH-SIZE — size per saved intake + Download beside Load */
+.recent th.sz-h, .recent td.sz{ text-align:right; white-space:nowrap; }
+.recent td.sz{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-sec); }
+.recent td.sz.big{ color:var(--status-warn); }
+.recent td.sz .measuring{ color:var(--text-disabled); font-style:italic; font-size:10.5px; }
+.recent td .dl{ font-family:var(--font-mono); font-size:10.5px; color:var(--accent-soft,#86D6CF); letter-spacing:1px;
+  text-transform:uppercase; margin-left:14px; cursor:pointer; text-decoration:none; }
+.recent td .dl:hover{ color:var(--accent-glow); }
+.recent-total{ padding:8px 12px 0; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); text-align:right; }
 
 .clear-session{
   margin-top:24px;
@@ -405,10 +414,11 @@
     <h3>Recent intakes</h3>
     <table id="recentTable">
       <thead>
-        <tr><th>Name</th><th>Scope</th><th>Uploaded · Last analysis</th><th></th></tr>
+        <tr><th>Name</th><th>Scope</th><th>Uploaded · Last analysis</th><th class="sz-h">Size</th><th></th></tr>
       </thead>
       <tbody id="recentBody"></tbody>
     </table>
+    <div id="recentTotal" class="recent-total"></div>
     <div id="recentEmpty" class="empty hidden">No intakes saved yet — start one above.</div>
   </div>
 
@@ -472,12 +482,71 @@
         <td>${escapeHtml(e.name)}</td>
         <td class="mode">${escapeHtml(e.mode || '—')}</td>
         <td class="mono ts-cell">${dateCell}</td>
+        <td class="sz" data-sz="${escapeAttr(e.name)}">${e.size ? fmtBytes(e.size) : '<span class="measuring">measuring…</span>'}</td>
         <td>
           <a class="open" href="#" data-name="${escapeAttr(e.name)}">Load →</a>
+          <a class="dl" href="#" data-name="${escapeAttr(e.name)}">Download</a>
           <a class="delete" href="#" data-name="${escapeAttr(e.name)}" title="Delete this saved intake (cannot be undone)">Delete</a>
         </td>
       </tr>`;
     }).join('');
+
+    /* APP-DASH-SIZE (operator 2026-09-30) — Download a saved intake's JSON from
+       here (what "Save to local storage" stored, incl. its review work), and show
+       each one's size. Sizes are recorded when a run is saved; older entries are
+       measured once, one at a time (each run is loaded, measured and released), and
+       the size is remembered in the list. */
+    body.querySelectorAll('a.dl').forEach(a => {
+      a.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        const orig = a.textContent; a.textContent = 'Preparing…';
+        try {
+          const json = await AppStorage.get('intake.' + a.dataset.name);
+          if (!json) { alert('Intake not found in local storage.'); return; }
+          const blob = new Blob([JSON.stringify(json)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url; link.download = a.dataset.name.replace(/[^A-Za-z0-9_-]+/g, '_') + '.json';
+          document.body.appendChild(link); link.click(); link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        } catch (err) { alert('Download failed: ' + err.message); }
+        finally { a.textContent = orig; }
+      });
+    });
+    const showTotal = () => {
+      const known = idx.filter(e => e.size), sum = known.reduce((t, e) => t + e.size, 0);
+      $('#recentTotal').textContent = known.length
+        ? `Saved intakes: ${fmtBytes(sum)} in total${known.length < idx.length ? ` (${idx.length - known.length} still being measured)` : ''}`
+        : '';
+    };
+    const paintSize = (e) => {
+      const td = body.querySelector(`td.sz[data-sz="${CSS.escape(e.name)}"]`); if (!td) return;
+      td.textContent = e.size ? fmtBytes(e.size) : '—';
+      td.classList.toggle('big', (e.size || 0) > 50 * 1024 * 1024);
+    };
+    idx.slice(0, 12).forEach(e => { if (e.size) paintSize(e); });
+    showTotal();
+    (async () => {
+      let changed = false;
+      for (const e of idx.slice(0, 12)) {
+        if (e.size) continue;
+        try {
+          const j = await AppStorage.get('intake.' + e.name);
+          e.size = j ? JSON.stringify(j).length : 0;
+          changed = true;
+        } catch (err) { e.size = 0; }
+        paintSize(e); showTotal();
+        await new Promise(r => setTimeout(r, 0));
+      }
+      if (changed) {
+        try {   // remember the sizes (merge into the current list, in case it changed meanwhile)
+          const cur = (await AppStorage.get('intakes.index')) || [];
+          const sz = new Map(idx.map(e => [e.name, e.size]));
+          cur.forEach(e => { if (!e.size && sz.get(e.name)) e.size = sz.get(e.name); });
+          await AppStorage.set('intakes.index', cur);
+        } catch (err) { /* not fatal — measured again next time */ }
+      }
+    })();
 
     body.querySelectorAll('a.open').forEach(a => {
       a.addEventListener('click', async (ev) => {
@@ -523,6 +592,11 @@
 
   function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
   function escapeAttr(s){ return escapeHtml(s).replace(/'/g, '&#39;'); }
+  function fmtBytes(n){
+    if (!n) return '—';
+    if (n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + ' KB';
+    return (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+  }
 
   /* #23a (2026-08-16) — Upload JSON straight from the Dashboard, so resuming a
      saved assessment no longer means scrolling to the bottom of Intake. Mirrors
