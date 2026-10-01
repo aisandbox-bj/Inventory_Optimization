@@ -381,6 +381,36 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Cancelled-PR line the same in every PR table - 2026-09-30 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-09-30</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-FIX-STRIKE-SAME</b>: a cancelled PR looks the same in every PR table (Trace Raw Data, the Canvas PR tile, the Letter report) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator ask:</b> "cancelled red line — make it consistent".</li>
+        <li><b>What was different:</b>
+          <ul>
+            <li><b>Trace Raw Data:</b> grey text with a red line of the browser's default thickness, no row colour. The row rule also turned the red "CANCELLED" State text grey.</li>
+            <li><b>Canvas PR tile (dark and light):</b> red text, a thin line, a light red row.</li>
+            <li><b>Letter PDF:</b> a darker red text, a thin line, no row colour.</li>
+          </ul></li>
+        <li><b>Now, everywhere:</b> red text at regular weight, a thin (1 px; 0.12 mm on the Letter PDF) semi-transparent red line through it, and a faint red row. The red is tuned to the background so the dates and numbers stay readable: a lighter red on dark screens (Trace, Canvas work view), a darker red on white (Canvas Light, print, Letter PDF). The exclude toggle on Trace isn't struck through.</li>
+        <li><b>Where the values live:</b> <code>--cancel-text / --cancel-line / --cancel-bg</code> in <code>shared/brand-tokens.css</code> (dark screen); <code>cardTheme()</code> <code>canText / canLine / canBg</code> in <code>shared/report-builder.js</code> (dark = the same values, light = the print values); <code>CANCEL_PDF</code> for the Letter PDF. Each points at the others.</li>
+        <li><b>Verified in the browser</b> (June data, material 2004641: 63 of 79 PRs cancelled):
+          <ul>
+            <li>Trace Raw Data: 63 struck rows, State cell red, toggle cell not struck, normal rows unchanged;</li>
+            <li>Canvas PR tile: dark theme computes the same values as Trace; light theme the print values;</li>
+            <li>Letter report: the raw-PR table renders with the pale red row, darker red text and thin line; "Tot" no longer bold on cancelled rows;</li>
+            <li>no console errors.</li>
+          </ul></li>
+        <li><b>Checked, not changed:</b> "Tot 0" on a cancelled PR is correct — the PR was released the day it was raised (step A = 0 days) and Tot adds up only the steps that happened (APP-FIX-RAW-OPENSTEP). Calibre Mirror keeps its own copy of these tables and wasn't touched (operator rule).</li>
+        <li>Files: <code>shared/brand-tokens.css</code>, <code>trace/trace.css</code>, <code>shared/report-builder.js</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Rollback: <code>_rollback/STRIKE-SAME-pre/</code> + <code>checkpoint/pre-strikesame</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Dashboard intake size + download; duplicate family finder - 2026-09-30 -->
     <article class="roc-entry dev">
       <div class="head">

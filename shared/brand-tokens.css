@@ -40,6 +40,15 @@
   --status-info:    #1FCED8;
   --status-wr:      #7B2D8B;   /* winter-road / seasonal review */
 
+  /* APP-FIX-STRIKE-SAME (2026-09-30) — one look for a cancelled PR in every PR table:
+     red text, regular weight, a thin semi-transparent red line through it, a faint red
+     row wash. These are the dark-screen values (Trace Raw Data); the same values live in
+     report-builder.js cardTheme('dark'), and the light / print variant in cardTheme('light')
+     + the Letter PDF (CANCEL_PDF). Change all three together. */
+  --cancel-text:    #F87171;
+  --cancel-line:    rgba(248,113,113,.6);
+  --cancel-bg:      rgba(239,68,68,.12);
+
   /* ─── Text ─────────────────────────────────────────────────────────────── */
   --text-pri:       #F0F4F3;
   --text-sec:       #D6DFDE;

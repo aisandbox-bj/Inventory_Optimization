@@ -552,10 +552,14 @@
 .chain-table td.trig-mrp{ color:var(--text-muted); }
 .chain-table td.trig-manual{ color:var(--status-warn); font-weight:600; }
 .chain-table tbody tr:last-child td{ border-bottom:none; }
+/* APP-FIX-STRIKE-SAME (2026-09-30) — same cancelled look as the Canvas / report PR
+   tables (tokens in brand-tokens.css). The exclude toggle isn't struck through. */
 .chain-table tbody tr.cancelled td{
-  color:var(--text-muted);
-  text-decoration:line-through; text-decoration-color:rgba(239,83,80,.5);
+  color:var(--cancel-text); background:var(--cancel-bg); font-weight:400;
+  text-decoration:line-through; text-decoration-color:var(--cancel-line); text-decoration-thickness:1px;
 }
+.chain-table tbody tr.cancelled td b{ font-weight:inherit; }
+.chain-table tbody tr.cancelled td.tog-cell{ text-decoration:none; }
 .chain-table td.state{
   font-family:var(--font-mono); font-size:9.5px; letter-spacing:1px;
   text-transform:uppercase;

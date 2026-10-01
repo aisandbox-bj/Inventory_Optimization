@@ -804,7 +804,7 @@
         <table class="um-table">
           <thead><tr><th>State</th><th>Meaning</th></tr></thead>
           <tbody>
-            <tr><td><b>CANCELLED</b></td><td>PR, no PO, deletion flag — red-tinted; kept out of the swimlane visual + funnel but visible in Raw Data.</td></tr>
+            <tr><td><b>CANCELLED</b></td><td>PR, no PO, deletion flag — kept out of the swimlane visual + funnel but visible in Raw Data, in red with a thin line through it on a faint red row: the same look as the Canvas PR tile and the Letter report.</td></tr>
             <tr><td><b>PR_ONLY</b></td><td>PR, no PO, not cancelled — open demand not yet ordered.</td></tr>
             <tr><td><b>IN_FLIGHT</b></td><td>PO but no site receipt (109) yet — may be at the 3PL (107, blocked stock).</td></tr>
             <tr><td><b>NOT_YET_CONSUMED</b></td><td>Received at site but not used yet — no work-order (261) or cost-centre (201) issue since the first site receipt.</td></tr>
@@ -867,7 +867,7 @@
           <li><b>Your place is kept.</b> Closing the canvas (✕ Close) keeps the set, removed materials and the page you were on. Launching again with the same ticks continues silently; with different ticks it asks <b>Continue current canvas</b> or <b>Start with current selection</b>. With nothing ticked, the button reads <b>▶ Continue Canvas</b>.</li>
         </ul>
         <p><b>Standard notes on every page.</b> Bottom-right of every page (Canvas and Letter): <em>"Inventory and consumption are approximations based on MB51 movements and may vary slightly from actual. Min/Max values are as at the report date (&lt;date&gt;) and may have changed since."</em></p>
-        <p><b>Tiles.</b> Trend graph + metrics · Trace average supply duration (optional box-and-whisker) · annual progression (newest year first) · last-X PRs (cancelled PRs in red with a thin line through them, so the dates and numbers stay readable) · last-X procurement chains (phases B, C, D shaded white → red within each column; To site green → red) · MRP-run cadence (both graphs) · Comment. Trace tiles need PR History; a step that hasn't happened yet is shown blank, not "0 days".</p>
+        <p><b>Tiles.</b> Trend graph + metrics · Trace average supply duration (optional box-and-whisker) · annual progression (newest year first) · last-X PRs (cancelled PRs in red with a thin line through them on a faint red row, so the dates and numbers stay readable; the same look as Trace Raw Data and the Letter report) · last-X procurement chains (phases B, C, D shaded white → red within each column; To site green → red) · MRP-run cadence (both graphs) · Comment. Trace tiles need PR History; a step that hasn't happened yet is shown blank, not "0 days".</p>
 
         <h3>Moving between Trend, Canvas and Trace</h3>
         <ul>

@@ -504,6 +504,11 @@
     P.y += 5;
   }
 
+  // APP-FIX-STRIKE-SAME (2026-09-30) — the cancelled-PR look on the Letter PDF: the light
+  // values of cardTheme('light') as RGB (line = canLine at 50% over the fill). Width stays
+  // at the thin 0.12 mm the operator asked for on 2026-09-27.
+  const CANCEL_PDF = { text:[185,28,28], fill:[253,236,236], line:[219,132,132], width:0.12 };
+
   async function blockRawPr(P, host, opts, fit){
     const { doc, g, ctx } = P; const M = g.M; const CW = g.W - 2*M;
     let N = Math.max(1, (opts && opts.lastN) || 8);
@@ -531,13 +536,15 @@
       didParseCell:(d)=>{
         if (d.row.section !== 'body') return;
         const canc = /CANCELL/i.test((rows[d.row.index] || [])[15] || '');   // State column
-        if (canc){ d.cell.styles.textColor = [200,40,40]; }   // regular weight — bold + a thick line hid the digits (operator 2026-09-27)
+        if (canc){   // regular weight — bold + a thick line hid the digits (operator 2026-09-27)
+          d.cell.styles.textColor = CANCEL_PDF.text; d.cell.styles.fillColor = CANCEL_PDF.fill; d.cell.styles.fontStyle = 'normal';
+        }
         else if (d.column.index === 1){ d.cell.styles.fontStyle = 'bold'; d.cell.styles.textColor = d.cell.raw === 'Manual' ? [186,117,23] : [90,110,120]; }
       },
       didDrawCell:(d)=>{
         if (d.row.section !== 'body') return;
         if (/CANCELL/i.test((rows[d.row.index] || [])[15] || '')){
-          doc.setDrawColor(235,110,110); doc.setLineWidth(0.12);   // thin, lighter line so the dates / numbers stay readable
+          doc.setDrawColor(...CANCEL_PDF.line); doc.setLineWidth(CANCEL_PDF.width);   // thin, lighter line so the dates / numbers stay readable
           const yy = d.cell.y + d.cell.height/2;
           doc.line(d.cell.x + 0.6, yy, d.cell.x + d.cell.width - 0.6, yy);   // strikethrough
         }
@@ -934,10 +941,14 @@
                         // detail width so the stat grid / MRP table don't squeeze and
                         // truncate to "…". AR is derived from the rendered content.
 
+  // canText / canLine / canBg = the cancelled-PR look (APP-FIX-STRIKE-SAME). Dark = the
+  // same values as --cancel-* in brand-tokens.css (Trace Raw Data); light = CANCEL_PDF.
   function cardTheme(theme){
     return theme === 'dark'
-      ? { bg:'#0c2d3b', text:'#e7eef0', sub:'#9bb0b6', border:'rgba(31,206,216,.28)', head:'#081e2b', headText:'#dff3f5', alt:'rgba(255,255,255,.03)', keyBg:'#0f3948', accent:'#1FCED8', chip:'#0f3948' }
-      : { bg:'#ffffff', text:'#1a2a2e', sub:'#5c7270', border:'#d6dfde', head:'#0c2d3b', headText:'#ffffff', alt:'#f4f7f7', keyBg:'#eef3f4', accent:'#1FCED8', chip:'#eef3f4' };
+      ? { bg:'#0c2d3b', text:'#e7eef0', sub:'#9bb0b6', border:'rgba(31,206,216,.28)', head:'#081e2b', headText:'#dff3f5', alt:'rgba(255,255,255,.03)', keyBg:'#0f3948', accent:'#1FCED8', chip:'#0f3948',
+          canText:'#F87171', canLine:'rgba(248,113,113,.6)', canBg:'rgba(239,68,68,.12)' }
+      : { bg:'#ffffff', text:'#1a2a2e', sub:'#5c7270', border:'#d6dfde', head:'#0c2d3b', headText:'#ffffff', alt:'#f4f7f7', keyBg:'#eef3f4', accent:'#1FCED8', chip:'#eef3f4',
+          canText:'#B91C1C', canLine:'rgba(185,28,28,.5)', canBg:'#FDECEC' };
   }
 
   async function chartDataUrl(ctx){
@@ -960,10 +971,10 @@
     opts = opts || {};
     const th = head.map(h => `<th style="background:${TH.head};color:${TH.headText};font-weight:700;font-size:10px;padding:4px 5px;text-align:center;border:1px solid ${TH.border};white-space:nowrap">${esc(h)}</th>`).join('');
     const body = rows.map((r,ri) => {
-      const struck = opts.strike && opts.strike(r);            // cancelled PR → red strikethrough, eye-catching
-      const rowBg = struck ? 'background:rgba(239,68,68,.16)' : `background:${ri%2?TH.alt:'transparent'}`;
+      const struck = opts.strike && opts.strike(r);            // cancelled PR → the shared cancelled look (APP-FIX-STRIKE-SAME)
+      const rowBg = struck ? `background:${TH.canBg}` : `background:${ri%2?TH.alt:'transparent'}`;
       // thin, semi-transparent line + regular weight so the dates / numbers stay readable (operator 2026-09-27)
-      const cellFx = struck ? `color:#e5484d;text-decoration:line-through;text-decoration-color:rgba(229,72,77,.6);text-decoration-thickness:1px` : `color:${TH.text}`;
+      const cellFx = struck ? `color:${TH.canText};font-weight:400;text-decoration:line-through;text-decoration-color:${TH.canLine};text-decoration-thickness:1px` : `color:${TH.text}`;
       return `<tr style="${rowBg}">${r.map((c,ci)=>{
         const bg = (!struck && opts.cellBg) ? opts.cellBg(ri, ci) : null;   // optional conditional shading
         return `<td style="font-size:10px;padding:3px 5px;border:1px solid ${TH.border};text-align:${(opts.center&&opts.center.includes(ci))?'center':'left'};white-space:nowrap;${cellFx}${bg?';background:'+bg:''}">${esc(c)}</td>`;
