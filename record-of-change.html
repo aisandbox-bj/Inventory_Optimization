@@ -381,6 +381,55 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Intake reads an Excel file one row at a time (any size opens) - 2026-10-13 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-13</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-INT-ROWREAD</b>: an Excel file of any size opens in Intake (read one row at a time, in the background) — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator report:</b> "the Trend intake tool fails to upload a 50 MB MB51 … can we move to the line by line intake process here?"</li>
+        <li><b>Cause (reproduced on the code as it was):</b>
+          <ul>
+            <li>The spreadsheet library holds a whole sheet as one piece of text, and a browser allows about 512 MB for one text. A 50 MB MB51 is about 350,000 rows and unpacks to roughly 300–350 MB; larger pulls go past the limit.</li>
+            <li>Past the limit the library gives back an <b>empty sheet and no error</b>. A made-up MB51 of 700,000 rows (558 MB unpacked) loaded as <b>"0 rows"</b> with every column missing, as if the file were empty.</li>
+            <li>Below the limit it worked but froze the page: a made-up 350,000-row MB51 took 43 seconds with the tab locked.</li>
+          </ul></li>
+        <li><b>Fix:</b>
+          <ul>
+            <li>Intake reads every <code>.xlsx</code> <b>one row at a time</b>, with the reader built for WO Readiness 0.5.6 (an unchanged copy in <code>vendor/wor_xlsx_rows.js</code>; source and checksum in <code>vendor/PROVENANCE.md</code>). Every line is read; only the columns the app uses are kept.</li>
+            <li>The read runs <b>in the background</b>, so the page stays alive and the card counts the rows as they come in ("reading… 120,000 rows").</li>
+            <li>Where a background read cannot start, the same reader runs on the page; the library remains for the old <code>.xls</code> format and for a browser too old for the reader.</li>
+            <li>A spreadsheet of several MB that comes back empty from the library is now an <b>error with a plain message</b>, never "0 rows".</li>
+            <li>The MB51 stock check page (<code>tools/mb51-check.html</code>) reads the same way, so an MB51 from go-live to today opens there too.</li>
+          </ul></li>
+        <li><b>Same results as before.</b> New check page <code>tools/reader-check.html</code> (not in the menus) reads a file three ways (background, on the page, library) through Intake's own parser and compares the sheet chosen, the headers, the column mapping and every value.
+          <ul>
+            <li>Run on every Excel file in the project's test data: 67 files (MB51, IW39, Fleet, Inventory Master, PR history, and 50 multi-sheet analysis workbooks), 511 comparisons, 590,192 rows. <b>No difference, no failure.</b></li>
+            <li>MB51 check page, real MB51 + Inventory Master: the results file is identical both ways (same checksum).</li>
+          </ul></li>
+        <li><b>Measured in the browser:</b>
+          <ul>
+            <li>real MB51, 7 MB, 50,648 rows: 1.7 s (was 7.6 s);</li>
+            <li>made-up MB51, 350,000 rows: 12 s with the page alive (was 43 s frozen);</li>
+            <li>made-up MB51, 700,000 rows: 23.5 s (was 0 rows);</li>
+            <li>all 67 test files: 40 s in the background, 295 s with the library;</li>
+            <li>a run with 350,000 MB51 rows (the June run with its MB51 repeated; made up) saves in under a second, and Trend opens it and lists its 323 materials within about 8 seconds.</li>
+          </ul></li>
+        <li><b>Not verified, and limits that remain:</b>
+          <ul>
+            <li>the operator's own 50 MB file (the large files here are made up from a real 7 MB extract);</li>
+            <li>Safari and Firefox; a page opened from a local file (there the on-page reader takes over and the page freezes while it reads; tested by simulation only);</li>
+            <li><code>.csv</code> files are still read whole, as before (the limit there is about 500 MB of text);</li>
+            <li>after a large read the card's own figures take 2–4 seconds to appear (350,000–700,000 rows); unchanged code;</li>
+            <li>the saved run still holds every MB51 line, with the description on each. A run is saved as one text, so the same limit applies to the save at very roughly two million MB51 rows (not tested). Trend was not tested above 350,000 rows.</li>
+          </ul></li>
+        <li>Files: <code>shared/parsers.js</code>, <code>intake/intake.{js,html}</code>, <code>tools/mb51-check.html</code>, new <code>tools/reader-check.html</code>, new <code>vendor/wor_xlsx_rows.js</code> + <code>vendor/PROVENANCE.md</code>, <code>user-manual.html</code>, <code>README.md</code>, <code>HANDOVER.md</code>, <code>Backlog.md</code>. Rollback: <code>_rollback/INT-ROWREAD-pre/</code> + <code>checkpoint/pre-rowread</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Cancelled-PR line the same in every PR table - 2026-09-30 -->
     <article class="roc-entry dev">
       <div class="head">

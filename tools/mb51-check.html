@@ -84,6 +84,7 @@
 </div>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="../vendor/wor_xlsx_rows.js"></script><!-- APP-INT-ROWREAD — .xlsx read one row at a time (see vendor/PROVENANCE.md) -->
 <script src="../shared/inventory-back-calc.js"></script>
 <script>
 (function () {
@@ -153,11 +154,25 @@
   }
 
   // ── read a sheet: find the header row, map the columns ──
-  async function readTable(file, alias, mustKeys){
-    const buf = await file.arrayBuffer();
+  // APP-INT-ROWREAD (2026-10-13) — an .xlsx is read one row at a time (vendor/wor_xlsx_rows.js), so an MB51 from
+  // go-live to today opens whatever its size. The library holds a sheet as one text and came back EMPTY past about
+  // 512 MB. Same rows either way (dates arrive as Excel serial numbers; iso() reads both). ?reader=library forces the library.
+  async function sheetRows(file){
+    const buf = await file.arrayBuffer(), b = new Uint8Array(buf);
+    const byRows = window.WorXlsxRows && typeof DecompressionStream === 'function' && b[0] === 0x50 && b[1] === 0x4B
+      && !/[?&]reader=library\b/.test(location.search);
+    if (byRows) {
+      const wb = await WorXlsxRows.open(b), name = wb.sheetNames[0];
+      return { aoa: (await wb.sheet(name)).rows, sheet: name };
+    }
     const wb = XLSX.read(buf, { type: 'array', cellDates: true, dense: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    return { aoa: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }), sheet: wb.SheetNames[0] };
+  }
+
+  async function readTable(file, alias, mustKeys){
+    const { aoa, sheet } = await sheetRows(file);
+    if (!aoa.length && file.size > 5 * 1024 * 1024) throw new Error(`${file.name}: too large for this browser to open as a spreadsheet (${Math.round(file.size / 1048576)} MB came back empty). Use a current Chrome or Edge.`);
     const norm = (x) => String(x == null ? '' : x).trim().toLowerCase();
     for (let h = 0; h < Math.min(12, aoa.length); h++){
       const hdr = (aoa[h] || []).map(norm);
@@ -167,7 +182,7 @@
       }
       if (mustKeys.every(k => map[k] != null)){
         const header = (aoa[h] || []).map(x => String(x == null ? '' : x).trim());
-        return { map, header, rows: aoa.slice(h + 1).filter(r => r && r.some(v => v != null && v !== '')), sheet: wb.SheetNames[0] };
+        return { map, header, rows: aoa.slice(h + 1).filter(r => r && r.some(v => v != null && v !== '')), sheet };
       }
     }
     throw new Error(`${file.name}: couldn't find a header row with ${mustKeys.map(k => '"' + alias[k][0] + '"').join(' + ')} in the first sheet.`);

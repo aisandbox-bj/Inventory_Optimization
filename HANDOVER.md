@@ -49,7 +49,7 @@ v2.2.0-dev/
 │   ├── canonical-schema.js     v1.0.0 schema, factory defaults, parameter descriptors
 │   ├── storage.js              localStorage + IndexedDB transparent fallback
 │   ├── locale.js               LOCAL-TIME display helpers + CAD currency
-│   ├── parsers.js              XLSX/CSV parsers + column-alias map (incl. Inventory Master Fiori + PR History)
+│   ├── parsers.js              XLSX/CSV parsers + column-alias map (incl. Inventory Master Fiori + PR History); .xlsx read row by row via vendor/wor_xlsx_rows.js (APP-INT-ROWREAD)
 │   ├── config.js               Settings r/w + prompt-template + clearSessionData()
 │   ├── pipeline.js             Analytical engine — period rates, HCE, lumpy, traffic-light,
 │   │                           Inv Adj detection, 10-rule decision tree (incl PURPLE/WR)

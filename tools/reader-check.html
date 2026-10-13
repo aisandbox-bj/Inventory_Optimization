@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reader Check</title>
+<!--═══ BUILD-STAMP ═══════════════════════════════════════════════════════════
+  Calibre Tune · tools/reader-check.html · v2.2.0-dev · APP-INT-ROWREAD (2026-10-13)
+
+  A CHECK page (changes nothing in the app, not in the menus). Intake reads an
+  .xlsx one row at a time (vendor/wor_xlsx_rows.js). This page reads each file
+  THREE ways — the row reader on its own thread, the row reader on the page,
+  and the spreadsheet library — through Intake's own parser
+  (AppParsers.parseAndMap) and compares every row, the headers, the sheet
+  chosen and the column mapping.
+
+  Run it after any change to shared/parsers.js or to the vendored reader.
+  A file too large for the library (it comes back empty) is reported as such;
+  the two row readings are still compared with each other.
+
+  Files are read in this browser only — nothing is uploaded or sent anywhere.
+═══════════════════════════════════════════════════════════════════════════-->
+<link rel="stylesheet" href="../shared/brand-tokens.css" />
+<style>
+  .wrap{ max-width:1100px; margin:0 auto; padding:28px 18px 60px; }
+  .eyebrow{ font-family:var(--font-mono); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); opacity:.8; }
+  h1{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:32px; margin:4px 0 6px; color:var(--text-pri); }
+  p{ color:var(--text-sec); line-height:1.55; margin:6px 0; }
+  .card{ background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:6px; padding:16px 18px; margin:16px 0; }
+  .privacy{ border-left:3px solid var(--accent-green); padding:6px 12px; background:rgba(90,182,157,.08); color:var(--text-sec); font-size:13.5px; }
+  input[type=file]{ color:var(--text-sec); font-family:var(--font-body); }
+  #status{ font-family:var(--font-mono); font-size:13px; color:var(--text-sec); min-height:20px; margin-top:10px; }
+  table{ border-collapse:collapse; width:100%; margin-top:8px; font-size:13.5px; }
+  th{ background:var(--bg-elevated); color:var(--text-pri); font-family:var(--font-heading); font-weight:600; text-align:left; padding:6px 8px; }
+  td{ padding:6px 8px; border-bottom:1px solid var(--border); color:var(--text-sec); vertical-align:top; }
+  td.num{ text-align:right; font-family:var(--font-mono); }
+  .ok{ color:var(--status-ok); font-weight:600; }
+  .bad{ color:var(--status-crit); font-weight:600; }
+  .na{ color:var(--status-warn); }
+  .diff{ font-family:var(--font-mono); font-size:12px; color:var(--text-muted); white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Calibre Tune · check page</div>
+  <h1>Reader check</h1>
+  <p>Intake reads an Excel file one row at a time, so a file of any size opens. This page reads each file you pick three ways
+     (row by row in the background, row by row on the page, and with the spreadsheet library) and compares every value.
+     Pick any SAP extracts (.xlsx).</p>
+  <p class="privacy">Files are read in this browser only. Nothing is uploaded or sent anywhere.</p>
+
+  <div class="card">
+    <input type="file" id="files" accept=".xlsx" multiple />
+    <div id="status"></div>
+    <div id="result"></div>
+  </div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="../vendor/wor_xlsx_rows.js"></script>
+<script src="../shared/parsers.js"></script>
+<script>
+(function(){
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+  const SOURCES = Object.keys(AppParsers.ALIASES);
+
+  /* Every value of two results compared: the sheet, the headers, the mapping, each row. */
+  function differences(a, b, an, bn){
+    const diffs = []; let values = 0;
+    for (const k of ['sheet', 'headers', 'fieldMap', 'unmatched', 'missingFields', 'matchedFields', 'rowCount']) {
+      const x = JSON.stringify(a[k]), y = JSON.stringify(b[k]);
+      if (x !== y) diffs.push(`${k}: ${an} ${x.slice(0, 160)} · ${bn} ${y.slice(0, 160)}`);
+    }
+    const n = Math.max(a.canonical.length, b.canonical.length);
+    for (let i = 0; i < n; i++) {
+      const p = a.canonical[i], q = b.canonical[i];
+      if (JSON.stringify(p) === JSON.stringify(q)) continue;
+      for (const k of Object.keys(Object.assign({}, p || {}, q || {}))) {
+        const vp = p ? p[k] : undefined, vq = q ? q[k] : undefined;
+        if (JSON.stringify(vp) !== JSON.stringify(vq)) { values++; if (diffs.length < 6) diffs.push(`row ${i + 2} · ${k}: ${an} ${JSON.stringify(vp)} · ${bn} ${JSON.stringify(vq)}`); }
+      }
+    }
+    return { diffs, values };
+  }
+
+  /* One file, one source: the three readers through Intake's own parser (the row reader on its own thread, the row
+     reader on the page, the library), then the two row readings each compared with the library's, value by value. */
+  async function compareOne(file, source){
+    const out = { file: file.name, source, mb: +(file.size / 1048576).toFixed(1) };
+    const got = {};
+    for (const how of ['worker', 'rows', 'library']) {
+      try { got[how] = await AppParsers.parseAndMap(file, source, {}, { reader: how }); out[how + 'Ms'] = AppParsers.lastRead().ms; if (how !== 'library') { out.blankRows = AppParsers.lastRead().blankRows; out.sheetMB = AppParsers.lastRead().sheetMB; } }
+      catch (e) { out[how + 'Error'] = String(e && e.message || e); }
+    }
+    out.libMs = out.libraryMs; out.libError = out.libraryError;
+    const any = got.worker || got.rows || got.library;
+    out.workerCount = got.worker ? got.worker.rowCount : null;
+    out.rowsCount   = got.rows ? got.rows.rowCount : null;
+    out.libCount    = got.library ? got.library.rowCount : null;
+    out.matched     = any ? any.matchedFields.length : 0;
+    if (!got.worker || !got.rows) { out.same = false; out.valueDiffs = 0; out.diffs = []; return out; }   // a row reader that fails is a failure
+    /* with no library result (a file past its limit) the two row readers are still compared with each other */
+    const base = got.library || got.rows, baseName = got.library ? 'library' : 'rows on the page';
+    const d1 = differences(got.worker, base, 'thread', baseName);
+    const d2 = got.library ? differences(got.rows, got.library, 'rows on the page', 'library') : { diffs: [], values: 0 };
+    out.valueDiffs = d1.values + d2.values; out.diffs = d1.diffs.concat(d2.diffs).slice(0, 8);
+    out.same = out.diffs.length === 0 && out.valueDiffs === 0 ? (got.library ? true : null) : false;
+    return out;
+  }
+
+  /* A file is checked as every source whose columns it has (at least two matched), so a file is never judged by its name. */
+  async function compareFile(file){
+    const results = [];
+    for (const source of SOURCES) {
+      let probe = null;
+      try { probe = await AppParsers.parseAndMap(file, source, {}, { reader: 'rows' }); } catch (e) { probe = null; }
+      if (probe && probe.matchedFields.length < 2) continue;
+      results.push(await compareOne(file, source));
+      if (!probe) break;   // the file cannot be opened row by row at all: one line says so
+    }
+    if (!results.length) results.push({ file: file.name, source: '—', mb: +(file.size / 1048576).toFixed(1), same: null, note: 'no SAP source recognised from its columns' });
+    return results;
+  }
+
+  function render(all){
+    const cell = (r) => r.note ? `<span class="na">${esc(r.note)}</span>`
+      : r.same === true ? '<span class="ok">same all three ways</span>'
+      : (r.workerError || r.rowsError) ? `<span class="bad">a row reader failed</span>`
+      : r.same === false ? `<span class="bad">DIFFERENT (${r.valueDiffs} values)</span>`
+      : `<span class="na">too large for the library; the two row readings agree</span>`;
+    const n = (v) => v == null ? '—' : v.toLocaleString(), s = (v) => v == null ? '—' : (v / 1000).toFixed(1);
+    const notes = (r) => [r.diffs && r.diffs.join('\n'), r.workerError && 'thread: ' + r.workerError, r.rowsError && 'rows on the page: ' + r.rowsError, r.libError && 'library: ' + r.libError].filter(Boolean).join('\n');
+    $('#result').innerHTML = `<table><thead><tr><th>File</th><th>Read as</th><th>MB</th><th>Rows: thread · page · library</th><th>Seconds: thread · page · library</th><th>Result</th></tr></thead><tbody>` +
+      all.map(r => `<tr><td>${esc(r.file)}</td><td>${esc(r.source)}</td><td class="num">${r.mb}</td>
+        <td class="num">${n(r.workerCount)} · ${n(r.rowsCount)} · ${n(r.libCount)}</td>
+        <td class="num">${s(r.workerMs)} · ${s(r.rowsMs)} · ${s(r.libMs)}</td>
+        <td>${cell(r)}${notes(r) ? `<div class="diff">${esc(notes(r))}</div>` : ''}</td></tr>`).join('') + '</tbody></table>';
+  }
+
+  $('#files').addEventListener('change', async (ev) => {
+    const files = [...ev.target.files], all = [];
+    for (let i = 0; i < files.length; i++) {
+      $('#status').textContent = `Reading ${i + 1} of ${files.length}: ${files[i].name}…`;
+      await new Promise(r => setTimeout(r, 30));
+      all.push(...await compareFile(files[i]));
+      render(all);
+    }
+    const bad = all.filter(r => r.same === false).length;
+    $('#status').textContent = `${files.length} file${files.length === 1 ? '' : 's'} checked · ${all.filter(r => r.same === true).length} the same all three ways · ${bad} with a difference or a failure`;
+  });
+
+  window.ReaderCheck = { compareFile, compareOne, SOURCES };
+})();
+</script>
+</body>
+</html>

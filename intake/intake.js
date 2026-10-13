@@ -486,7 +486,11 @@
     const oldStats = drop.querySelector('.drop-stats'); if (oldStats) oldStats.innerHTML = '';
 
     try {
-      const result = await AppParsers.parseAndMap(file, source, state.aliases);
+      // APP-INT-ROWREAD — an .xlsx is read one row at a time; show the count as it goes
+      const fileEl = drop.querySelector('.file');
+      const result = await AppParsers.parseAndMap(file, source, state.aliases, {
+        onProgress: n => { fileEl.textContent = `${file.name} · reading… ${n.toLocaleString()} rows`; }
+      });
       state.parsed[source] = result;
       const sheetTxt = result.sheet ? ` · sheet: "${result.sheet}"` : '';
       drop.querySelector('.file').textContent = `${file.name} · ${result.rowCount.toLocaleString()} rows${sheetTxt}`;

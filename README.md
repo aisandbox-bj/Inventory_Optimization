@@ -44,7 +44,7 @@ canonical-schema.js   Schema, FACTORY_DEFAULTS, PARAMETER_DESCRIPTIONS (SCHEMA_V
 storage.js            localStorage + IndexedDB transparent fallback
 analyst-marks.js      Sidecar store for For-Action flags + Analyst Recommendation + Notes (localStorage per assessment; round-trips in the JSON's _analystData block) — APP-ACT-01 + Phase 1
 locale.js             Local-time display helpers + CAD currency
-parsers.js            XLSX/CSV parsers + column-alias map (MB51 / IW39 / Fleet / Inventory Master Fiori / PR History)
+parsers.js            XLSX/CSV parsers + column-alias map (MB51 / IW39 / Fleet / Inventory Master Fiori / PR History). An .xlsx is read one row at a time (vendor/wor_xlsx_rows.js, on its own thread) so a file of any size opens; tools/reader-check.html compares the readers (APP-INT-ROWREAD)
 config.js             Settings read/write + prompt template + clearSessionData()
 inventory-back-calc.js  Stock-on-hand back-calc from MB51 (UTC day-keys) → SOH series + stockout windows (APP-E1)
 pipeline.js           Deterministic analytical engine — period rates, per-event/batch stats, HCE, lumpy/smooth, Inv-Adj detection, 10-rule traffic-light tree, Min/Max + MRP reclass, screens
