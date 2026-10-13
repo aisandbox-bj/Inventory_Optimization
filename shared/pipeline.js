@@ -663,15 +663,21 @@
     const m = json.scope.manual || {};
     const useWO = (m.listType === 'workOrders');
     const set = new Set((useWO ? m.workOrders : m.materials) || []);
+    /* APP-FIX-SCOPE-WHOLE (2026-10-13, operator: "all front-door selectors are used for the filtering of
+       materials only … no use analysing only portions of the consumption"). A list of WORK ORDERS picks the
+       materials (those with net consumption above zero on the listed orders); each material is then analysed
+       on ALL of its consumption, like every other route. Was: only the lines on the listed orders. */
+    let materials = set;
+    if (useWO) {
+      const own = mb51.filter(t => set.has(String(t.order || '').trim()) && VALID_TYPES.has(String(t.movementType || '').trim()));
+      materials = new Set();
+      for (const [mat, agg] of netConsumptionByMaterial(own, null)) if (agg.net > 0) materials.add(mat);
+    }
     const transactions = mb51.filter(t => {
-      const v = String((useWO ? t.order : t.material) || '').trim();
-      if (!set.has(v)) return false;
+      if (!materials.has(String(t.material || '').trim())) return false;
       const mt = String(t.movementType || '').trim();
       return VALID_TYPES.has(mt);
     });
-    const materials = useWO
-      ? new Set(transactions.map(t => String(t.material || '').trim()).filter(Boolean))
-      : set;
     return [{
       key:          'manual',
       name:         useWO ? 'Manual WO list' : 'Manual list',
@@ -1285,7 +1291,7 @@
     const d = (json && json.data) || {};
     const c = k => (Array.isArray(d[k]) ? d[k].length : 0);
     return [
-      'pc3',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption) so a tab can't keep a stale cached result
+      'pc4',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption · pc4 = the work-order list too) so a tab can't keep a stale cached result
       m.assessmentName || m.name || '', m.uploadedAt || '', m.savedAt || '', m.createdAt || '',
       m.inventoryMasterDate || '',
       (json && json.SCHEMA_VERSION) || m.schemaVersion || '',
