@@ -414,6 +414,21 @@
 }
 .dq-list li.warn .sev{ color:var(--status-warn); }
 .dq-list li.crit .sev{ color:var(--status-crit); }
+/* APP-INT-MODELMERGE (2026-10-13) — a model spelled two ways: pick the spelling to keep on the halt line;
+   the confirmed merge then stands on the same line with Undo. The buttons sit inside the text line. */
+.dq-twin{ display:grid; flex:1 1 auto; min-width:0; }
+.dq-twin > .live, .dq-twin > .ghost{ grid-area:1 / 1; }     /* both faces share one space: the line is as tall as the taller */
+.dq-twin > .ghost{ visibility:hidden; pointer-events:none; }
+.dq-list li.note{ border-left-color:var(--accent); }
+.dq-list li.note .sev{ color:var(--accent); }
+.dq-pick{
+  display:inline-block; margin:-3px 0 -3px 4px; padding:1px 9px;
+  font-family:var(--font-mono); font-size:11px; line-height:1.5; letter-spacing:.3px; text-transform:none;
+  color:var(--accent); background:rgba(31,206,216,0.10);
+  border:1px solid var(--border-soft); border-radius:var(--r-sm); cursor:pointer;
+}
+.dq-pick:hover{ background:rgba(31,206,216,0.20); border-color:var(--accent); color:var(--accent); }
+.dq-pick.undo{ color:var(--text-sec); background:transparent; }
 
 /* ─── Step 4: Scope tabs ────────────────────────────────────────────────── */
 .scope-pane{
@@ -461,6 +476,32 @@
 .chip:hover{ background:rgba(31,206,216,0.18); border-color:var(--accent); }
 .chip.selected{ background:var(--accent); color:var(--bg-void); border-color:var(--accent); }
 .chip .x{ font-size:14px; line-height:1; opacity:.6; }
+
+/* APP-INT-FLEETSEARCH (2026-10-13) — search the fleet list, pick, search again.
+   One fixed-height row; the chip list is taller and keeps its height while it is filtered. */
+.fleet-find{ display:flex; align-items:center; gap:8px; height:30px; }
+.fleet-find input[type=search]{
+  flex:1 1 240px; min-width:140px; max-width:420px; height:30px; padding:0 10px;
+  background:var(--bg-deep); border:1px solid var(--border); border-radius:var(--r-sm);
+  color:var(--text-pri); font-family:var(--font-mono); font-size:12px; letter-spacing:.3px;
+}
+.fleet-find input[type=search]:focus{ outline:none; border-color:var(--accent); }
+.fleet-find input[type=search]::placeholder{ color:var(--text-muted); }
+.fleet-btn{
+  height:30px; padding:0 12px; flex:0 0 auto;
+  font-family:var(--font-mono); font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
+  background:transparent; border:1px solid var(--border-soft); border-radius:var(--r-sm);
+  color:var(--text-sec); cursor:pointer; white-space:nowrap;
+}
+.fleet-btn.active{ background:var(--accent); border-color:var(--accent); color:var(--bg-void); }
+.fleet-btn.quiet{ min-width:104px; }                       /* "Clear picks" ↔ "Clear 12?" without the row moving */
+.fleet-count{
+  flex:1 1 auto; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.4px; color:var(--text-muted);
+}
+.chip-row.fleet-chips{ max-height:196px; align-content:flex-start; }
+.chip.chip-hide{ display:none; }
+.fleet-none{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-muted); padding:4px 6px; }
 
 .scope-preview{
   font-family:var(--font-mono);

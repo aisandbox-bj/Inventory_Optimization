@@ -313,7 +313,7 @@
       <div class="step-head">
         <div class="step-num">04</div>
         <div class="step-title">Scope selection</div>
-        <div class="step-status">awaiting DQ pass</div>
+        <div class="step-status" id="step4Status">awaiting DQ pass</div>
       </div>
       <div class="step-body">
         <div class="tabs scope-tabs">
@@ -326,7 +326,15 @@
         <!-- Fleet pane -->
         <div class="scope-pane" data-mode="fleet">
           <h5>Pick fleet models</h5>
-          <div id="fleetModels" class="chip-row"></div>
+          <!-- APP-INT-FLEETSEARCH — search the list, click to pick or un-pick, search again -->
+          <div class="fleet-find">
+            <input type="search" id="fleetSearch" placeholder="Search model, make or type…" autocomplete="off" spellcheck="false" aria-label="Search fleet models" />
+            <button type="button" class="fleet-btn active" id="fleetShowAll">All</button>
+            <button type="button" class="fleet-btn" id="fleetShowPicked">Picked</button>
+            <span class="fleet-count" id="fleetCount"></span>
+            <button type="button" class="fleet-btn quiet" id="fleetClearPicks">Clear picks</button>
+          </div>
+          <div id="fleetModels" class="chip-row fleet-chips"></div>
           <div class="scope-preview">no models selected</div>
         </div>
 

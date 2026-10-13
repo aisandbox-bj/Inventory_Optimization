@@ -134,7 +134,8 @@
     inventoryMasterDate: null,                       // APP-FIX-SNAPSHOT-ALIGN · SAP extract date of the Inventory Master (yyyy-mm-dd)
     analystMap:  null,                               // APP-ANALYST-IN-JSON · review work carried in by an uploaded JSON / Reuse (→ json.analyst)
     analystFrom: null,                               //   … and the name it was filed under in this browser
-    duplicates: null                                 // APP-DUP-FLAG · parsed potential-duplicates list { hasFamilies, materials, families } (→ json.duplicates)
+    duplicates: null,                                // APP-DUP-FLAG · parsed potential-duplicates list { hasFamilies, materials, families } (→ json.duplicates)
+    fleetModelMerges: {}                             // APP-INT-MODELMERGE · lower-cased model → the spelling the operator chose to keep (a model spelled two ways by letter case)
   };
 
   /* APP-FIX-SNAPSHOT-ALIGN — pull a yyyy-mm-dd (or yyyymmdd / yyyy_mm_dd) date out
@@ -325,6 +326,9 @@
       });
       input.addEventListener('change', (e) => {
         if (e.target.files.length) handleFile(source, e.target.files[0]);
+        // APP-FIX-INT-REPICK (2026-10-13) — a file corrected and saved under the SAME name must be pickable again:
+        // a browser raises no change when the same name is chosen twice, so the old copy stayed loaded.
+        e.target.value = '';
       });
     });
     // APP-FIX-SNAPSHOT-ALIGN — Inventory Master extract-date field.
@@ -920,9 +924,60 @@
      STEP 3 — Data Quality Gate (port of 01_data_quality.py)
   ═════════════════════════════════════════════════════════════════════════ */
 
+  /* ─── APP-INT-MODELMERGE (2026-10-13) — one model spelled two ways ─────────
+     A Fleet list that spells a model two ways by letter case only (DI650i / DI650I)
+     halts the gate: the scope picker would list two fleets while the analysis
+     reads the two spellings as one. The operator confirms the merge on the gate
+     line by picking the spelling to keep. The choice is applied to the Fleet rows
+     of this run (so every later step and the saved run see one spelling),
+     remembered for a re-dropped Fleet file in this session, noted in the saved
+     run (validation.notes), and can be undone on the same line. */
+  const fleetModelAsFiled = new WeakMap();   // fleet row → its model as the file had it (for Undo)
+
+  /* Applies the remembered choices to the Fleet rows; returns one note per model that was really merged. */
+  function applyFleetModelMerges(fleet){
+    const merges = state.fleetModelMerges, groups = {};
+    for (const r of fleet) {
+      const m = String(r.model || '').trim();
+      if (!m) continue;
+      const key = m.toLowerCase(), keep = merges[key];
+      if (!keep) continue;
+      const filed = fleetModelAsFiled.has(r) ? String(fleetModelAsFiled.get(r) || '').trim() : m;
+      const g = groups[key] || (groups[key] = { key, keep, filed: {} });
+      g.filed[filed] = (g.filed[filed] || 0) + 1;
+      if (m !== keep) { if (!fleetModelAsFiled.has(r)) fleetModelAsFiled.set(r, r.model); r.model = keep; }
+    }
+    // the scope picks follow the kept spelling
+    if (state.scope.fleet && Array.isArray(state.scope.fleet.models)) {
+      state.scope.fleet.models = uniq(state.scope.fleet.models.map(m => merges[String(m).trim().toLowerCase()] || m));
+    }
+    return Object.values(groups).filter(g => Object.keys(g.filed).length > 1).map(g => {
+      const options = Object.keys(g.filed).map(s => ({ model: s, units: g.filed[s] }));
+      return { code: 'fleet_model_merged', sev: 'note', undoKey: g.key, keep: g.keep, options, msg: fleetMergeText.note(options, g.keep) };
+    });
+  }
+
+  /* The two faces of the same gate line: the halt (pick a spelling) and the confirmed merge (Undo). */
+  const fleetMergeText = {
+    units: n => `${n} unit${n === 1 ? '' : 's'}`,
+    halt: (opts) => `Fleet list spells one model ${opts.length === 2 ? 'two' : opts.length} ways: ${opts.map(o => o.model).join(' / ')}. If it is the same machine, click the spelling to keep.`,
+    note: (opts, keep) => `Fleet model ${opts.map(o => `${o.model} (${fleetMergeText.units(o.units)})`).join(' and ')}: treated as one model, ${keep}, as you confirmed.`
+  };
+
+  function undoFleetModelMerge(key){
+    delete state.fleetModelMerges[key];
+    for (const r of (state.parsed.fleetMaster?.canonical || [])) {
+      if (!fleetModelAsFiled.has(r)) continue;
+      const filed = fleetModelAsFiled.get(r);
+      if (String(filed || '').trim().toLowerCase() !== key) continue;
+      r.model = filed; fleetModelAsFiled.delete(r);
+    }
+  }
+
   function runDqGate(){
     const issues = [];
     const warnings = [];
+    const notes = [];          // APP-INT-MODELMERGE — what the operator confirmed at the gate (shown, saved, not counted as a warning)
     const tiles = [];
 
     const mb51 = state.parsed.mb51?.canonical || [];
@@ -943,9 +998,22 @@
       if (months < 12) issues.push({ code:'mb51_span', sev:'crit', msg:`MB51 spans only ${months} months — minimum 12 required` });
 
       const movs = uniq(mb51.map(r => String(r.movementType || '').trim())).filter(Boolean).sort();
-      const expected = ['109','261','262','201','202'];
-      const unexpected = movs.filter(m => !expected.includes(m));
-      if (unexpected.length) warnings.push({ code:'mb51_movts', sev:'warn', msg:`MB51 has unexpected movement types: ${unexpected.join(', ')} — will be ignored downstream` });
+      /* APP-FIX-MVT-WARN (2026-10-13) — say which movement types are and are not used, from the tables the app
+         itself reads. Was: anything outside 109 / 261 / 262 / 201 / 202 "will be ignored downstream", which was
+         wrong: the stock line and Trace also use 107, 110, 221, 291, 309, 411, 541–543, 551, 711, 712 … */
+      const BCm = (typeof InventoryBackCalc !== 'undefined') ? InventoryBackCalc : null;
+      if (BCm && BCm.MVT_SIGN) {
+        const used = new Set(['261', '262', '201', '202', '109', '107']);   // consumption · site receipt · arrival at the 3PL (Trace lead times)
+        Object.keys(BCm.MVT_SIGN).forEach(m => used.add(m));                // the stock line
+        (BCm.DIRECTIONAL_MVTS || []).forEach(m => used.add(m));             // transfers, by the row's own sign
+        const ruledOut   = BCm.DELIBERATELY_EXCLUDED || new Set();          // looked at and left out on purpose
+        const notUsed    = movs.filter(m => !used.has(m) && ruledOut.has(m));
+        const unreviewed = movs.filter(m => !used.has(m) && !ruledOut.has(m));
+        if (notUsed.length) warnings.push({ code:'mb51_movts', sev:'warn',
+          msg:`MB51 movement types that Trend and Trace do not use: ${notUsed.join(', ')}. Their lines stay in the run; they are not counted.` });
+        if (unreviewed.length) warnings.push({ code:'mb51_movts_unreviewed', sev:'warn',
+          msg:`MB51 movement types never reviewed for the stock line: ${unreviewed.join(', ')}. They are not counted. If any of them moves stock on site, the stock line will be out by those lines.` });
+      }
 
       const has261 = movs.includes('261');
       const has262 = movs.includes('262');
@@ -983,17 +1051,21 @@
     if (fleet.length === 0) {
       warnings.push({ code:'fleet_empty', sev:'warn', msg:'Fleet Master has no rows — fleet scope mode unavailable' });
     } else {
+      // APP-INT-MODELMERGE — spellings the operator already confirmed as one model are applied first
+      applyFleetModelMerges(fleet).forEach(n => notes.push(n));
       const models = uniq(fleet.map(r => String(r.model || '').trim()).filter(Boolean));
       tiles.push({ lab:'Fleet models',    v:models.length.toString(), desc:`${fleet.length} units total` });
-      // Case-dupe check
-      const lowerMap = {};
+      // Case-dupe check: one model spelled two ways by letter case. Halts until the operator says which spelling to keep.
+      const lowerMap = {}, unitsOf = {};
+      fleet.forEach(r => { const m = String(r.model || '').trim(); if (m) unitsOf[m] = (unitsOf[m] || 0) + 1; });
       models.forEach(m => {
         const k = m.toLowerCase();
         (lowerMap[k] = lowerMap[k] || []).push(m);
       });
       const caseDupes = Object.values(lowerMap).filter(arr => arr.length > 1);
       caseDupes.forEach(arr => {
-        issues.push({ code:'fleet_case_dupe', sev:'crit', msg:`Fleet model case conflict: ${JSON.stringify(arr)} — confirm merge before proceeding` });
+        const options = arr.map(m => ({ model: m, units: unitsOf[m] || 0 }));
+        issues.push({ code:'fleet_case_dupe', sev:'crit', msg: fleetMergeText.halt(options), merge: { key: arr[0].toLowerCase(), options } });
       });
     }
 
@@ -1051,7 +1123,7 @@
     }
 
     state.dq = {
-      issues, warnings, tiles,
+      issues, warnings, notes, tiles,
       passed: issues.length === 0
     };
     renderDq();
@@ -1070,13 +1142,36 @@
       tilesHost.appendChild(el);
     });
     const listHost = $('#dqList'); listHost.innerHTML = '';
-    dq.issues.concat(dq.warnings).forEach(i => {
+    // APP-INT-MODELMERGE — a confirmed merge is listed where its halt line stood (issues · notes · warnings), so nothing moves on the click
+    const afterChoice = () => {                       // a spelling was chosen or undone: the Fleet rows changed in place
+      jsonSizeCache.delete(state.parsed.fleetMaster?.canonical || {});
+      runDqGate();
+      if (state.parsed.fleetMaster) renderDropStats('fleetMaster');
+    };
+    dq.issues.concat(dq.notes || [], dq.warnings).forEach(i => {
       const li = document.createElement('li');
       li.className = i.sev;
-      li.innerHTML = `<span class="sev">${i.sev}</span><span>${escapeHtml(i.msg)}</span>`;
+      const sev = `<span class="sev">${i.sev === 'note' ? 'merged' : i.sev}</span>`;
+      if (!i.merge && !i.undoKey) {
+        li.innerHTML = `${sev}<span class="dq-msg">${escapeHtml(i.msg)}</span>`;
+      } else {
+        /* The halt and its confirmed merge are two faces of one line. Both are laid out in the same space (the one
+           not showing is invisible), so the line is as tall as the taller of the two and a click moves nothing. */
+        const opts = i.merge ? i.merge.options : i.options;
+        const key  = i.merge ? i.merge.key : i.undoKey;
+        const keep = i.keep || opts.slice().sort((a, b) => b.model.length - a.model.length)[0].model;
+        const halt = `${escapeHtml(fleetMergeText.halt(opts))} ` + opts.map(o => `<button type="button" class="dq-pick">${escapeHtml(o.model)} · ${fleetMergeText.units(o.units)}</button>`).join(' ');
+        const note = `${escapeHtml(fleetMergeText.note(opts, keep))} <button type="button" class="dq-pick undo">Undo</button>`;
+        li.innerHTML = `${sev}<span class="dq-msg dq-twin"><span class="live">${i.merge ? halt : note}</span><span class="ghost" aria-hidden="true">${i.merge ? note : halt}</span></span>`;
+        li.querySelectorAll('.ghost button').forEach(b => { b.disabled = true; b.tabIndex = -1; });
+        li.querySelectorAll('.live .dq-pick').forEach((b, n) => b.addEventListener('click', () => {
+          if (i.merge) state.fleetModelMerges[key] = opts[n].model; else undoFleetModelMerge(key);
+          afterChoice();
+        }));
+      }
       listHost.appendChild(li);
     });
-    if (dq.issues.length === 0 && dq.warnings.length === 0) {
+    if (dq.issues.length === 0 && dq.warnings.length === 0 && !(dq.notes || []).length) {
       listHost.innerHTML = '<li class="ok"><span class="sev">ok</span><span>All checks passed.</span></li>';
     }
     const status = $('#step3Status');
@@ -1088,6 +1183,9 @@
     const scopeStep = $('#step4');
     if (dq.passed) scopeStep.classList.remove('disabled');
     else           scopeStep.classList.add('disabled');
+    // the step's own label said "awaiting DQ pass" for ever, also after the gate had passed
+    const scopeStatus = $('#step4Status');
+    if (scopeStatus) { scopeStatus.textContent = dq.passed ? 'ready' : 'awaiting DQ pass'; scopeStatus.className = dq.passed ? 'step-status done' : 'step-status'; }
   }
 
   /* ═════════════════════════════════════════════════════════════════════════
@@ -1110,23 +1208,95 @@
     });
   }
 
+  /* ─── APP-INT-FLEETSEARCH (2026-10-13) — search the fleet list, pick, search again ─────────
+     A site list can hold hundreds of models. The box above the chips filters them as you type
+     (model, make or unit type; every word must match). Clicking a chip picks or un-picks it and
+     hands the box back with its text selected, so the next search can be typed straight away.
+     "Picked" shows only what is picked. Picks made while a chip is hidden are kept. */
+  let fleetChips = [];
+  const fleetFind = { q: '', show: 'all' };
+
+  function applyFleetFilter(){
+    const host = $('#fleetModels'); if (!host) return;
+    const toks = fleetFind.q.toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0, picked = 0;
+    fleetChips.forEach(c => {
+      const isPicked = c.classList.contains('selected');
+      if (isPicked) picked++;
+      const ok = (fleetFind.show !== 'picked' || isPicked) && toks.every(t => c._hay.includes(t));
+      c.classList.toggle('chip-hide', !ok);
+      if (ok) shown++;
+    });
+    let none = host.querySelector('.fleet-none');
+    if (!shown && fleetChips.length) {
+      if (!none) { none = document.createElement('span'); none.className = 'fleet-none'; host.appendChild(none); }
+      none.textContent = (fleetFind.show === 'picked' && !toks.length) ? 'nothing picked yet'
+        : `no model matches "${fleetFind.q.trim()}"${fleetFind.show === 'picked' ? ' among your picks' : ''}`;
+    } else if (none) none.remove();
+    const count = $('#fleetCount');
+    if (count) count.textContent = fleetChips.length ? `${shown} of ${fleetChips.length} shown · ${picked} picked` : '';
+    const all = $('#fleetShowAll'), pk = $('#fleetShowPicked'), clr = $('#fleetClearPicks');
+    if (all) all.classList.toggle('active', fleetFind.show === 'all');
+    if (pk)  pk.classList.toggle('active', fleetFind.show === 'picked');
+    if (clr) { clr.disabled = picked === 0; if (clr.dataset.armed) { delete clr.dataset.armed; clr.textContent = 'Clear picks'; } }
+  }
+
+  function setupFleetSearch(){
+    const box = $('#fleetSearch'), host = $('#fleetModels');
+    if (!box || !host) return;
+    /* the list keeps its height while it is filtered, so nothing below it moves */
+    const hold = () => { if (!host.style.height && host.offsetHeight) host.style.height = host.offsetHeight + 'px'; };
+    box.addEventListener('focus', hold);
+    box.addEventListener('input', () => { hold(); fleetFind.q = box.value; applyFleetFilter(); });
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {                       // one match left: Enter picks (or un-picks) it
+        const vis = fleetChips.filter(c => !c.classList.contains('chip-hide'));
+        if (vis.length === 1) { e.preventDefault(); vis[0].click(); }
+      } else if (e.key === 'Escape' && box.value) { box.value = ''; fleetFind.q = ''; applyFleetFilter(); }
+    });
+    $('#fleetShowAll').addEventListener('click',    () => { hold(); fleetFind.show = 'all';    applyFleetFilter(); });
+    $('#fleetShowPicked').addEventListener('click', () => { hold(); fleetFind.show = 'picked'; applyFleetFilter(); });
+    const clr = $('#fleetClearPicks');
+    clr.addEventListener('click', () => {            // two clicks, so a long pick list is not lost by a slip
+      const n = fleetChips.filter(c => c.classList.contains('selected')).length;
+      if (!n) return;
+      if (!clr.dataset.armed) { clr.dataset.armed = '1'; clr.textContent = `Clear ${n}?`; return; }
+      state.scope.fleet.models = [];
+      fleetChips.forEach(c => c.classList.remove('selected'));
+      applyFleetFilter(); renderScopePreview(); renderJsonPreview();
+    });
+    clr.addEventListener('blur', () => { if (clr.dataset.armed) { delete clr.dataset.armed; clr.textContent = 'Clear picks'; } });
+  }
+
   function populateScopeOptions(){
     // Fleet — chips for each model
     const fleet = state.parsed.fleetMaster?.canonical || [];
     const models = uniq(fleet.map(r => String(r.model || '').trim()).filter(Boolean)).sort();
-    const fleetHost = $('#fleetModels'); fleetHost.innerHTML = '';
-    models.forEach(m => {
+    const fleetHost = $('#fleetModels'); fleetHost.innerHTML = ''; fleetHost.style.height = '';
+    // what a search looks through for each model: the model, its makes and its unit types
+    const hay = {};
+    fleet.forEach(r => {
+      const m = String(r.model || '').trim(); if (!m) return;
+      (hay[m] = hay[m] || new Set([m])).add(String(r.manufacturer || '').trim()).add(String(r.unitType || '').trim());
+    });
+    fleetChips = models.map(m => {
       const c = chip(m, () => {
         const arr = state.scope.fleet.models;
         const i = arr.indexOf(m);
         if (i >= 0) arr.splice(i, 1); else arr.push(m);
         c.classList.toggle('selected');
+        applyFleetFilter();
+        const box = $('#fleetSearch');
+        if (box && box.value) { box.focus(); box.select(); }   // ready for the next search
         renderScopePreview();
         renderJsonPreview();
       });
+      c._hay = [...(hay[m] || [m])].join(' ').toLowerCase();
       if (state.scope.fleet.models.includes(m)) c.classList.add('selected');
       fleetHost.appendChild(c);
+      return c;
     });
+    applyFleetFilter();
 
     // Classification — populate inventory types & MRP classifiers
     const master = state.parsed.inventoryMaster?.canonical || [];
@@ -2326,23 +2496,44 @@
         severity: i.sev, code: i.code, message: i.msg
       }))
     } : { passed:false, issues:[{ severity:'crit', code:'no_dq', message:'DQ gate not run' }] };
+    // APP-INT-MODELMERGE — what the operator confirmed at the gate travels with the run (additive; absent = nothing confirmed)
+    if (state.dq && state.dq.notes && state.dq.notes.length) json.validation.notes = state.dq.notes.map(n => ({ code: n.code, message: n.msg }));
     return json;
+  }
+
+  /* APP-FIX-INT-PREVIEW (2026-10-13) — the preview runs on every click (a chip, a tab, a parameter). It used to copy
+     the whole run (JSON.parse(JSON.stringify(json))) and serialise it a second time for the size: with a 400,000-line
+     MB51 that is seconds of frozen page per click. Now the data tables are never copied, and each table's size is
+     worked out once per loaded file and remembered. The text shown and the size are the same as before. */
+  const jsonSizeCache = new WeakMap();   // a data table (the array itself) → its size in bytes as JSON
+  function jsonBytes(v){ return new Blob([JSON.stringify(v)]).size; }
+  function jsonSizeOf(json){
+    const keys = Object.keys(json.data), light = Object.assign({}, json, { data: {} });
+    let big = 0;
+    for (const k of keys) {
+      const arr = json.data[k];
+      light.data[k] = 0;                                   // 1 byte where the table's JSON goes
+      if (!arr || typeof arr !== 'object') { big += jsonBytes(arr) - 1; continue; }
+      let b = jsonSizeCache.get(arr);
+      if (b == null || b.n !== arr.length) { b = { n: arr.length, bytes: jsonBytes(arr) }; jsonSizeCache.set(arr, b); }
+      big += b.bytes - 1;
+    }
+    return jsonBytes(light) + big;
   }
 
   function renderJsonPreview(){
     const json = buildJson();
     const host = $('#jsonPreview');
-    // Strip the heavy data.* arrays for preview, replace with summaries
-    const summary = JSON.parse(JSON.stringify(json));
-    for (const key of Object.keys(summary.data)) {
-      const arr = summary.data[key] || [];
+    // The heavy data.* arrays are shown as summaries (and never copied)
+    const summary = Object.assign({}, json, { data: {} });
+    for (const key of Object.keys(json.data)) {
+      const arr = json.data[key] || [];
       summary.data[key] = arr.length > 0 ? `[ … ${arr.length} rows … ]` : `[ ]`;
     }
-    if (summary.duplicates) summary.duplicates = `{ … ${duplicateSummary(summary.duplicates)} … }`;   // APP-DUP-FLAG
+    if (json.duplicates) summary.duplicates = `{ … ${duplicateSummary(json.duplicates)} … }`;   // APP-DUP-FLAG
     host.textContent = JSON.stringify(summary, null, 2);
 
-    const sizeBytes = new Blob([JSON.stringify(json)]).size;
-    $('#jsonSize').textContent = humanBytes(sizeBytes);
+    $('#jsonSize').textContent = humanBytes(jsonSizeOf(json));
 
     // Scope summary updates with the JSON preview — same upstream triggers
     renderScopeSummary();
@@ -2973,6 +3164,7 @@
     setupAssessmentType();
     setupDropZones();
     setupScopeTabs();
+    setupFleetSearch();        // APP-INT-FLEETSEARCH
     setupManualPaste();
     setupClassifInputs();
     setupParamSearch();
