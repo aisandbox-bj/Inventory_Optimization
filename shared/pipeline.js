@@ -537,15 +537,43 @@
     }];
   }
 
-  /* ─── Fleet bucketing + multi-model detection ───────────────────────────── */
+  /* ─── Fleet bucketing + multi-model detection ─────────────────────────────
+     APP-FIX-FLEET-WHOLE (2026-10-13, operator) — a fleet PICKS THE MATERIALS; each material is then
+     analysed on ALL of its consumption, exactly as in a user-defined material list.
+
+     Was: a fleet bucket held only the MB51 lines posted to work orders of the picked models. The rates,
+     the traffic light and the recommended Min / Max of a part therefore ignored what every other fleet,
+     every cost centre and every order missing from the IW39 pull had consumed, while the stock line on
+     the same chart was already site-wide. A Min / Max is a setting for the whole site, so it was read
+     from part of the demand.
+
+     Now:
+       1. A model's materials = those with net consumption above zero on the model's OWN work orders
+          (IW39 orders of its units, not dated after the run date). The fleet's use decides who is on
+          the list, whatever its size.
+       2. A material used by two or more of the picked models goes to MULTI · cross-fleet, as before
+          (a material sits in exactly one bucket).
+       3. A bucket's lines = EVERY consumption line of its materials in the whole MB51. A line carries
+          the unit of its work order wherever IW39 knows it (any fleet), so the event tables still name
+          the machine.
+     The threshold and min-events screens in runPipeline() therefore read whole-site consumption.
+     `fleetNet` on a bucket keeps what the picked fleet itself consumed (material → net), for display. */
   function bucketsFleet(json, mb51, iw39, fleet){
     const runDate = (json.metadata && json.metadata.inventoryMasterDate) || new Date().toISOString().slice(0, 10);  // APP-FIX-SNAPSHOT-ALIGN — anchor IW39 cutoff to extract date
-    const threshold = json.parameters.threshold;
     const models = (json.scope.fleet && json.scope.fleet.models) || [];
 
-    // Per-model: sortFields → orders → transactions
-    const perModel = [];
-    for (const model of models) {
+    // Every work order IW39 knows → its unit (for naming the machine on any line, picked fleet or not)
+    const orderUnit = new Map();
+    for (const w of iw39) {
+      const sf = String(w.sortField || '').trim();
+      const o  = String(w.order || '').trim();
+      if (sf && o && !orderUnit.has(o)) orderUnit.set(o, sf);
+    }
+
+    // Per picked model: its units → its work orders (unchanged rule)
+    const orderModels = new Map();   // order → [index of each picked model that owns it]
+    const modelOrderSf = [];         // per model: order → unit
+    models.forEach((model, mi) => {
       const sortFields = new Set(
         fleet
           .filter(f => String(f.model || '').trim().toUpperCase() === model.trim().toUpperCase())
@@ -559,57 +587,69 @@
         if (!sf || !o) continue;
         if (!sortFields.has(sf)) continue;
         if (w.basicStartDate && w.basicStartDate > runDate) continue;
-        if (!orderSf.has(o)) orderSf.set(o, sf);
+        if (!orderSf.has(o)) { orderSf.set(o, sf); const l = orderModels.get(o); if (l) l.push(mi); else orderModels.set(o, [mi]); }
       }
-      const orders = new Set(orderSf.keys());
-      const transactions = [];
+      modelOrderSf.push(orderSf);
+    });
+
+    // One pass over MB51: the lines each picked model itself consumed (to decide who is on the list)
+    const ownTx = models.map(() => []);
+    if (orderModels.size) {
       for (const t of mb51) {
-        const o = String(t.order || '').trim();
-        if (!orders.has(o)) continue;
-        const mt = String(t.movementType || '').trim();
-        if (!VALID_TYPES.has(mt)) continue;
-        transactions.push({ ...t, equipmentUnit: orderSf.get(o) });
+        const owners = orderModels.get(String(t.order || '').trim());
+        if (!owners) continue;
+        if (!VALID_TYPES.has(String(t.movementType || '').trim())) continue;
+        for (const mi of owners) ownTx[mi].push(t);
       }
-      perModel.push({ key: model, name: model, transactions });
     }
 
-    // Multi-model detection: per-material net per model
-    const materialModels = new Map();   // material → Set<model>
-    for (const bucket of perModel) {
-      const desc = buildMaterialDescIndex(bucket.transactions);
-      const net  = netConsumptionByMaterial(bucket.transactions, desc);
+    // Who uses what: a material belongs to a model when the model's own net consumption of it is above zero
+    const ownNet = ownTx.map(tx => netConsumptionByMaterial(tx, null));
+    const materialModels = new Map();   // material → Set<model index>
+    ownNet.forEach((net, mi) => {
       for (const [mat, agg] of net) {
-        if (agg.net < threshold) continue;
-        if (!materialModels.has(mat)) materialModels.set(mat, new Set());
-        materialModels.get(mat).add(bucket.key);
+        if (!(agg.net > 0)) continue;
+        let s = materialModels.get(mat); if (!s) { s = new Set(); materialModels.set(mat, s); }
+        s.add(mi);
       }
-    }
+    });
+
+    // Each material sits in exactly one bucket: its one model, or MULTI when two or more picked models use it
+    const bucketOf = new Map();         // material → model index, or -1 for MULTI
+    const matSets  = models.map(() => new Set());
     const multiSet = new Set();
     for (const [mat, mods] of materialModels) {
-      if (mods.size >= 2) multiSet.add(mat);
+      if (mods.size >= 2) { multiSet.add(mat); bucketOf.set(mat, -1); }
+      else { const mi = mods.values().next().value; matSets[mi].add(mat); bucketOf.set(mat, mi); }
     }
 
-    // Strip multi materials from per-model buckets; build MULTI bucket from all selected models' transactions
-    const out = [];
-    for (const bucket of perModel) {
-      const filtered = bucket.transactions.filter(t => !multiSet.has(String(t.material || '').trim()));
-      out.push({
-        key: bucket.key,
-        name: bucket.name,
-        kind: 'fleet',
-        materials: null,
-        transactions: filtered
-      });
-    }
-    if (multiSet.size > 0) {
-      // MULTI bucket = transactions across all per-model buckets for these materials
-      const allTx = [];
-      for (const bucket of perModel) {
-        for (const t of bucket.transactions) {
-          if (multiSet.has(String(t.material || '').trim())) allTx.push(t);
-        }
+    // One more pass over MB51: every consumption line of those materials, whoever consumed it
+    const allTx = models.map(() => []), multiTx = [];
+    if (bucketOf.size) {
+      for (const t of mb51) {
+        const bi = bucketOf.get(String(t.material || '').trim());
+        if (bi === undefined) continue;
+        if (!VALID_TYPES.has(String(t.movementType || '').trim())) continue;
+        const o = String(t.order || '').trim();
+        const unit = (bi >= 0 && modelOrderSf[bi].get(o)) || orderUnit.get(o);
+        (bi === -1 ? multiTx : allTx[bi]).push(unit ? { ...t, equipmentUnit: unit } : { ...t });
       }
-      out.push({ key: '__MULTI__', name: 'MULTI · cross-fleet', kind: 'multi', materials: multiSet, transactions: allTx });
+    }
+
+    const fleetNetOf = (mats, idxs) => {
+      const m = new Map();
+      for (const mat of mats) { let n = 0; for (const mi of idxs) { const a = ownNet[mi].get(mat); if (a) n += a.net; } m.set(mat, n); }
+      return m;
+    };
+    const out = models.map((model, mi) => ({
+      key: model, name: model, kind: 'fleet',
+      materials: matSets[mi],
+      fleetNet: fleetNetOf(matSets[mi], [mi]),
+      transactions: allTx[mi]
+    }));
+    if (multiSet.size > 0) {
+      out.push({ key: '__MULTI__', name: 'MULTI · cross-fleet', kind: 'multi', materials: multiSet,
+                 fleetNet: fleetNetOf(multiSet, models.map((_, mi) => mi)), transactions: multiTx });
     }
     return out;
   }
@@ -1245,7 +1285,7 @@
     const d = (json && json.data) || {};
     const c = k => (Array.isArray(d[k]) ? d[k].length : 0);
     return [
-      'pc2',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording) so a tab can't keep a stale cached result
+      'pc3',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption) so a tab can't keep a stale cached result
       m.assessmentName || m.name || '', m.uploadedAt || '', m.savedAt || '', m.createdAt || '',
       m.inventoryMasterDate || '',
       (json && json.SCHEMA_VERSION) || m.schemaVersion || '',
