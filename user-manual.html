@@ -352,7 +352,7 @@
         </ul>
 
         <h3>Manual list: materials OR work orders (APP-E22)</h3>
-        <p>The Manual scope textarea accepts a paste of <em>either</em> material numbers <em>or</em> work-order numbers. Three buttons above it — <code>Auto</code> · <code>Materials</code> · <code>Work Orders</code> — control interpretation. Auto guesses from how the pasted values match Inventory Master / MB51 / IW39 and shows a confidence chip; you can override with one click. When the list is work orders, the scope resolves to the set of materials those orders touched in MB51.</p>
+        <p>The Manual scope textarea accepts a paste of <em>either</em> material numbers <em>or</em> work-order numbers. Three buttons above it — <code>Auto</code> · <code>Materials</code> · <code>Work Orders</code> — control interpretation. Auto guesses from how the pasted values match Inventory Master / MB51 / IW39 and shows a confidence chip; you can override with one click. When the list is work orders, the listed orders <b>pick the materials</b> (those with net consumption above zero on those orders); each material is then analysed on all of its consumption, not only on the listed orders.</p>
       </section>
 
       <!-- ───────────── 4 · Data files ───────────── -->
@@ -436,6 +436,7 @@
       <section class="um-section" id="scope-selection">
         <h2><span class="num">05</span>Scope selection</h2>
         <p>Step 4 drives which materials get bucketed and how. The available tabs depend on the assessment type.</p>
+        <p><b>One rule for every route:</b> a scope only chooses <i>which materials</i> are reviewed. Each material is then analysed on <b>all</b> of its consumption in the MB51 (every 261 / 262 / 201 / 202 line, whoever consumed it). No route analyses a slice of the consumption: a Min / Max is a setting for the whole site.</p>
         <h3>Fleet</h3>
         <p>Pick one or more fleet model codes (chips, with a search box over them). <b>The fleet picks the materials; each material is then analysed on all of its consumption</b>, exactly as in a user list.</p>
         <ul>
@@ -445,7 +446,7 @@
         </ul>
         <p>Preview line shows models / units / qualifying historical work orders. <i>Before 2026-10-13 only the lines posted to the picked fleets' work orders were counted, so a part's rate and Min / Max ignored everything consumed elsewhere; a saved fleet run shows the corrected figures when it is reopened.</i></p>
         <h3>Manual</h3>
-        <p>Paste materials or work orders (see §3). Default for User-list assessments; available everywhere. Single bucket.</p>
+        <p>Paste materials or work orders (see §3). Default for User-list assessments; available everywhere. Single bucket. A work-order list picks the materials used on those orders; their consumption is whole-site, as everywhere. <i>Before 2026-10-13 a work-order list counted only the lines on the listed orders.</i></p>
         <h3>By Classification</h3>
         <p>Inventory-Master-driven: Inventory Type ∈ {…} AND MRP classifier ∈ {…} AND net movement in [min, max]. All filters AND together. Single bucket.</p>
         <h3>By Vendor</h3>

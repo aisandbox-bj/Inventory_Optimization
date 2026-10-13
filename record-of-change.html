@@ -381,6 +381,35 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Every scope route picks materials only (work-order list) - 2026-10-13 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-13</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-FIX-SCOPE-WHOLE</b>: every scope route now only picks the materials; the work-order list was the last one that analysed a slice — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator decision:</b> "update so that all front-door selectors are used for the filtering of materials only … no use analysing only portions of the consumption."</li>
+        <li><b>Audit of the routes</b> (<code>shared/pipeline.js</code>):
+          <ul>
+            <li>Fleet: corrected earlier the same day (APP-FIX-FLEET-WHOLE).</li>
+            <li>Material list, by classification, by vendor, parameter search: already whole-site; not touched.</li>
+            <li><b>Work-order list: the one left.</b> It kept only the MB51 lines posted to the listed orders.</li>
+          </ul></li>
+        <li><b>Now:</b> the listed orders pick the materials (net consumption above zero on those orders); each material is analysed on every consumption line in the MB51. Cache tag pc3 → pc4, so a saved work-order-list run shows the corrected figures when reopened.</li>
+        <li><b>Verified in the browser</b> on the April test data:
+          <ul>
+            <li>a list of 300 real work orders gives the same figures as its 53 materials entered as a material list (only the bucket name differs);</li>
+            <li>against the old engine: of 25 materials in both, Min / Max changed on 21, all upward. Example: 2004641 read 95 on the listed orders against 3,683 for the site;</li>
+            <li>material list (400 materials), by classification (446) and parameter search (141): old engine and new engine identical in every field.</li>
+          </ul></li>
+        <li><b>What changes for the operator:</b> as with the fleet route, the list is longer (26 → 53) because the screens now read whole-site consumption.</li>
+        <li><b>Not verified:</b> by vendor (no vendor mapping in the test data; its code was not touched); the operator's own run.</li>
+        <li>Files: <code>shared/pipeline.js</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Commit <code>0b4f9fc</code>. Rollback: <code>_rollback/SCOPE-WHOLE-pre/</code> + <code>checkpoint/pre-scopewhole</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Fleet scope reads whole-site consumption - 2026-10-13 -->
     <article class="roc-entry dev">
       <div class="head">
@@ -411,7 +440,7 @@ git -C /tmp/peek push --force-with-lease origin main
             <li><b>Lists get longer</b> (four fleets: 104 → 167 materials). A part the fleet used only lightly now appears when the site as a whole uses enough of it to pass the screens. Not built: an option to keep the list to parts the fleet itself uses above the threshold.</li>
             <li><b>A few materials leave the list</b> (4 of 104): the whole site returned more than it issued in the window (one shows +49 on the fleet and −113 for the site).</li>
           </ul></li>
-        <li><b>Not changed, operator to decide:</b> the "list of work orders" route still counts only the consumption on the listed work orders.</li>
+        <li><b>Work-order list route:</b> left as it was in this change; the operator decided the same day and it was corrected in APP-FIX-SCOPE-WHOLE (above).</li>
         <li><b>Not verified:</b> the operator's own run. By-vendor and by-classification scope were already whole-site and were not touched.</li>
         <li>Files: <code>shared/pipeline.js</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Commit <code>012d326</code>. Rollback: <code>_rollback/FLEET-WHOLE-pre/</code> + <code>checkpoint/pre-fleetwhole</code>.</li>
       </ul>

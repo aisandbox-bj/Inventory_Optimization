@@ -5,6 +5,7 @@
 ## 🧪 TEST LATER — operator checklist (started 2026-09-27; tick off as you go)
 Hard-refresh (Ctrl+F5) first. Each line: what to do → what you should see.
 - [ ] **Fleet scope looks at the whole site** (2026-10-13) — open a fleet run in Trend and pick a part you know other fleets use → "Qty Iss." and the rates now include everybody's use, and the amber line agrees with the purple stock line. The Where-used card shows who took it. Lists are longer than before; a few parts drop off where the site returned more than it issued.
+- [ ] **Work-order list looks at the whole site** (2026-10-13) — a run built from a pasted list of work orders: each part's "Qty Iss.", rates and Min / Max now include everything the site consumed, not only those orders. The list is longer than before.
 - [ ] **A model spelled two ways** (2026-10-13) — with a Fleet list that has DI650i and DI650I: the gate's red line shows both as buttons with unit counts → click one → the line turns to "merged … Undo", nothing on the page moves, Scope opens with one chip. The saved run remembers it.
 - [ ] **Fleet search** (2026-10-13) — Scope → Fleet: type part of a model, a make or a type → click the chip → type the next one straight away. "Picked" shows what you picked; click a chip there to un-pick.
 - [ ] **Same file name again** (2026-10-13) — correct a file in Excel, save under the same name, click the card and pick it → the card re-reads it.
@@ -37,7 +38,7 @@ Hard-refresh (Ctrl+F5) first. Each line: what to do → what you should see.
 ## ✅ SHIPPED 2026-10-13 — APP-FIX-FLEET-WHOLE · fleet scope reads whole-site consumption (`012d326`)
 The fleet picks the materials (net consumption above zero on its own work orders); each material is analysed on every consumption line in the MB51, as in a user list. See RoC.
 **Open, operator to decide:**
-- **Work-order list route** still counts only the consumption on the listed work orders. Same question as the fleet: should the listed orders only pick the materials?
+- ~~**Work-order list route** still counts only the consumption on the listed work orders.~~ ✅ SHIPPED the same day (APP-FIX-SCOPE-WHOLE, `0b4f9fc`): operator decided every front-door selector filters materials only. All six routes are now whole-site.
 - **List length:** lists grew (104 → 167 on the April test). Option not built: keep the list to parts the fleet itself uses at or above the threshold (the figures stay whole-site either way).
 - **Show the fleet's share:** each fleet bucket already carries what the picked fleet itself consumed (`fleetNet`, material → net); nothing shows it yet. Candidate: "of which on this fleet: 583 of 3,683" on the detail.
 
