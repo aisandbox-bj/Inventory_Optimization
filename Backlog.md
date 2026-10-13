@@ -4,6 +4,11 @@
 
 ## 🧪 TEST LATER — operator checklist (started 2026-09-27; tick off as you go)
 Hard-refresh (Ctrl+F5) first. Each line: what to do → what you should see.
+- [ ] **Fleet scope looks at the whole site** (2026-10-13) — open a fleet run in Trend and pick a part you know other fleets use → "Qty Iss." and the rates now include everybody's use, and the amber line agrees with the purple stock line. The Where-used card shows who took it. Lists are longer than before; a few parts drop off where the site returned more than it issued.
+- [ ] **A model spelled two ways** (2026-10-13) — with a Fleet list that has DI650i and DI650I: the gate's red line shows both as buttons with unit counts → click one → the line turns to "merged … Undo", nothing on the page moves, Scope opens with one chip. The saved run remembers it.
+- [ ] **Fleet search** (2026-10-13) — Scope → Fleet: type part of a model, a make or a type → click the chip → type the next one straight away. "Picked" shows what you picked; click a chip there to un-pick.
+- [ ] **Same file name again** (2026-10-13) — correct a file in Excel, save under the same name, click the card and pick it → the card re-reads it.
+- [ ] **Movement-type message** (2026-10-13) — the gate now says which types Trend and Trace do not use (101, 102, 108, 343, 344, 561, 562, 641 in your file) and which were never reviewed (122, 415).
 - [ ] **Large Excel files open** (2026-10-13) — on Intake drop your 50 MB MB51 (.xlsx) on its card → the card counts up ("reading… 120,000 rows") while the page stays usable, then shows the row count, plant chip and matches as usual. No need to trim the file first. If it ever says "too large for this browser", send me the message. The MB51 stock check page now opens a go-live-to-today MB51 the same way.
 - [ ] **✓ Reviewed tick** (this update) — in the Canvas click "○ Mark reviewed" → it moves to the next page and the bar reads "1 of N reviewed"; go back → the button is green "✓ Reviewed · date"; click it → unticked, stays on the page. Close + reopen the run → ticks still there.
 - [ ] **Dashboard sizes + Download** (2026-09-30) — Dashboard → Recent intakes shows a Size per run (older runs say "measuring…" once, then keep the size) and the total; Download beside Load saves that run's JSON.
@@ -29,7 +34,20 @@ Hard-refresh (Ctrl+F5) first. Each line: what to do → what you should see.
 - **✅ SHIPPED 2026-09-27 (APP-TRACE-POBUNDLE option 2 + APP-TRACE-PRLINES + per-line exclude)** — see RoC. Mirror must mirror it. Was: **DECISION PENDING — PR lines (found 2026-09-27):** Trace makes one chain per PR LINE but identifies it by PR NUMBER only. (1) Same material on 2+ lines of one PR, all on ONE PO: June data has 10 cases, all PR 10003789 → PO 9600006236 (materials 1021775–1021789, 3–8 lines each, 47 lines). Each line becomes its own chain with identical dates, so ONE delivery is averaged in 3–8 times. (2) Trace's exclude button and the sigma trim key off the PR number, so excluding one line of a PR excludes all its lines. (3) OPERATOR CONFIRMED 2026-09-27: several DIFFERENT PRs for the same material are often bundled into one PO (mostly 2, sometimes >5). June data: 24 PO/material pairs with 2 PRs, 2 with 3, 1 with 4; PRs on one PO raised a median 3 days apart (max 51). Today every PR is its own order, so the PO's supplier + 3PL legs (C, D) count once per PR. Options put to the operator: keep per PR · A/B per PR + C/D once per PO · one order per PO from the earliest PR · from the latest PR. Measured on June (18 materials, no exclusions): most move within ±3 d; 1003376 62.9 d → 50–53, 1002984 60.2 → 44–54, 1011045 24.3 → 27.5–29.3. Mirror uses the same engine, so the choice has to be applied there too. The earlier '23 shared POs' count included the PR 10003789 PO; the true 'different PRs on one PO' count is 22 POs / 27 PO+material pairs / 18 materials. Proposal to operator: identify chains by PR + line; merge lines of one PR on one PO into one order (qty summed, 'n lines' tag).
 - **Waiting on you:** the open PR → PO list (to settle the shared-PO question); the comments export + video for the Canvas rule-check / AI review.
 
-## ✅ BUILT 2026-10-13 — APP-INT-ROWREAD · Intake reads an Excel file one row at a time (any size opens)
+## ✅ SHIPPED 2026-10-13 — APP-FIX-FLEET-WHOLE · fleet scope reads whole-site consumption (`012d326`)
+The fleet picks the materials (net consumption above zero on its own work orders); each material is analysed on every consumption line in the MB51, as in a user list. See RoC.
+**Open, operator to decide:**
+- **Work-order list route** still counts only the consumption on the listed work orders. Same question as the fleet: should the listed orders only pick the materials?
+- **List length:** lists grew (104 → 167 on the April test). Option not built: keep the list to parts the fleet itself uses at or above the threshold (the figures stay whole-site either way).
+- **Show the fleet's share:** each fleet bucket already carries what the picked fleet itself consumed (`fleetNet`, material → net); nothing shows it yet. Candidate: "of which on this fleet: 583 of 3,683" on the detail.
+
+## ✅ SHIPPED 2026-10-13 — Intake: model spelled two ways · fleet search · re-pick · honest messages (`0cd1178`)
+APP-INT-MODELMERGE, APP-INT-FLEETSEARCH, APP-FIX-INT-REPICK, APP-FIX-MVT-WARN, APP-FIX-INT-PREVIEW. See RoC.
+**Follow-ups (not built):**
+- Movement types 122 and 415 were never reviewed for the stock line (they are in the operator's MB51). Decide with the MB51 stock check (register K-14).
+- The material case-conflict halt in the Inventory Master has no way through in the app either (left as is: a material number that differs only by case is a real data fault).
+
+## ✅ SHIPPED 2026-10-13 — APP-INT-ROWREAD · Intake reads an Excel file one row at a time (any size opens) (`c9c2d52`; the operator's 418,747-line MB51 loaded)
 Reader = WO Readiness 0.5.6 `wor_xlsx_rows.js`, unchanged copy in `vendor/` (PROVENANCE.md); background thread → on-page → library. `tools/reader-check.html` compares the three readers: 67 files / 511 comparisons / 590,192 rows, no difference. See RoC.
 **Follow-ups (not built):**
 - **CSV by rows** — a `.csv` is still read whole (limit about 500 MB of text). PapaParse can read a file in pieces; same mapping step.

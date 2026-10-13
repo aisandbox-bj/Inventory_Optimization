@@ -381,6 +381,70 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Fleet scope reads whole-site consumption - 2026-10-13 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-13</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-FIX-FLEET-WHOLE</b>: in fleet scope the fleet picks the materials, and each material is analysed on <u>all</u> of its consumption — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator report:</b> "when I select materials based on a fleet / unit ID it ONLY looks at the consumption on that fleet … it assumes no other units consume that material, which is false. The fleet should only zoom in on the materials, like a user defined list, but should then look at each material holistically."</li>
+        <li><b>What was wrong:</b> a fleet bucket held only the MB51 lines posted to work orders of the picked models. The rates, the traffic light and the recommended Min / Max of a part ignored what every other fleet, every cost centre and every order missing from the IW39 pull had consumed. The stock line on the same chart was already site-wide, so the chart mixed the two. A Min / Max is a setting for the whole site, and it was being read from part of the demand. It has worked this way since the analysis engine was first written (May 2026, checked in the repository history); it is not a recent regression.</li>
+        <li><b>Now</b> (<code>shared/pipeline.js</code>, <code>bucketsFleet</code>), the same as a user-defined material list:
+          <ul>
+            <li>a model's materials = those with net consumption above zero on the model's own work orders;</li>
+            <li>a material used by two or more picked models goes to MULTI · cross-fleet, as before (a material sits in exactly one bucket);</li>
+            <li>a bucket's lines = every consumption line (261 / 262 / 201 / 202) of its materials in the whole MB51. A line keeps the unit of its work order wherever IW39 knows it, so the event tables still name the machine;</li>
+            <li>the threshold and min-events screens therefore read whole-site consumption.</li>
+          </ul></li>
+        <li><b>Saved runs:</b> a fleet run saved earlier shows the corrected figures when it is reopened in Trend (the analysis is recalculated on opening; the cache tag moved from pc2 to pc3 so no tab keeps an old result). A run saved with "trim to materials in use" still holds every line of its materials, so it recalculates correctly too.</li>
+        <li><b>Verified in the browser</b> on the April test data (50,648 MB51 lines):
+          <ul>
+            <li><b>Fleet = user list.</b> Four fleets, 167 materials: every figure of every material equals the same materials run as a user list. Only the bucket labels, the multi-fleet flag and the machine name in the event tables differ.</li>
+            <li><b>Against the old engine</b> (loaded side by side), 100 materials in both lists: recommended Min / Max changed on 53, all upward, none downward; the traffic light changed on 14. Example: 1000510 FILTER, AIR, PRIMARY: consumed 167 → 228, Min 55 → 69, Max 110 → 138. One fleet (775G): 2004641 read 583 on the fleet against 3,683 for the site.</li>
+            <li>A made-up 418,747-line run with five fleets: the Intake's "materials to be analysed" (390) equals what Trend lists; no console errors.</li>
+          </ul></li>
+        <li><b>What changes for the operator, beyond the figures:</b>
+          <ul>
+            <li><b>Lists get longer</b> (four fleets: 104 → 167 materials). A part the fleet used only lightly now appears when the site as a whole uses enough of it to pass the screens. Not built: an option to keep the list to parts the fleet itself uses above the threshold.</li>
+            <li><b>A few materials leave the list</b> (4 of 104): the whole site returned more than it issued in the window (one shows +49 on the fleet and −113 for the site).</li>
+          </ul></li>
+        <li><b>Not changed, operator to decide:</b> the "list of work orders" route still counts only the consumption on the listed work orders.</li>
+        <li><b>Not verified:</b> the operator's own run. By-vendor and by-classification scope were already whole-site and were not touched.</li>
+        <li>Files: <code>shared/pipeline.js</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Commit <code>012d326</code>. Rollback: <code>_rollback/FLEET-WHOLE-pre/</code> + <code>checkpoint/pre-fleetwhole</code>.</li>
+      </ul>
+    </article>
+
+    <!-- v2.2.0-dev - Intake: confirm a model spelled two ways, fleet search, re-pick, honest messages - 2026-10-13 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-13</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — Intake: <b>APP-INT-MODELMERGE</b> (confirm a model spelled two ways), <b>APP-INT-FLEETSEARCH</b> (search the fleet list), <b>APP-FIX-INT-REPICK</b>, <b>APP-FIX-MVT-WARN</b>, <b>APP-FIX-INT-PREVIEW</b> — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator report:</b> the gate halted on "Fleet model case conflict: DI650i / DI650I — confirm merge before proceeding", with no way to confirm it; the corrected file "still kicks me out"; and the fleet list of 228 models was hard to work through.</li>
+        <li><b>A model spelled two ways (APP-INT-MODELMERGE).</b>
+          <ul>
+            <li>Why it halts: the scope picker would list the two spellings as two fleets, while the analysis reads them as one. Picked together, the same machines would be analysed twice.</li>
+            <li>The halt line now shows each spelling as a button with its unit count ("DI650i · 4 units"). Clicking one treats them as one model for this run: the Fleet rows, the scope picks and the saved run all carry the kept spelling.</li>
+            <li>The confirmed merge stands on the same line with <b>Undo</b>, is remembered if the Fleet file is loaded again in the session, and is written into the saved run (<code>validation.notes</code>, additive).</li>
+            <li>The line reserves room for both of its forms, so the click moves nothing on the page (checked: halt → merged → undone → merged the other way, identical positions).</li>
+          </ul></li>
+        <li><b>The same file name can be picked again (APP-FIX-INT-REPICK).</b> A browser raises no change when the same file name is chosen twice, so a file corrected and saved under the same name was not re-read and the old copy stayed loaded. The upload cards now reset after each read. (Dragging the file on, or ✕ Clear first, already worked.)</li>
+        <li><b>Search the fleet list (APP-INT-FLEETSEARCH).</b> A search box over the chips filters by model, make or unit type (every word must match). A click picks or un-picks and hands the box back with its text selected for the next search; Enter picks a single match; <b>Picked</b> shows only the picks; <b>Clear picks</b> asks twice. The list is taller and keeps its height while it is filtered.</li>
+        <li><b>The movement-type warning told an untruth (APP-FIX-MVT-WARN).</b> It listed every type outside 109 / 261 / 262 / 201 / 202 as "will be ignored downstream", although the stock line and Trace use 107, 110, 221 / 222, 291 / 292, 309, 411, 541–543, 551, 711 / 712. It now reads the app's own tables and says which types Trend and Trace do not use, and separately which were never reviewed for the stock line (in the operator's file: 122 and 415). Nothing was ever dropped; only the text was wrong.</li>
+        <li><b>The preview no longer re-reads the whole run on every click (APP-FIX-INT-PREVIEW).</b> Each click (a chip, a tab, a parameter) copied the entire run and serialised it a second time for the size figure: about 1.6 seconds per click with a 418,747-line MB51. The data tables are no longer copied and each table's size is worked out once per loaded file. Same text, same size figure (69.4 MB both ways on the test run).</li>
+        <li>The Scope step's label said "awaiting DQ pass" also after the gate had passed; it now says "ready".</li>
+        <li><b>Verified in the browser:</b> the April Fleet list (which has DI650i × 4 and DI650I × 2); a 226-model made-up list for the search; a made-up 418,747-line MB51 for speed (merge click 0.8 s, chip clicks about 0.3 s, the saved run opens in Trend); the warning text on a made-up file with the operator's movement types. No console errors.</li>
+        <li><b>Not verified:</b> the operator's own files; whether the same-name re-pick was the cause of "still kicks me out" on their side (it is the one known way the old copy stays loaded).</li>
+        <li>Files: <code>intake/intake.{js,html,css}</code>, <code>user-manual.html</code>, <code>Backlog.md</code>. Commit <code>0cd1178</code>. Rollback: <code>_rollback/INT-MODELMERGE-pre/</code> + <code>checkpoint/pre-fleetwhole</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Intake reads an Excel file one row at a time (any size opens) - 2026-10-13 -->
     <article class="roc-entry dev">
       <div class="head">
