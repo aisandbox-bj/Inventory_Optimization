@@ -14,6 +14,12 @@
    Quantities are ABSOLUTE (operator decision 2026-06-27); the movement-type
    description carries the direction (GI = out, GR = in, reversal = back).
 
+   APP-FIX-SHELF-STOCK + APP-FIX-DIRECTCHARGE (2026-10-14): when the MB51 carries a
+   storage location, the stock list follows the shelf rule (InventoryBackCalc.rowDelta
+   with the material's shelf storage locations), and a 109 / 110 with no storage
+   location (bought straight for a work order / cost centre / project) is listed on
+   the CONSUMPTION side (AppPipeline.consMvt), labelled as such, never on the stock side.
+
    Transfers that cancel out are left off the stock list (operator 2026-09-29):
    309/310 (batch relabel / material-to-material) and 411/412 (storage location)
    post one row out and one row back in, so on a day where a material's rows of
@@ -57,6 +63,19 @@
   // Consumption (orange line) — matches pipeline VALID_TYPES (261/201 + reversals).
   const CONS_TYPES = new Set(['261', '201', '262', '202']);
 
+  // Consumption kind of a row — the pipeline's one rule when it is loaded (adds receipts bought for an account).
+  function consKind(row){
+    const P = global.AppPipeline;
+    if (P && P.consMvt) return P.consMvt(row);
+    const mt = String(row.movementType || '').trim();
+    return CONS_TYPES.has(mt) ? mt : '';
+  }
+  function directLabel(row){
+    const mt = String(row.movementType || '').trim();
+    const to = String(row.order || '').trim() ? 'work order' : 'account';
+    return mt === '110' ? `Reversal of a receipt bought for the ${to}` : `Bought for the ${to} · used on arrival (not shelf stock)`;
+  }
+
   function describe(code){
     const c = String(code == null ? '' : code).trim();
     return DESC[c] || ('Movement ' + c);
@@ -65,9 +84,10 @@
   // Signed effect on the back-calc Stock-on-Hand line — mirrors the exact logic
   // in inventory-back-calc.js (DIRECTIONAL row-signed, else MVT_SIGN × |qty|,
   // else excluded → 0). Returns 0 when the movement doesn't move the line.
-  function stockSignedDelta(row){
+  function stockSignedDelta(row, siteSlocs){
     const BC = global.InventoryBackCalc;
     if (!BC) return 0;
+    if (BC.rowDelta) return BC.rowDelta(row, siteSlocs || null);       // the line's own rule (shelf or movement types)
     const mt = String(row.movementType || '').trim();
     const q  = parseFloat(row.quantity);
     if (!Number.isFinite(q) || q === 0) return 0;
@@ -85,16 +105,20 @@
     const stock = [];
     const XFER = { '309': 'mm', '310': 'mm', '411': 'sl', '412': 'sl' };   // transfer groups
     const xferNet = new Map();   // date|group → net signed qty for this material
-    for (const r of mb51){
-      if (String(r.material || '').trim() !== mat) continue;
+    const rows = mb51.filter(r => String(r.material || '').trim() === mat);
+    const BC = global.InventoryBackCalc;
+    const siteSlocs = (BC && BC.shelfSlocs) ? BC.shelfSlocs(json, mat, rows) : null;
+    for (const r of rows){
       const date = String(r.postingDate || '').trim();
       if (!date) continue;
       const mt    = String(r.movementType || '').trim();
       const order = String(r.order || '').trim();
-      if (CONS_TYPES.has(mt)){
-        consumption.push({ date, mt, mtDesc: describe(mt), qty: Math.abs(parseFloat(r.quantity) || 0), order });
+      const ck = consKind(r);
+      if (ck){
+        const direct = ck !== mt;   // a receipt bought for an account, counted as the issue it stands in for
+        consumption.push({ date, mt, mtDesc: direct ? directLabel(r) : describe(mt), qty: Math.abs(parseFloat(r.quantity) || 0), order });
       }
-      const sd = stockSignedDelta(r);
+      const sd = stockSignedDelta(r, siteSlocs);
       if (sd !== 0){
         const grp = XFER[mt] || null;
         if (grp) { const k = date + '|' + grp; xferNet.set(k, (xferNet.get(k) || 0) + sd); }

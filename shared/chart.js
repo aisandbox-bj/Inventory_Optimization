@@ -138,9 +138,16 @@
     // the start of the P1 window so the step-line can render, and a trailing
     // flat point at the analysis end (run date / P2 end) so the post-event
     // plateau is visible.
-    const startISO = material.p1Start || cum[0].date;
-    const endISO   = material.p2End   || cum[cum.length - 1].date;
-    if (new Date(startISO).getTime() < new Date(cum[0].date).getTime() && cum[0].cum !== 0) {
+    // APP-CHART-SAMESPAN (2026-10-14, operator: "charts must always have the same timescale … start and
+    // finish … orange and purple line just stays flat if no Tx"). Every material of a run is drawn from the
+    // run's chartStart (first MB51 date, or the P1 start if earlier) to its chartEnd (the run date). Was:
+    // from the first transaction / P1 start to the P2 end, so a material whose P2 was moved back to its last
+    // consumption stopped there (1002390 ended in Oct 2025 on a run of Oct 2026). Older cached results
+    // without chartStart / chartEnd keep the old span.
+    const fixedSpan = !!(material.chartStart && material.chartEnd);
+    const startISO = material.chartStart || material.p1Start || cum[0].date;
+    const endISO   = material.chartEnd   || material.p2End   || cum[cum.length - 1].date;
+    if (new Date(startISO).getTime() < new Date(cum[0].date).getTime() && (fixedSpan || cum[0].cum !== 0)) {
       cum = [{ date: startISO, delta: 0, cum: 0 }, ...cum];
     }
     if (new Date(endISO).getTime() > new Date(cum[cum.length - 1].date).getTime()) {
@@ -155,8 +162,8 @@
 
     const dates = cum.map(p => new Date(p.date).getTime());
     const cums  = cum.map(p => p.cum);
-    let xMin = Math.min(...dates);
-    let xMax = Math.max(...dates);
+    let xMin = fixedSpan ? new Date(startISO).getTime() : Math.min(...dates);
+    let xMax = fixedSpan ? new Date(endISO).getTime()   : Math.max(...dates);
     // Pad x by 7 days
     const xPad = (xMax - xMin) * 0.02 || 7 * 86400000;
     xMin -= xPad; xMax += xPad;
@@ -268,7 +275,9 @@
     // vertical orange dashed line so the operator can read "this is where
     // consumption stopped" at a glance.
     const sohSeries = material.stockOnHandSeries || [];
-    const stockoutWindows = material.stockoutWindows || [];
+    // APP-CHART-SAMESPAN — the bands follow the whole drawn stock line; material.stockoutWindows stays the
+    // analysis window (the Stockouts stat and the verdict rules read it).
+    const stockoutWindows = material.stockoutWindowsChart || material.stockoutWindows || [];
     const lastConsDate = material.lastConsumptionDate || null;
     const hasSohOverlay = sohSeries.length > 0;
     let yScaleSOH = null;

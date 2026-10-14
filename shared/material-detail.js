@@ -467,7 +467,11 @@
         ${(opts.nav || opts.notes || opts.whereUsedFn || opts.enablePopout) ? `<span class="nav-spacer"></span><div class="detail-right">${opts.nav ? `<button type="button" class="nav-btn" id="navPrev"${opts.nav.hasPrev === false ? ' disabled' : ''}>‹ Prev</button><button type="button" class="nav-btn" id="navNext"${opts.nav.hasNext === false ? ' disabled' : ''}>Next ›</button>` : ''}${opts.notes ? `<button type="button" class="notes-btn${opts.notes.hasNote ? ' has-note' : ''}" id="notesBtn">✎ Note</button>` : ''}${opts.whereUsedFn ? `<button type="button" class="wu-btn" id="wuBtn">⊞ Where used</button>` : ''}${opts.enablePopout ? `<button type="button" class="popout-btn" id="popoutBtn">⤢ Pop out</button>` : ''}</div>` : ''}
       </div>
       <div class="chart-host" id="chartHost"></div>
-      <div class="chart-caveat">Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.</div>
+      <div class="chart-caveat">${mat.stockLineRule === 'shelf'
+        ? 'Stock-on-hand line is rebuilt from every MB51 line in the shelf storage location; parts bought straight for an order have no storage location and count as consumption, not stock. Not pulled from SAP.'
+        : mat.stockLineRule === 'movementType'
+          ? '⚠ Stock-on-hand line is back-calculated from MB51 movement types: this run\'s MB51 has no storage location, so parts bought straight for an order are read as stock and the line can drop below zero. Re-run Intake with an MB51 that includes Storage Location. Not pulled from SAP.'
+          : 'Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.'}</div>
       ${(opts.snapshotAlign && opts.snapshotAlign.hasImDate && !opts.snapshotAlign.aligned) ? `<div class="chart-caveat soh-misalign">⚠ Stock snapshot dated <b>${escapeHtml(opts.snapshotAlign.imDate)}</b> but MB51 runs to <b>${escapeHtml(opts.snapshotAlign.lastMb51Date)}</b> — ${Math.abs(opts.snapshotAlign.gapDays)} day${Math.abs(opts.snapshotAlign.gapDays) === 1 ? '' : 's'} of movements ${opts.snapshotAlign.gapDays > 0 ? 'after' : 'before'} the stock snapshot. The Stock-on-Hand line and stockout flags are offset by the net of those movements — re-extract both on the same SAP run date.</div>` : ''}
 
       <!-- APP-TREND-STATX — the stat block is a primary 2×4 (always shown) plus a

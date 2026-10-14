@@ -12,6 +12,35 @@
   const RETURN_TYPES = new Set(['262', '202']);   // returns
   const VALID_TYPES  = new Set([...ISSUE_TYPES, ...RETURN_TYPES]);
 
+  /* ─── APP-FIX-DIRECTCHARGE (2026-10-14) — parts bought straight for an account ───
+     A 109 with NO storage location is a receipt bought for a work order, cost
+     centre or project ("GR AccAss"): SAP charges it to that account on arrival,
+     so it never reaches the shelf. It IS consumption (operator 2026-10-14: "they
+     cannot be excluded from consumption"), counted like the issue it stands in
+     for: 261 when it carries an order, else 201. Its reversal (110, no storage
+     location) counts like 262 / 202. Recognised only when the MB51 row carries the
+     storageLocation field (Intake maps it from 2026-10-14); runs without it keep the
+     old reading (261 / 262 / 201 / 202 only). Every consumption read in this engine
+     goes through consMvt(), so the orange line, P1 / P2 rates, events, batches,
+     HCE and scope membership all agree. The 109 itself stays a 109 everywhere else
+     (Trace still reads it as the site delivery for lead times). */
+  function isDirectCharge(r){
+    if (!r || !Object.prototype.hasOwnProperty.call(r, 'storageLocation')) return false;
+    const mt = String(r.movementType || '').trim();
+    if (mt !== '109' && mt !== '110') return false;
+    return !String(r.storageLocation == null ? '' : r.storageLocation).trim();
+  }
+  /** The consumption movement type a row counts as ('261' · '262' · '201' · '202'), or '' when it isn't consumption. */
+  function consMvt(r){
+    const mt = String(r.movementType || '').trim();
+    if (VALID_TYPES.has(mt)) return mt;
+    if (isDirectCharge(r)) {
+      const o = String(r.order || '').trim();
+      return mt === '109' ? (o ? '261' : '201') : (o ? '262' : '202');
+    }
+    return '';
+  }
+
   /* ─── Date helpers ──────────────────────────────────────────────────────── */
   function toDate(s){ if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d; }
   function inRange(d, start, end){ const dd = toDate(d); if (!dd) return false; const ds = toDate(start), de = toDate(end); return ds && de && dd >= ds && dd <= de; }
@@ -46,6 +75,12 @@
     return `${last.getUTCFullYear()}-${String(last.getUTCMonth() + 1).padStart(2, '0')}-${String(last.getUTCDate()).padStart(2, '0')}`;
   }
 
+  /* APP-CHART-SAMESPAN — a stock-out window cut to start on `fromIso` (days recounted, inclusive). */
+  function clipWindow(w, fromIso){
+    const days = Math.round((Date.parse(w.end) - Date.parse(fromIso)) / 86400000) + 1;
+    return { start: fromIso, end: w.end, days };
+  }
+
   /* ─── Group-by helper ───────────────────────────────────────────────────── */
   function groupBy(rows, keyFn){
     const out = new Map();
@@ -72,7 +107,7 @@
     for (const r of transactions) {
       const m = String(r.material || '').trim();
       if (!m) continue;
-      const mt = String(r.movementType || '').trim();
+      const mt = consMvt(r);
       if (!VALID_TYPES.has(mt)) continue;
       const q = Math.abs(parseFloat(r.quantity) || 0);
 
@@ -120,7 +155,7 @@
     const xd = (excludeDates instanceof Set) ? excludeDates : null;
     for (const r of transactions) {
       if (!inRange(r.postingDate, start, end)) continue;
-      const mt = String(r.movementType || '').trim();
+      const mt = consMvt(r);
       if (!VALID_TYPES.has(mt)) continue;
       rows++;
       if (xd && xd.has(r.postingDate)) continue;
@@ -144,7 +179,7 @@
     const sigmaN = (params && params.invAdjSigmaThreshold) || 5;
     const dailyMap = new Map();   // date → { date, count, materials:Set, totalQty }
     for (const r of (mb51 || [])) {
-      const mt = String(r.movementType || '').trim();
+      const mt = consMvt(r);
       if (!ISSUE_TYPES.has(mt)) continue;          // adjustments post as issues (typically 201)
       const d = r.postingDate;
       if (!d) continue;
@@ -197,7 +232,7 @@
     const set = new Set(confirmedDates);
     const byDate = new Map();
     for (const r of transactions) {
-      const mt = String(r.movementType || '').trim();
+      const mt = consMvt(r);
       if (!ISSUE_TYPES.has(mt)) continue;
       const d = r.postingDate;
       if (!d || !set.has(d)) continue;
@@ -236,7 +271,7 @@
 
     const issueRows = transactions.filter(r => {
       if (!inRange(r.postingDate, pStart, pEnd)) return false;
-      return ISSUE_TYPES.has(String(r.movementType || '').trim());
+      return ISSUE_TYPES.has(consMvt(r));
     });
     if (issueRows.length === 0) return [];
 
@@ -299,7 +334,7 @@
    * Operates on the full analysis window's issue rows.
    */
   function classifyPattern(transactions, params){
-    const issueRows = transactions.filter(r => ISSUE_TYPES.has(String(r.movementType || '').trim()));
+    const issueRows = transactions.filter(r => ISSUE_TYPES.has(consMvt(r)));
     if (issueRows.length === 0) return 'SMOOTH';
     const byOrder = new Map();
     for (const r of issueRows) {
@@ -335,7 +370,7 @@
     for (const r of transactions) {
       const d = r.postingDate;
       if (!d) continue;
-      const mt = String(r.movementType || '').trim();
+      const mt = consMvt(r);
       if (!VALID_TYPES.has(mt)) continue;
       const q = Math.abs(parseFloat(r.quantity) || 0);
       const delta = ISSUE_TYPES.has(mt) ? q : -q;
@@ -487,7 +522,7 @@
   function countIssueWorkOrders(transactions){
     const orders = new Set();
     for (const r of transactions) {
-      const mt = String(r.movementType || '').trim();
+      const mt = consMvt(r);
       if (!ISSUE_TYPES.has(mt)) continue;
       const o = String(r.order || '').trim();
       if (o) orders.add(o);
@@ -525,7 +560,7 @@
     const transactions = mb51.filter(t => {
       const m = String(t.material || '').trim();
       if (!mats.has(m)) return false;
-      const mt = String(t.movementType || '').trim();
+      const mt = consMvt(t);
       return VALID_TYPES.has(mt);
     });
     return [{
@@ -598,7 +633,7 @@
       for (const t of mb51) {
         const owners = orderModels.get(String(t.order || '').trim());
         if (!owners) continue;
-        if (!VALID_TYPES.has(String(t.movementType || '').trim())) continue;
+        if (!VALID_TYPES.has(consMvt(t))) continue;
         for (const mi of owners) ownTx[mi].push(t);
       }
     }
@@ -629,7 +664,7 @@
       for (const t of mb51) {
         const bi = bucketOf.get(String(t.material || '').trim());
         if (bi === undefined) continue;
-        if (!VALID_TYPES.has(String(t.movementType || '').trim())) continue;
+        if (!VALID_TYPES.has(consMvt(t))) continue;
         const o = String(t.order || '').trim();
         const unit = (bi >= 0 && modelOrderSf[bi].get(o)) || orderUnit.get(o);
         (bi === -1 ? multiTx : allTx[bi]).push(unit ? { ...t, equipmentUnit: unit } : { ...t });
@@ -669,13 +704,13 @@
        on ALL of its consumption, like every other route. Was: only the lines on the listed orders. */
     let materials = set;
     if (useWO) {
-      const own = mb51.filter(t => set.has(String(t.order || '').trim()) && VALID_TYPES.has(String(t.movementType || '').trim()));
+      const own = mb51.filter(t => set.has(String(t.order || '').trim()) && VALID_TYPES.has(consMvt(t)));
       materials = new Set();
       for (const [mat, agg] of netConsumptionByMaterial(own, null)) if (agg.net > 0) materials.add(mat);
     }
     const transactions = mb51.filter(t => {
       if (!materials.has(String(t.material || '').trim())) return false;
-      const mt = String(t.movementType || '').trim();
+      const mt = consMvt(t);
       return VALID_TYPES.has(mt);
     });
     return [{
@@ -709,7 +744,7 @@
     let transactions = mb51.filter(t => {
       const m = String(t.material || '').trim();
       if (!matSet.has(m)) return false;
-      const mt = String(t.movementType || '').trim();
+      const mt = consMvt(t);
       return VALID_TYPES.has(mt);
     });
     if (mmin != null || mmax != null) {
@@ -749,7 +784,7 @@
       const tx = mb51.filter(t => {
         const m = String(t.material || '').trim();
         if (!mats.has(m)) return false;
-        const mt = String(t.movementType || '').trim();
+        const mt = consMvt(t);
         return VALID_TYPES.has(mt);
       });
       out.push({ key: vendor, name: vendor, kind: 'vendor', materials: mats, transactions: tx });
@@ -758,7 +793,7 @@
       const tx = mb51.filter(t => {
         const m = String(t.material || '').trim();
         if (!multi.has(m)) return false;
-        const mt = String(t.movementType || '').trim();
+        const mt = consMvt(t);
         return VALID_TYPES.has(mt);
       });
       out.push({ key: '__MULTI__', name: 'MULTI · cross-vendor', kind: 'multi', materials: multi, transactions: tx });
@@ -788,6 +823,16 @@
     const p1Months   = Math.max(1, monthsBetween(p1Start, p1End) + 1);
     const p2Start    = addMonths(runDate, -p2Months);
     const p2End      = runDate;
+
+    // APP-CHART-SAMESPAN (2026-10-14) — every material's chart runs from the same start (first MB51
+    // date of the run, or the P1 start if earlier) to the run date (or the last MB51 date, if the MB51 was
+    // pulled after the stock snapshot); the stock line is drawn over it all.
+    let chartStart = p1Start, chartEnd = runDate;
+    for (const r of (json.data.mb51 || [])) {
+      const d = r.postingDate; if (!d) continue;
+      if (d < chartStart) chartStart = d;
+      if (d > chartEnd) chartEnd = d;
+    }
 
     const master = json.data.inventoryMaster || [];
     const masterIdx = new Map();
@@ -881,7 +926,7 @@
         // Pulled up so APP-E11's P2-anchoring decision can see lastConsDate.
         let _issuesQty = 0, _returnsQty = 0, _lastIssueDate = '';
         for (const r of tx) {
-          const mt = String(r.movementType || '').trim();
+          const mt = consMvt(r);
           if (!VALID_TYPES.has(mt)) continue;
           const qv = Math.abs(parseFloat(r.quantity) || 0);
           if (ISSUE_TYPES.has(mt)) {
@@ -903,7 +948,7 @@
         // are NOT events and don't reduce an event's size.
         const _evQty = new Map();
         for (const r of tx) {
-          const mt = String(r.movementType || '').trim();
+          const mt = consMvt(r);
           if (!ISSUE_TYPES.has(mt)) continue;
           const qv = Math.abs(parseFloat(r.quantity) || 0);
           const o  = String(r.order || '').trim();
@@ -938,7 +983,7 @@
         // event cons" display stat). Empty when the material is drawn only via CC.
         const _batchQty = new Map();
         for (const r of tx) {
-          const mt = String(r.movementType || '').trim();
+          const mt = consMvt(r);
           if (mt !== '261' && mt !== '262') continue;          // WO issue / return only
           const o = String(r.order || '').trim();
           if (!o) continue;                                     // order-less → not a job batch
@@ -969,6 +1014,8 @@
         // stockoutWindows to make the P2 anchoring decision below).
         let stockOnHandSeries = [];
         let stockoutWindows   = [];
+        let stockoutWindowsChart = [];   // APP-CHART-SAMESPAN — over the whole drawn span (chart bands only)
+        let stockLineRule     = null;    // APP-FIX-SHELF-STOCK — 'shelf' | 'movementType'
         let socBackCalcAnchor = null;
         if (typeof InventoryBackCalc !== 'undefined' && typeof stock === 'number') {
           const backCalcMonths = (typeof params?.socBackCalcMonths === 'number' && params.socBackCalcMonths > 0)
@@ -984,15 +1031,26 @@
             // FIX-1 — pass the FULL per-material MB51 slice (includes 109
             // site receipts), not the bucket-filtered `tx`.
             const fullMb51 = mb51FullByMat.get(q.material) || [];
+            // APP-FIX-SHELF-STOCK — shelf storage locations when the MB51 carries them (else null → movement types).
+            const siteSlocs = InventoryBackCalc.shelfSlocs ? InventoryBackCalc.shelfSlocs(json, q.material, fullMb51) : null;
+            // APP-CHART-SAMESPAN — walk back over the whole chart span (the line is the same on any day whatever
+            // the span, because the walk starts from today's stock), then hand the analysis only the stock-outs
+            // inside its own window, exactly as before.
+            const spanStart = (chartStart < win.windowStart) ? chartStart : win.windowStart;
             const out = InventoryBackCalc.backCalcSOH({
               material:     q.material,
               currentSOH:   stock,
               mb51Rows:     fullMb51,
-              windowStart:  win.windowStart,
-              windowEnd:    win.windowEnd
+              windowStart:  spanStart,
+              windowEnd:    win.windowEnd,
+              siteSlocs
             });
-            stockOnHandSeries = out.series;
-            stockoutWindows   = out.stockoutWindows;
+            stockLineRule        = out.rule || null;
+            stockOnHandSeries    = out.series.filter(p => p.date >= chartStart);
+            stockoutWindowsChart = out.stockoutWindows.filter(w => w.end >= chartStart)
+                                     .map(w => (w.start < chartStart ? clipWindow(w, chartStart) : w));
+            stockoutWindows      = out.stockoutWindows.filter(w => w.end >= win.windowStart)
+                                     .map(w => (w.start < win.windowStart ? clipWindow(w, win.windowStart) : w));
           }
         }
 
@@ -1171,15 +1229,15 @@
           movingAvgPrice,
           totalReservation,
           totalNet:     Math.round(q.totalNet * 10) / 10,
-          p1Net:        Math.round((tx.filter(r => inRange(r.postingDate, p1Start, p1End) && VALID_TYPES.has(String(r.movementType || '').trim())).reduce((s, r) => {
-                          const mt = String(r.movementType || '').trim();
+          p1Net:        Math.round((tx.filter(r => inRange(r.postingDate, p1Start, p1End) && VALID_TYPES.has(consMvt(r))).reduce((s, r) => {
+                          const mt = consMvt(r);
                           const qv = Math.abs(parseFloat(r.quantity) || 0);
                           return s + (ISSUE_TYPES.has(mt) ? qv : -qv);
                         }, 0)) * 10) / 10,
           p1Rate:       Math.round(p1r * 100) / 100,
           p1Flag:       p1f,
-          p2Net:        Math.round((tx.filter(r => inRange(r.postingDate, p2Start, p2End) && VALID_TYPES.has(String(r.movementType || '').trim())).reduce((s, r) => {
-                          const mt = String(r.movementType || '').trim();
+          p2Net:        Math.round((tx.filter(r => inRange(r.postingDate, p2Start, p2End) && VALID_TYPES.has(consMvt(r))).reduce((s, r) => {
+                          const mt = consMvt(r);
                           const qv = Math.abs(parseFloat(r.quantity) || 0);
                           return s + (ISSUE_TYPES.has(mt) ? qv : -qv);
                         }, 0)) * 10) / 10,
@@ -1214,7 +1272,10 @@
           // APP-E1 (v2.1.3) — stockout-aware diagnostic fields
           lastConsumptionDate,                     // ISO or null — max(postingDate) where mvt ∈ {261,201}
           stockOnHandSeries,                       // [{date, soh}] daily SOH back-calc over the window
-          stockoutWindows,                         // [{start, end, days}] periods where SOH ≤ 0
+          stockoutWindows,                         // [{start, end, days}] periods where SOH ≤ 0 (analysis window)
+          stockoutWindowsChart,                    // APP-CHART-SAMESPAN — the same over the whole drawn span (chart bands)
+          stockLineRule,                           // APP-FIX-SHELF-STOCK — 'shelf' (storage location) | 'movementType' (older runs)
+          chartStart, chartEnd,                    // APP-CHART-SAMESPAN — one span for every chart of the run
           rateDropCause,                           // 'STOCKOUT_DRIVEN' | 'GENUINE_DEMAND_DROP' | null
           stockoutDrivenDrop,                      // boolean — true when rateDropFlag + stockout window overlaps P2
           socBackCalcAnchor,                       // 'lastConsumption' | 'today' | null — which date anchored the back-calc window
@@ -1291,7 +1352,7 @@
     const d = (json && json.data) || {};
     const c = k => (Array.isArray(d[k]) ? d[k].length : 0);
     return [
-      'pc4',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption · pc4 = the work-order list too) so a tab can't keep a stale cached result
+      'pc5',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption · pc4 = the work-order list too · pc5 = 2026-10-14 shelf stock line + bought-for-the-account receipts as consumption + one chart span) so a tab can't keep a stale cached result
       m.assessmentName || m.name || '', m.uploadedAt || '', m.savedAt || '', m.createdAt || '',
       m.inventoryMasterDate || '',
       (json && json.SCHEMA_VERSION) || m.schemaVersion || '',
@@ -1333,6 +1394,7 @@
   /* ─── Public API ────────────────────────────────────────────────────────── */
   global.AppPipeline = Object.freeze({
     ISSUE_TYPES, RETURN_TYPES, VALID_TYPES,
+    consMvt, isDirectCharge,                       // APP-FIX-DIRECTCHARGE — the one consumption rule, for the other modules
     netConsumptionByMaterial,
     calcPeriodRate,
     detectHce,

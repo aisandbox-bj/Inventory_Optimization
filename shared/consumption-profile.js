@@ -23,6 +23,12 @@
 
   const ISSUE = new Set(['261', '201']);
   function num(v){ const x = Number(v); return Number.isFinite(x) ? x : 0; }
+  // APP-FIX-DIRECTCHARGE (2026-10-14) — the pipeline's one consumption rule (a 109 / 110 with no storage
+  // location = a part bought for an account, counted as the issue / reversal it stands in for).
+  function cmt(r){
+    const P = global.AppPipeline;
+    return (P && P.consMvt) ? P.consMvt(r) : String(r.movementType || '').trim();
+  }
 
   function eventQtys(json, material){
     const mb51 = (json && json.data && json.data.mb51) || [];
@@ -30,7 +36,7 @@
     const ev = new Map();
     for (const r of mb51){
       if (String(r.material || '').trim() !== mat) continue;
-      const mt = String(r.movementType || '').trim();
+      const mt = cmt(r);
       if (!ISSUE.has(mt)) continue;
       const q = Math.abs(num(r.quantity));
       const o = String(r.order || '').trim();
@@ -47,7 +53,7 @@
     let i = 0;
     for (const r of mb51){
       if (String(r.material || '').trim() !== mat) continue;
-      const mt = String(r.movementType || '').trim();
+      const mt = cmt(r);
       if (!ISSUE.has(mt)) continue;
       const q = Math.abs(num(r.quantity));
       const o = String(r.order || '').trim() || ('__row_' + (i++));
@@ -65,7 +71,7 @@
     const byOrder = new Map();
     for (const r of mb51){
       if (String(r.material || '').trim() !== mat) continue;
-      const mt = String(r.movementType || '').trim();
+      const mt = cmt(r);
       if (mt !== '261' && mt !== '262') continue;        // WO issue / return only — excludes CC
       const o = String(r.order || '').trim();
       if (!o) continue;                                  // order-less → not a job batch

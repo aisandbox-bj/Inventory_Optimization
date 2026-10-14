@@ -381,6 +381,33 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Stock line by storage location + parts bought for an order count as consumption + one chart span - 2026-10-14 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-14</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-FIX-SHELF-STOCK + APP-FIX-DIRECTCHARGE + APP-CHART-SAMESPAN</b>: the stock line no longer goes below zero; parts bought straight for an order count as consumption; every chart has the same start and finish — <b>browser-verified on the operator's live MB51; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator report:</b> stock lines below zero (1002181 down to −228). Investigation (<i>Investigation 2026-10-14 - stock line below zero</i>): 68 materials in the run went below zero, 9 on the Trend list. Nothing was missing from the MB51.</li>
+        <li><b>Cause:</b> a 109 with text "GR AccAss fr. Val.B." has <b>no storage location</b>: the part was bought for a work order, cost centre or project and charged to it on arrival; it never reached the shelf. Trend counted every 109 as stock arriving, so walking back from today's stock the line fell below zero. 186 such lines on 90 of 91 materials in the operator's MB51. Smaller: stock moved from 113D into 113S (411) was missed; 561 opening balances and a 641 out of the shelf were left out.</li>
+        <li><b>Stock line now (APP-FIX-SHELF-STOCK):</b> when MB51 carries a storage location, the line counts <b>every MB51 line in the shelf storage location</b> (the storage location on the Inventory Master row), with SAP's sign, whatever the movement type. Proof: adding those lines from go-live gives the Inventory Master stock for 91 of 91 materials; none goes below zero. One rule (<code>InventoryBackCalc.rowDelta</code>) serves the line, its hover list and the Trace cadence dots.</li>
+        <li><b>Consumption now (APP-FIX-DIRECTCHARGE, operator: "they cannot be excluded from consumption"):</b> a 109 with no storage location counts as consumption (as a 261 when it has an order, else a 201); a 110 with no storage location counts as its reversal. One rule (<code>AppPipeline.consMvt</code>) feeds the orange line, Qty Iss., P1 / P2 rates, Min / Max, events, batches, scope membership, Where used, the hover list, the Sandbox profile and Trace's "Consumed" volume line. The 109 stays a 109 for Trace lead times.</li>
+        <li><b>Intake:</b> MB51 Storage Location is now read (same aliases as the Inventory Master; a blank cell is kept as blank). The gate notes how many receipt lines were bought for an account; an MB51 <b>without</b> the column gets a warning saying what it costs.</li>
+        <li><b>Charts (APP-CHART-SAMESPAN, operator: "charts must always have the same timescale … start and finish … orange and purple line just stays flat if no Tx"):</b> every chart of a run runs from the first MB51 date (or the P1 start if earlier) to the run date (or the last MB51 date if later). The stock line is drawn over the whole span; the analysis still reads stock-outs only inside its own window, so verdicts are unchanged by the longer line. Was: the chart ended at the P2 end, so a material whose P2 was moved back to its last consumption stopped there (1002390 ended in Oct 2025 on a run of Oct 2026).</li>
+        <li><b>Verified in the browser:</b>
+          <ul>
+            <li>operator's saved run (no storage location): all 115 materials identical to the old engine in every field; the old stock line equals the new one day for day; one span for all; the chart caption warns that the line uses movement types;</li>
+            <li>operator's fresh MB51 (with storage location) read through Intake: storage location mapped, 655 blank; shelf rule on every material; <b>no material below zero</b>; every line ends at the Inventory Master stock; consumption totals and P2 rates match an independent recount (e.g. 1002181: 185 → 505 issued, P2 16.3 → 104.7 / mo, GREY → ORANGE, Min 262 / Max 523); orange line = hover list = Where used (505 / 1,055 / 482);</li>
+            <li>Intake gate: the note with storage location, the warning without; Trend, Trace, Intake, Sandbox: no console errors.</li>
+          </ul></li>
+        <li><b>What changes for the operator:</b> a saved run keeps the old reading until Intake is run again with an MB51 that has Storage Location. Then Min / Max rise on parts bought straight for work orders (Trend list on the 91 test materials: 17 → 30).</li>
+        <li><b>Not changed, open:</b> the rule that moves P2 back to the last consumption when stock is at zero on the run date misfires when stock sat unused for months before running out (1002390: 96 on the shelf for 11 months, then written off); awaiting the operator. Trace "time to first use" for parts bought for an order (the 109 is the use) not changed. Calibre Mirror carries its own copy of the stock module and is not changed.</li>
+        <li>Files: <code>shared/inventory-back-calc.js</code>, <code>shared/pipeline.js</code> (cache tag pc5), <code>shared/parsers.js</code>, <code>shared/chart.js</code>, <code>shared/material-detail.js</code>, <code>shared/movement-detail.js</code>, <code>shared/where-used.js</code>, <code>shared/mrp-cadence.js</code>, <code>shared/consumption-profile.js</code>, <code>intake/intake.js</code>, <code>trace/trace.js</code>. Rollback: <code>_rollback/SHELF-STOCK-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Every scope route picks materials only (work-order list) - 2026-10-13 -->
     <article class="roc-entry dev">
       <div class="head">

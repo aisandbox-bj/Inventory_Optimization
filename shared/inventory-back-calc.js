@@ -122,6 +122,84 @@
     '601', '602', '653', '331', '332'
   ]));
 
+  /* ─── APP-FIX-SHELF-STOCK (2026-10-14) — the shelf rule ───────────────────
+     When the MB51 carries a storage location (Intake maps it from 2026-10-14),
+     the stock line counts EVERY MB51 line posted to the material's shelf storage
+     location(s) — the storage location on its Inventory Master row — with the
+     sign SAP gives it, whatever the movement type. Lines with NO storage
+     location never touched the shelf. Proven on the operator's live data
+     2026-10-14: the shelf lines added up from go-live (561 opening balances
+     included) equal the Inventory Master stock for 91 of 91 materials, and no
+     material goes below zero. The movement-type table above was wrong in three
+     ways the shelf rule fixes by itself:
+       · 109 "GR AccAss" (bought for a work order / cost centre / project) has
+         NO storage location — charged to the account on arrival, never on the
+         shelf — but the table counted every 109 as stock arriving, which pushed
+         the line below zero (186 lines on 90 materials in that data);
+       · 411 from a transit location (113D) into the shelf (113S) netted to zero
+         under the row-signed rule, so stock arriving by transfer was missed;
+       · 561 opening balances and 641 out of the shelf were left out.
+     Sign: a movement type in MVT_SIGN keeps its fixed direction (× |qty|), so an
+     unsigned extract still reads issues as issues; any other line keeps the
+     sign SAP wrote on it. Runs without a storage location on MB51 keep the
+     movement-type table (rule 'movementType'), and the chart says so. */
+  const hasOwn = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+  function slocOf(row) { return String(row.storageLocation == null ? '' : row.storageLocation).trim(); }
+
+  /** Signed forward-in-time effect of ONE MB51 row on the stock line.
+   *  `siteSlocs` (Set) = the shelf storage locations → shelf rule; null → movement-type table. */
+  function rowDelta(r, siteSlocs) {
+    const q = parseFloat(r.quantity);
+    if (!Number.isFinite(q) || q === 0) return 0;
+    const mt = String(r.movementType || '').trim();
+    if (siteSlocs && hasOwn(r, 'storageLocation')) {
+      if (!siteSlocs.has(slocOf(r))) return 0;            // not on the shelf (blank = charged to an account)
+      const sign = MVT_SIGN[mt];
+      return sign != null ? sign * Math.abs(q) : q;
+    }
+    if (DIRECTIONAL_MVTS.has(mt)) return q;                // (a) row-signed
+    const sign = MVT_SIGN[mt];
+    return sign == null ? 0 : sign * Math.abs(q);          // (b) fixed sign · (c) excluded → 0
+  }
+
+  /** Does this run's MB51 carry storage locations? Cached per MB51 array. */
+  const _slocCtx = new WeakMap();
+  function shelfContext(json) {
+    const data = (json && json.data) || {};
+    const mb51 = data.mb51 || [];
+    if (_slocCtx.has(mb51)) return _slocCtx.get(mb51);
+    let on = false;
+    for (let i = 0; i < mb51.length; i++) { if (hasOwn(mb51[i], 'storageLocation')) { on = true; break; } }
+    const byMat = new Map(), all = new Set();
+    for (const r of (data.inventoryMaster || [])) {
+      const s = slocOf(r); if (!s) continue;
+      const m = String(r.material || '').trim();
+      all.add(s);
+      if (!byMat.has(m)) byMat.set(m, new Set());
+      byMat.get(m).add(s);
+    }
+    const ctx = { on, byMat, all };
+    _slocCtx.set(mb51, ctx);
+    return ctx;
+  }
+
+  /** The shelf storage locations for one material, or null when the shelf rule can't run.
+   *  Order: its Inventory Master row(s) → every storage location on the Inventory Master →
+   *  the storage locations its own issues (261 / 201) came from. */
+  function shelfSlocs(json, material, mb51Rows) {
+    const ctx = shelfContext(json);
+    if (!ctx.on) return null;
+    const m = String(material == null ? '' : material).trim();
+    if (ctx.byMat.has(m)) return ctx.byMat.get(m);
+    if (ctx.all.size) return ctx.all;
+    const fromIssues = new Set();
+    for (const r of (mb51Rows || [])) {
+      const mt = String(r.movementType || '').trim();
+      if ((mt === '261' || mt === '201') && slocOf(r)) fromIssues.add(slocOf(r));
+    }
+    return fromIssues.size ? fromIssues : null;
+  }
+
   /* ─── Date helpers ──────────────────────────────────────────────────────── */
   /* APP-FIX-BACKCALC-TZ (2026-05-25) — ALL date math is UTC.
      MB51 posting dates are calendar dates ("2026-05-25"), not instants.
@@ -183,26 +261,32 @@
    *                                          (caller filters; we don't re-filter)
    * @param {string}  args.windowStart     — ISO date, inclusive
    * @param {string}  args.windowEnd       — ISO date, inclusive (typically today)
+   * @param {Set}     [args.siteSlocs]     — APP-FIX-SHELF-STOCK: the shelf storage locations
+   *                                          (from shelfSlocs()); omitted/null → movement-type table
    * @returns {{
    *   series:           Array<{date:string, soh:number}>,
    *   stockoutWindows:  Array<{start:string, end:string, days:number}>,
    *   currentSOH:       number,
+   *   rule:             'shelf'|'movementType',
    *   error:            string|null
    * }}
    */
-  function backCalcSOH({ material, currentSOH, mb51Rows, windowStart, windowEnd }) {
+  function backCalcSOH({ material, currentSOH, mb51Rows, windowStart, windowEnd, siteSlocs }) {
+    const slocs = (siteSlocs && siteSlocs.size) ? siteSlocs : null;
+    const rule  = slocs ? 'shelf' : 'movementType';
     // Guard: no current SOH = can't anchor the walk
     if (currentSOH == null || !Number.isFinite(currentSOH)) {
-      return { series: [], stockoutWindows: [], currentSOH: null, error: 'no current SOH on Inventory Master' };
+      return { series: [], stockoutWindows: [], currentSOH: null, rule, error: 'no current SOH on Inventory Master' };
     }
     const startMs = toMs(windowStart);
     const endMs   = toMs(windowEnd);
     if (startMs == null || endMs == null || startMs >= endMs) {
-      return { series: [], stockoutWindows: [], currentSOH, error: 'invalid window' };
+      return { series: [], stockoutWindows: [], currentSOH, rule, error: 'invalid window' };
     }
 
-    // Group MB51 rows by day. Each day's net delta = Σ signedDelta(row).
-    // APP-E16 — three signed-delta paths:
+    // Group MB51 rows by day. Each day's net delta = Σ rowDelta(row).
+    // Shelf rule (APP-FIX-SHELF-STOCK) when siteSlocs is given; otherwise the
+    // APP-E16 movement-type paths:
     //   (a) DIRECTIONAL MVT (309/310/411/412): trust row's qty sign as-is.
     //       SAP emits source row as negative, destination row as positive
     //       under the SAME MVT; a fixed sign would mis-sign one leg.
@@ -210,24 +294,14 @@
     //   (c) Otherwise (DELIBERATELY_EXCLUDED or unknown): row skipped.
     const deltasByDay = new Map();   // isoDay → net forward-in-time qty
     for (const r of (mb51Rows || [])) {
-      const mt = String(r.movementType || '').trim();
       const d = String(r.postingDate || '');
       if (!d) continue;
       const ms = toMs(d);
       if (ms == null) continue;
-      const qRaw = parseFloat(r.quantity);
-      if (!Number.isFinite(qRaw) || qRaw === 0) continue;
       // Only days from windowStart through windowEnd matter to the visible series.
       if (ms < startMs - 86400000 || ms > endMs + 86400000) continue;
-
-      let signedDelta;
-      if (DIRECTIONAL_MVTS.has(mt)) {
-        signedDelta = qRaw;                              // (a) row-signed
-      } else {
-        const sign = MVT_SIGN[mt];
-        if (sign == null) continue;                      // (c) not in map / excluded
-        signedDelta = sign * Math.abs(qRaw);             // (b) fixed-sign
-      }
+      const signedDelta = rowDelta(r, slocs);
+      if (signedDelta === 0) continue;
       deltasByDay.set(d, (deltasByDay.get(d) || 0) + signedDelta);
     }
 
@@ -280,7 +354,7 @@
       stockoutWindows.push(win);
     }
 
-    return { series, stockoutWindows, currentSOH, error: null };
+    return { series, stockoutWindows, currentSOH, rule, error: null };
   }
 
   /**
@@ -487,6 +561,9 @@
     countStockoutsInRange,
     stockoutDaysInRange,
     chooseP2Window,
+    rowDelta,                // APP-FIX-SHELF-STOCK — one line's effect on the stock line (shared with the hover)
+    shelfContext,            // APP-FIX-SHELF-STOCK — does this run's MB51 carry storage locations?
+    shelfSlocs,              // APP-FIX-SHELF-STOCK — a material's shelf storage locations, or null
     MVT_SIGN,
     DIRECTIONAL_MVTS,        // APP-E16 — exposed so callers can introspect / audit
     DELIBERATELY_EXCLUDED    // APP-E16 — exposed so callers can introspect / audit

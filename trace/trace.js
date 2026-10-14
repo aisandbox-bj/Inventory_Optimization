@@ -869,7 +869,8 @@
     const mb51Rows = ((state.json && state.json.data && state.json.data.mb51) || [])
                        .filter(r => String(r.material || '').trim() === String(mat));
     let res;
-    try { res = InventoryBackCalc.backCalcSOH({ material: mat, currentSOH: soh0, mb51Rows, windowStart: startIso, windowEnd: endIso }); }
+    const siteSlocs = InventoryBackCalc.shelfSlocs ? InventoryBackCalc.shelfSlocs(state.json, mat, mb51Rows) : null;   // APP-FIX-SHELF-STOCK
+    try { res = InventoryBackCalc.backCalcSOH({ material: mat, currentSOH: soh0, mb51Rows, windowStart: startIso, windowEnd: endIso, siteSlocs }); }
     catch (e){ return out; }
     if (!res || res.error || !res.series || !res.series.length) return out;
     for (const p of res.series) out.sohByDay.set(p.date, p.soh);
@@ -1772,7 +1773,7 @@
     // Consumed: MB51 MVT 261 (work order) + 201 (cost centre) — same independence
     // rationale; 201 added with APP-TRACE-FIRSTUSE so it matches "Last consumption".
     const consSeries = buildCumulativeSeries(
-      mb51.filter(r => { const mt = String(r.movementType || '').trim(); return mt === '261' || mt === '201'; }),
+      mb51.filter(r => { const mt = (window.AppPipeline && AppPipeline.consMvt) ? AppPipeline.consMvt(r) : String(r.movementType || '').trim(); return mt === '261' || mt === '201'; }),   // APP-FIX-DIRECTCHARGE — incl. parts bought for an order
       r => r.postingDate,
       r => Math.abs(parseFloat(r.quantity) || 0) * ps
     );

@@ -1002,7 +1002,18 @@
          itself reads. Was: anything outside 109 / 261 / 262 / 201 / 202 "will be ignored downstream", which was
          wrong: the stock line and Trace also use 107, 110, 221, 291, 309, 411, 541–543, 551, 711, 712 … */
       const BCm = (typeof InventoryBackCalc !== 'undefined') ? InventoryBackCalc : null;
-      if (BCm && BCm.MVT_SIGN) {
+      /* APP-FIX-SHELF-STOCK (2026-10-14) — with a storage location on MB51 the stock line counts every line in
+         the shelf storage location, whatever its movement type, so the "not counted" lists below only apply
+         to a file without it. Without it: say what that costs. */
+      const mb51Sloc = mb51.some(r => Object.prototype.hasOwnProperty.call(r, 'storageLocation'));
+      if (mb51Sloc) {
+        const direct = mb51.filter(r => { const mt = String(r.movementType || '').trim(); return (mt === '109' || mt === '110') && !String(r.storageLocation || '').trim(); }).length;
+        notes.push({ code:'mb51_sloc', sev:'note', msg:`MB51 has storage locations: the stock line counts every line in the shelf storage location.${direct ? ` ${direct.toLocaleString()} receipt line${direct === 1 ? '' : 's'} (109 / 110) with no storage location ${direct === 1 ? 'is a part' : 'are parts'} bought straight for an order, cost centre or project: counted as consumption, not stock.` : ''}` });
+      } else {
+        warnings.push({ code:'mb51_no_sloc', sev:'warn',
+          msg:'MB51 has no Storage Location column. The stock line falls back to movement types: parts bought straight for an order are read as stock arriving (the line can drop below zero) and are not counted as consumption. Re-export MB51 with Storage Location.' });
+      }
+      if (!mb51Sloc && BCm && BCm.MVT_SIGN) {
         const used = new Set(['261', '262', '201', '202', '109', '107']);   // consumption · site receipt · arrival at the 3PL (Trace lead times)
         Object.keys(BCm.MVT_SIGN).forEach(m => used.add(m));                // the stock line
         (BCm.DIRECTIONAL_MVTS || []).forEach(m => used.add(m));             // transfers, by the row's own sign
@@ -1151,7 +1162,7 @@
     dq.issues.concat(dq.notes || [], dq.warnings).forEach(i => {
       const li = document.createElement('li');
       li.className = i.sev;
-      const sev = `<span class="sev">${i.sev === 'note' ? 'merged' : i.sev}</span>`;
+      const sev = `<span class="sev">${i.sev === 'note' ? (i.undoKey ? 'merged' : 'note') : i.sev}</span>`;
       if (!i.merge && !i.undoKey) {
         li.innerHTML = `${sev}<span class="dq-msg">${escapeHtml(i.msg)}</span>`;
       } else {
@@ -1478,7 +1489,7 @@
     for (const r of mb51) {
       const m = String(r.material || '').trim();
       if (!m) continue;
-      const mt = String(r.movementType || '').trim();
+      const mt = (window.AppPipeline && AppPipeline.consMvt) ? AppPipeline.consMvt(r) : String(r.movementType || '').trim();   // APP-FIX-DIRECTCHARGE
       const q  = parseFloat(r.quantity);
       if (isNaN(q)) continue;
       out[m] = out[m] || 0;

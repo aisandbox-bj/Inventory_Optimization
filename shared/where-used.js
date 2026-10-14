@@ -11,6 +11,11 @@
      · All-time, split into annual buckets (by posting year).
      · Explicit "Unmapped WO" bucket for orders with no IW39 match — never
        silently dropped (credibility principle).
+     · APP-FIX-DIRECTCHARGE (2026-10-14): a 109 / 110 with no storage location
+       (bought straight for a work order / cost centre / project) counts as the
+       issue / reversal it stands in for (AppPipeline.consMvt), so these totals
+       tie to Trend's consumption. Quantity direction comes from the movement
+       (issue +, reversal −), not the row sign, since a receipt is posted positive.
 
    Availability: needs IW39 to resolve work orders → Sort Field. Model rollup
    needs Fleet Master; without it the table shows Sort Field directly.
@@ -25,6 +30,15 @@
 
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
   function num(v){ const x = Number(v); return Number.isFinite(x) ? x : 0; }
+  // The consumption movement a row counts as ('261' · '262' · '201' · '202' or ''), via the pipeline's one rule.
+  function consMvt(r){
+    const P = window.AppPipeline;
+    if (P && P.consMvt) return P.consMvt(r);
+    const mt = String(r.movementType || '').trim();
+    return (mt === '261' || mt === '262' || mt === '201' || mt === '202') ? mt : '';
+  }
+  // Consumption read positive, reversals negative.
+  function consQty(r, mvt){ const q = Math.abs(num(r.quantity)); return (mvt === '261' || mvt === '201') ? q : -q; }
   function yearOf(d){ const s = String(d || '').slice(0, 4); return /^\d{4}$/.test(s) ? s : null; }
   function fmt(n){ return n == null ? '—' : Math.round(n).toLocaleString(); }
 
@@ -56,7 +70,7 @@
     const unmappedWO  = { byYear: {}, total: 0 };  // 261/262 order not in IW39
 
     for (const r of rows){
-      const mvt = String(r.movementType || '').trim();
+      const mvt = consMvt(r);
       let kind;
       if      (mvt === '261' || mvt === '262') kind = 'wo';
       else if (mvt === '201' || mvt === '202') kind = 'cc';
@@ -64,10 +78,8 @@
       const yr = yearOf(r.postingDate);
       if (!yr) continue;
       years.add(yr);
-      // MB51 issue quantities are negative (stock out) and reversals positive, so
-      // negating makes consumption read positive AND nets reversals out
-      // automatically (261−262, 201−202).
-      const val = -num(r.quantity);
+      // Consumption reads positive, reversals net it out (261−262, 201−202).
+      const val = consQty(r, mvt);
 
       if (kind === 'cc'){
         cc.byYear[yr] = (cc.byYear[yr] || 0) + val; cc.total += val;
@@ -233,18 +245,18 @@
     let total = 0;
 
     for (const r of rows){
-      const mvt = String(r.movementType || '').trim();
+      const mvt = consMvt(r);
       const isWO = (mvt === '261' || mvt === '262');
       const isCc = (mvt === '201' || mvt === '202');
       if (isCC ? !isCc : !isWO) continue;
       const ym = ymOf(r.postingDate);
       if (!ym || (year && ym.y !== year)) continue;
-      const val = -num(r.quantity);   // issues negative → consumption positive, nets reversals
+      const val = consQty(r, mvt);    // consumption positive, nets reversals
 
       let key, fleetLab, unitLab, orderLab, descLab;
       if (isCC){
         key = 'm:' + ym.sortKey;            // group cost-centre issues by month
-        fleetLab = 'Cost centre'; unitLab = '—'; orderLab = '—'; descLab = 'Cost-centre issue (mvt 201/202)';
+        fleetLab = 'Cost centre'; unitLab = '—'; orderLab = '—'; descLab = 'Cost-centre / account issue (201/202, or bought for the account)';
       } else {
         const ord = String(r.order || '').trim();
         const sf  = ord ? orderToSF.get(ord) : '';

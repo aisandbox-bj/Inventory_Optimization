@@ -85,7 +85,8 @@
     const startIso = mfIso(firstSlotMs);
     const mb51Rows = ((json && json.data && json.data.mb51) || []).filter(r => String(r.material || '').trim() === String(mat));
     let res;
-    try { res = InventoryBackCalc.backCalcSOH({ material: mat, currentSOH: soh0, mb51Rows, windowStart: startIso, windowEnd: endIso }); }
+    const siteSlocs = InventoryBackCalc.shelfSlocs ? InventoryBackCalc.shelfSlocs(json, mat, mb51Rows) : null;   // APP-FIX-SHELF-STOCK
+    try { res = InventoryBackCalc.backCalcSOH({ material: mat, currentSOH: soh0, mb51Rows, windowStart: startIso, windowEnd: endIso, siteSlocs }); }
     catch (e){ return out; }
     if (!res || res.error || !res.series || !res.series.length) return out;
     for (const p of res.series) out.sohByDay.set(p.date, p.soh);

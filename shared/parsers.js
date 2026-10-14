@@ -36,7 +36,12 @@
          reads as IN_FLIGHT or PR_ONLY. Audit §"MB51_Opn.xlsx" col 24
          confirms the header is verbatim "Purchase order". String type
          to preserve leading zeros on PO numbers like 9600010502. */
-      purchaseOrder: ['Purchase order', 'PO', 'PO Number', 'PO No', 'PO No.', 'Purchasing Document']
+      purchaseOrder: ['Purchase order', 'PO', 'PO Number', 'PO No', 'PO No.', 'Purchasing Document'],
+      /* APP-FIX-SHELF-STOCK (2026-10-14) — storage location on every MB51 line. The stock line counts
+         the lines in the shelf storage location; a 109 / 110 with NO storage location is a part bought
+         straight for an order / cost centre / project (consumption, never shelf stock). Optional: a file
+         without it keeps the old movement-type reading. Same aliases as the Inventory Master. */
+      storageLocation: ['Storage Location', 'Sloc', 'Stor. Loc.', 'StorLoc']
     },
     iw39: {
       order:          ['Order', 'Order Number'],
@@ -271,7 +276,8 @@
       quantity:     'number',
       movementType: 'string',
       plant:         'string',  /* APP-T-01b */
-      purchaseOrder: 'string'   /* APP-FIX-T-04b — preserve PO leading zeros for PR↔MB51 join */
+      purchaseOrder: 'string',  /* APP-FIX-T-04b — preserve PO leading zeros for PR↔MB51 join */
+      storageLocation: 'string' /* APP-FIX-SHELF-STOCK — blank is kept as '' (blank means "not on the shelf") */
     },
     iw39: {
       order:          'string',
