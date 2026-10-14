@@ -378,8 +378,10 @@
             <tr><td><b>201</b></td><td>Goods issue to cost center</td><td class="warn">+ consumption</td><td>P1/P2 rates, cumulative, SOH back-calc</td></tr>
             <tr><td><b>262</b></td><td>Reversal of 261 (return)</td><td class="ok">− return</td><td>P1/P2 rates, cumulative, SOH back-calc</td></tr>
             <tr><td><b>202</b></td><td>Reversal of 201 (return)</td><td class="ok">− return</td><td>P1/P2 rates, cumulative, SOH back-calc</td></tr>
-            <tr><td><b>109</b></td><td>Goods receipt (site)</td><td class="ok">+ stock in</td><td><b>SOH back-calc only</b> (not a consumption rate). See §7c.</td></tr>
-            <tr><td colspan="4" style="color:var(--text-muted);">Other movement types are ignored for rates (the stock line and Trace read more of them, see §7c). The DQ gate lists the types in your file that Trend and Trace do not use, and separately any type never reviewed for the stock line; it warns (not blocks) if 109 receipts are absent — the stock-on-hand line will then show drawdowns only.</td></tr>
+            <tr><td><b>109</b> into the shelf</td><td>Goods receipt at site, with a storage location</td><td class="ok">+ stock in</td><td><b>Stock line only</b> (not a consumption rate). See §7c.</td></tr>
+            <tr><td><b>109</b> with no storage location</td><td>Part bought straight for a work order, cost centre or project ("GR AccAss"): charged to it on arrival, never on the shelf</td><td class="warn">+ consumption</td><td>Counted like a 261 (with an order) or 201 (without): P1/P2 rates, cumulative, Where used. <b>Never stock.</b> Needs MB51 with Storage Location (2026-10-14).</td></tr>
+            <tr><td><b>110</b> with no storage location</td><td>Reversal of the above</td><td class="ok">− return</td><td>Counted like a 262 / 202.</td></tr>
+            <tr><td colspan="4" style="color:var(--text-muted);"><b>Include the Storage Location column in MB51.</b> With it, the stock line counts every line in the shelf storage location, whatever the movement type (§7c). Without it, the stock line falls back to a table of movement types, parts bought for an order are read as stock arriving (the line can drop below zero) and are not counted as consumption; the DQ gate warns. Without it the gate also lists the types Trend and Trace do not use and any type never reviewed for the stock line. Trace still reads every 109 as the site delivery date for lead times.</td></tr>
           </tbody>
         </table>
         <p>The DQ gate halts if MB51 spans &lt; 12 months or has no 261. It warns if 262 is missing (net = gross) or 109 is missing (see §7c).</p>
@@ -509,9 +511,10 @@
         <p>A sharp drop in recent consumption has two very different causes: <em>demand genuinely fell</em>, or <em>stock ran out so nothing could be issued.</em> They demand opposite actions. To tell them apart the engine reconstructs the site stock-on-hand history (<code>shared/inventory-back-calc.js</code>).</p>
         <div class="um-formula">
           <span class="lab">SOH back-calc</span>
-          Anchor on the last-consumption date; window = that date back <code>socBackCalcMonths</code> (factory 6), then forward to today.<br>
-          Walk MB51 day-by-day from the current <code>totQtyOh</code> snapshot, applying signed movements:<br>
-          &nbsp;&nbsp;receipts (109) add stock · issues (261/201) remove · returns (262/202) add back.<br>
+          Walk MB51 day-by-day backwards from the current <code>totQtyOh</code> snapshot.<br>
+          <b>With a storage location on MB51 (from 2026-10-14):</b> every line posted to the material's shelf storage location (the one on its Inventory Master row) moves the line, with the sign SAP gave it, whatever the movement type. A line with no storage location never touched the shelf. Checked on live data: the shelf lines added up from go-live equal the Inventory Master stock for 91 of 91 materials.<br>
+          <b>Without it (older runs):</b> a table of movement types: receipts (109) add stock · issues (261/201) remove · returns (262/202) add back, plus the transfers and count adjustments in <code>InventoryBackCalc.MVT_SIGN</code>. This reads parts bought straight for an order as stock and can drop below zero; the chart says so.<br>
+          The analysis reads stock-outs inside the window <code>socBackCalcMonths</code> (factory 6) back from the last-consumption date; the line itself is drawn over the whole chart span (§8).<br>
           Day-keys are computed in <b>UTC</b> (APP-FIX-BACKCALC-TZ) so they line up with the raw posting-date strings.
         </div>
         <ul>
@@ -521,7 +524,7 @@
         </ul>
         <div class="um-note warn">
           <span class="lab">The SOH line is reconstructed, not pulled from SAP</span>
-          The stock-on-hand line and stockout bands are <em>back-calculated</em> from the current snapshot + MB51 movements (site stock only; 3PL receipts excluded). They are an analytical estimate. If MB51 was exported without 109 receipts, the line shows drawdowns only — re-export with 109 included. A negative reconstructed SOH is a <b>signal that an assumption is wrong</b> (missing movement types, stale snapshot, timing mismatch) — investigate the cause; it is never silently clamped.
+          The stock-on-hand line and stockout bands are <em>back-calculated</em> from the current snapshot + MB51 movements (the shelf storage location only). They are an analytical estimate. The caption under the chart says which rule drew it. If MB51 was exported without 109 receipts, the line shows drawdowns only — re-export with 109 included. A negative reconstructed SOH is a <b>signal that an assumption is wrong</b> (missing movement types, stale snapshot, timing mismatch) — investigate the cause; it is never silently clamped.
         </div>
 
         <h3 id="m-invadj">7d · Inventory Adjustment detection</h3>
@@ -597,11 +600,11 @@
       <!-- ───────────── 8 · Charts ───────────── -->
       <section class="um-section" id="chart">
         <h2><span class="num">08</span>Charts — what they show</h2>
-        <p>The material chart is an inline SVG. X = time (the analysis window); the main Y = cumulative net consumption. A chart toolbar lets you toggle the Consumption and Stock-on-Hand series independently.</p>
+        <p>The material chart is an inline SVG. X = time; <b>every chart of a run has the same start and finish</b> (the first MB51 date, or the P1 start if earlier, to the run date), so materials can be compared at a glance; where nothing moves, the lines run flat. The main Y = cumulative net consumption. A chart toolbar lets you toggle the Consumption and Stock-on-Hand series independently.</p>
         <h4>Series &amp; markers</h4>
         <ul>
-          <li><span class="sw consumption"></span><b>Amber step line</b> — cumulative net consumption. Steps up on issue dates, down on returns.</li>
-          <li><span class="sw soh"></span><b>Violet line</b> — back-calculated stock on hand over the window (APP-E1; see §7c). Toggleable.</li>
+          <li><span class="sw consumption"></span><b>Amber step line</b> — cumulative net consumption. Steps up on issue dates (including parts bought straight for an order), down on returns.</li>
+          <li><span class="sw soh"></span><b>Violet line</b> — back-calculated stock on hand over the whole chart (APP-E1; see §7c). Toggleable.</li>
           <li><span class="sw stockout"></span><b>Red wash bands</b> — stockout windows (reconstructed SOH ≤ 0).</li>
           <li><span class="sw lastcons"></span><b>Orange dashed marker</b> — the last-consumption date (the anchor for the back-calc + P2 re-anchoring).</li>
           <li><b>Red dotted line</b> — the current SAP threshold to track the violet stock line against, labelled at the right on the stock axis: <b>MIN</b> for V1 materials (current SAP Min), <b>SS</b> for PD (or any other non-V1) materials that carry a safety stock. No line is drawn when that value is zero or blank. Wherever the violet line dips below it, actual stock sat below Min/SS.</li>
@@ -610,9 +613,9 @@
           <li><b>WO annotations</b> — top HCE events get a marker + leader + label (WO / description / equipment / qty).</li>
           <li><b>Purple dashed verticals</b> — confirmed Inventory-Adjustment dates (§7d).</li>
           <li><b>LUMPY badge</b> — top-left when the material is LUMPY.</li>
-          <li><b>Per-event hover dots (APP-TREND-HOV)</b> — a faint dot sits on each line at every date that has movements. Hover one for a tooltip of that date's movements: <b>date · movement type (code + plain-English description) · quantity</b>. The amber line shows goods issues + reversals (261 / 201 / 262 / 202); the violet line shows every movement that actually moves the back-calc stock line, and adds the resulting <b>"Stock after"</b> level. Quantities are absolute — direction is in the description (GI = out, GR = in, reversal = back). Transfers that cancel out — a 309 batch relabel or a 411 storage-location move posted as one row out and one row back in on the same day — aren't listed, because they don't change the stock; a 309 that doesn't cancel out (stock moved in from another material number) is still shown. Toggling a line off (the Consumption / Stock-on-Hand checkboxes) also removes its hover dots.</li>
+          <li><b>Per-event hover dots (APP-TREND-HOV)</b> — a faint dot sits on each line at every date that has movements. Hover one for a tooltip of that date's movements: <b>date · movement type (code + plain-English description) · quantity</b>. The amber line shows goods issues + reversals (261 / 201 / 262 / 202) and parts bought straight for an order, labelled "Bought for the work order · used on arrival"; the violet line shows every movement that actually moves the back-calc stock line, and adds the resulting <b>"Stock after"</b> level. Quantities are absolute — direction is in the description (GI = out, GR = in, reversal = back). Transfers that cancel out — a 309 batch relabel or a 411 storage-location move posted as one row out and one row back in on the same day — aren't listed, because they don't change the stock; a 309 that doesn't cancel out (stock moved in from another material number) is still shown. Toggling a line off (the Consumption / Stock-on-Hand checkboxes) also removes its hover dots.</li>
         </ul>
-        <p>The violet-line hover reuses the back-calc's own movement classification, so it shows exactly what moved the line — this site's non-standard rules apply (the 3PL / 101 / 107 flow is excluded; 109 is the site receipt), so those excluded movements don't appear on the hover.</p>
+        <p>The violet-line hover reuses the back-calc's own rule, so it shows exactly what moved the line: with a storage location, every line in the shelf storage location; without it, this site's movement-type table (the 3PL / 101 / 107 flow is excluded; 109 is the site receipt).</p>
         <p>The chart caveats explicitly that the SOH line is back-calculated, not pulled from SAP. If a material has only a single posting date, the cumulative series is padded with a synthetic zero-point so the step line still draws; the empty-state ("no consumption transactions found") only triggers on a true data-absence case.</p>
       </section>
 
@@ -916,7 +919,7 @@
         </div>
         <div class="um-note warn">
           <span class="lab">The stock-on-hand (violet) line looks wrong / shows only drawdowns</span>
-          The SOH line is back-calculated and needs 109 receipts in MB51 (§7c). If 109 is absent, re-export MB51 with receipts included. A reconstructed SOH that goes negative is a signal that a data assumption is off (missing movement types, stale snapshot, timing) — investigate; it is never silently clamped.
+          The SOH line is back-calculated and needs 109 receipts in MB51 (§7c). If 109 is absent, re-export MB51 with receipts included. If the line drops below zero, first check the caption under the chart: "back-calculated from MB51 movement types" means the MB51 had no Storage Location column, and parts bought straight for an order are being read as stock. Re-export MB51 with Storage Location and run Intake again. A negative line with storage location present is a signal that another data assumption is off (stale snapshot, timing) — investigate; it is never silently clamped.
         </div>
         <div class="um-note">
           <span class="lab">A PD material shows "PD → V1" in the Reclass column</span>
