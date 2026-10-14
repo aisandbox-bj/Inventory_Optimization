@@ -1773,7 +1773,7 @@
     // Consumed: MB51 MVT 261 (work order) + 201 (cost centre) — same independence
     // rationale; 201 added with APP-TRACE-FIRSTUSE so it matches "Last consumption".
     const consSeries = buildCumulativeSeries(
-      mb51.filter(r => { const mt = (window.AppPipeline && AppPipeline.consMvt) ? AppPipeline.consMvt(r) : String(r.movementType || '').trim(); return mt === '261' || mt === '201'; }),   // APP-FIX-DIRECTCHARGE — incl. parts bought for an order
+      mb51.filter(r => { const mt = (window.AppPipeline && AppPipeline.totalConsMvt) ? AppPipeline.totalConsMvt(r) : String(r.movementType || '').trim(); return mt === '261' || mt === '201'; }),   // APP-TREND-TOTALUSE — total use (incl. parts bought for an order), beside Site Receipt which counts every 109
       r => r.postingDate,
       r => Math.abs(parseFloat(r.quantity) || 0) * ps
     );

@@ -1008,10 +1008,10 @@
       const mb51Sloc = mb51.some(r => Object.prototype.hasOwnProperty.call(r, 'storageLocation'));
       if (mb51Sloc) {
         const direct = mb51.filter(r => { const mt = String(r.movementType || '').trim(); return (mt === '109' || mt === '110') && !String(r.storageLocation || '').trim(); }).length;
-        notes.push({ code:'mb51_sloc', sev:'note', msg:`MB51 has storage locations: the stock line counts every line in the shelf storage location.${direct ? ` ${direct.toLocaleString()} receipt line${direct === 1 ? '' : 's'} (109 / 110) with no storage location ${direct === 1 ? 'is a part' : 'are parts'} bought straight for an order, cost centre or project: counted as consumption, not stock.` : ''}` });
+        notes.push({ code:'mb51_sloc', sev:'note', msg:`MB51 has storage locations: the stock line counts every line in the shelf storage location.${direct ? ` ${direct.toLocaleString()} receipt line${direct === 1 ? '' : 's'} (109 / 110) with no storage location ${direct === 1 ? 'is a part' : 'are parts'} bought straight for an order, cost centre or project: shown on the chart as total use (dotted line); not stock, and not in the rates or Min / Max.` : ''}` });
       } else {
         warnings.push({ code:'mb51_no_sloc', sev:'warn',
-          msg:'MB51 has no Storage Location column. The stock line falls back to movement types: parts bought straight for an order are read as stock arriving (the line can drop below zero) and are not counted as consumption. Re-export MB51 with Storage Location.' });
+          msg:'MB51 has no Storage Location column. The stock line falls back to movement types: parts bought straight for an order are read as stock arriving (the line can drop below zero), and the chart cannot show total use. Re-export MB51 with Storage Location.' });
       }
       if (!mb51Sloc && BCm && BCm.MVT_SIGN) {
         const used = new Set(['261', '262', '201', '202', '109', '107']);   // consumption · site receipt · arrival at the 3PL (Trace lead times)
@@ -1489,7 +1489,7 @@
     for (const r of mb51) {
       const m = String(r.material || '').trim();
       if (!m) continue;
-      const mt = (window.AppPipeline && AppPipeline.consMvt) ? AppPipeline.consMvt(r) : String(r.movementType || '').trim();   // APP-FIX-DIRECTCHARGE
+      const mt = (window.AppPipeline && AppPipeline.consMvt) ? AppPipeline.consMvt(r) : String(r.movementType || '').trim();   // usage from stock (the pipeline's rule)
       const q  = parseFloat(r.quantity);
       if (isNaN(q)) continue;
       out[m] = out[m] || 0;

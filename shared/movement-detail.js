@@ -14,11 +14,12 @@
    Quantities are ABSOLUTE (operator decision 2026-06-27); the movement-type
    description carries the direction (GI = out, GR = in, reversal = back).
 
-   APP-FIX-SHELF-STOCK + APP-FIX-DIRECTCHARGE (2026-10-14): when the MB51 carries a
+   APP-FIX-SHELF-STOCK + APP-TREND-TOTALUSE (2026-10-14): when the MB51 carries a
    storage location, the stock list follows the shelf rule (InventoryBackCalc.rowDelta
-   with the material's shelf storage locations), and a 109 / 110 with no storage
-   location (bought straight for a work order / cost centre / project) is listed on
-   the CONSUMPTION side (AppPipeline.consMvt), labelled as such, never on the stock side.
+   with the material's shelf storage locations). A 109 / 110 with no storage location
+   (bought straight for a work order / cost centre / project) is never on the stock
+   side and never in `consumption` (usage from stock, the solid line); it is listed in
+   `direct`, for the dotted total-use line, labelled as such.
 
    Transfers that cancel out are left off the stock list (operator 2026-09-29):
    309/310 (batch relabel / material-to-material) and 411/412 (storage location)
@@ -28,7 +29,7 @@
    number) still shows them — that transfer really changed the stock.
 
    Public API:
-     MovementDetail.forMaterial(json, material) -> { consumption:[], stock:[] }
+     MovementDetail.forMaterial(json, material) -> { consumption:[], stock:[], direct:[] }
          each row: { date, mt, mtDesc, qty (absolute), order }
      MovementDetail.describe(code) -> plain-English movement-type label
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -63,7 +64,7 @@
   // Consumption (orange line) — matches pipeline VALID_TYPES (261/201 + reversals).
   const CONS_TYPES = new Set(['261', '201', '262', '202']);
 
-  // Consumption kind of a row — the pipeline's one rule when it is loaded (adds receipts bought for an account).
+  // Usage-from-stock kind of a row — the pipeline's rule when it is loaded (261 / 262 / 201 / 202).
   function consKind(row){
     const P = global.AppPipeline;
     if (P && P.consMvt) return P.consMvt(row);
@@ -73,7 +74,7 @@
   function directLabel(row){
     const mt = String(row.movementType || '').trim();
     const to = String(row.order || '').trim() ? 'work order' : 'account';
-    return mt === '110' ? `Reversal of a receipt bought for the ${to}` : `Bought for the ${to} · used on arrival (not shelf stock)`;
+    return mt === '110' ? `Reversal of a receipt bought for the ${to}` : `Bought for the ${to} · not from stock`;
   }
 
   function describe(code){
@@ -103,6 +104,8 @@
     const mat   = String(material == null ? '' : material).trim();
     const consumption = [];
     const stock = [];
+    const direct = [];   // APP-TREND-TOTALUSE — parts bought for an account (dotted line only)
+    const PL = global.AppPipeline;
     const XFER = { '309': 'mm', '310': 'mm', '411': 'sl', '412': 'sl' };   // transfer groups
     const xferNet = new Map();   // date|group → net signed qty for this material
     const rows = mb51.filter(r => String(r.material || '').trim() === mat);
@@ -113,10 +116,10 @@
       if (!date) continue;
       const mt    = String(r.movementType || '').trim();
       const order = String(r.order || '').trim();
-      const ck = consKind(r);
-      if (ck){
-        const direct = ck !== mt;   // a receipt bought for an account, counted as the issue it stands in for
-        consumption.push({ date, mt, mtDesc: direct ? directLabel(r) : describe(mt), qty: Math.abs(parseFloat(r.quantity) || 0), order });
+      if (consKind(r)){
+        consumption.push({ date, mt, mtDesc: describe(mt), qty: Math.abs(parseFloat(r.quantity) || 0), order });
+      } else if (PL && PL.isDirectCharge && PL.isDirectCharge(r)){
+        direct.push({ date, mt, mtDesc: directLabel(r), qty: Math.abs(parseFloat(r.quantity) || 0), order });
       }
       const sd = stockSignedDelta(r, siteSlocs);
       if (sd !== 0){
@@ -128,7 +131,7 @@
     // Drop transfer rows whose day nets to zero (they cancel out on the line).
     const kept = stock.filter(mv => !(mv._grp && Math.abs(xferNet.get(mv.date + '|' + mv._grp)) < 1e-9));
     kept.forEach(mv => { delete mv._grp; });
-    return { consumption, stock: kept };
+    return { consumption, stock: kept, direct };
   }
 
   global.MovementDetail = { forMaterial, describe };

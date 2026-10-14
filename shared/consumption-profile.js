@@ -23,8 +23,7 @@
 
   const ISSUE = new Set(['261', '201']);
   function num(v){ const x = Number(v); return Number.isFinite(x) ? x : 0; }
-  // APP-FIX-DIRECTCHARGE (2026-10-14) — the pipeline's one consumption rule (a 109 / 110 with no storage
-  // location = a part bought for an account, counted as the issue / reversal it stands in for).
+  // Usage from stock through the pipeline's rule (2026-10-14): parts bought for an account are not here.
   function cmt(r){
     const P = global.AppPipeline;
     return (P && P.consMvt) ? P.consMvt(r) : String(r.movementType || '').trim();

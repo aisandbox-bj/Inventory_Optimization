@@ -468,7 +468,7 @@
       </div>
       <div class="chart-host" id="chartHost"></div>
       <div class="chart-caveat">${mat.stockLineRule === 'shelf'
-        ? 'Stock-on-hand line is rebuilt from every MB51 line in the shelf storage location; parts bought straight for an order have no storage location and count as consumption, not stock. Not pulled from SAP.'
+        ? 'Stock-on-hand line is rebuilt from every MB51 line in the shelf storage location. Solid orange = usage from stock (the rates and Min / Max use this); dotted orange = total use, including parts bought straight for an order, cost centre or project (never stock). Not pulled from SAP.'
         : mat.stockLineRule === 'movementType'
           ? '⚠ Stock-on-hand line is back-calculated from MB51 movement types: this run\'s MB51 has no storage location, so parts bought straight for an order are read as stock and the line can drop below zero. Re-run Intake with an MB51 that includes Storage Location. Not pulled from SAP.'
           : 'Stock-on-hand line is back-calculated from MB51 movements (site stock only, 3PL receipts excluded) — not pulled from SAP.'}</div>
@@ -482,7 +482,7 @@
         <div class="stat-cell"><span class="lab">Unit cost (CAD)</span><div class="v">${mat.movingAvgPrice != null ? AppLocale.fmtCAD(mat.movingAvgPrice) : '—'}</div></div>
         <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
         <div class="stat-cell"><span class="lab">P2 rate</span><div class="v ${mat.p2Flag !== 'OK' ? 'warn' : ''}">${mat.p2Flag === 'OK' ? mat.p2Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
-        <div class="stat-cell"><span class="lab">Qty Iss. (window)</span><div class="v">${mat.totalNet}</div></div>
+        <div class="stat-cell"><span class="lab">Qty Iss. (window)</span><div class="v">${mat.totalNet}${mat.directNet ? ` <small>+${mat.directNet} for orders</small>` : ''}</div></div>
         ${perEventCell}
         ${lastConsCell}
         <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History. Same figure on Trend, Canvas and Sandbox. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div>${(mat.leadDays == null && mat.leadGap) ? `<div class="lead-gap">${escapeHtml(mat.leadGap.short)} <button type="button" class="lead-why" id="leadWhyBtn">why?</button></div>` : ''}</div>

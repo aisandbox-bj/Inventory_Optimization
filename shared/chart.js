@@ -160,8 +160,15 @@
       cum = [{ date: startISO, delta: 0, cum: 0 }, only];
     }
 
+    // APP-TREND-TOTALUSE — dotted orange "total use" line (usage from stock + parts bought straight for an
+    // order / cost centre / project). Display only: P1 / P2 chords and every rate read the solid line.
+    let totalCum = (material.cumulativeTotal && material.cumulativeTotal.length) ? material.cumulativeTotal.slice() : null;
+    if (totalCum) {
+      if (new Date(startISO).getTime() < new Date(totalCum[0].date).getTime()) totalCum.unshift({ date: startISO, cum: 0 });
+      if (new Date(endISO).getTime() > new Date(totalCum[totalCum.length - 1].date).getTime()) totalCum.push({ date: endISO, cum: totalCum[totalCum.length - 1].cum });
+    }
     const dates = cum.map(p => new Date(p.date).getTime());
-    const cums  = cum.map(p => p.cum);
+    const cums  = cum.map(p => p.cum).concat(totalCum ? totalCum.map(p => p.cum) : []);
     let xMin = fixedSpan ? new Date(startISO).getTime() : Math.min(...dates);
     let xMax = fixedSpan ? new Date(endISO).getTime()   : Math.max(...dates);
     // Pad x by 7 days
@@ -228,6 +235,15 @@
     }
     // APP-E11 — tag for legend toggle (.chart-host.hide-cum hides this).
     svg.appendChild(polyline(points.join(' '), { stroke: PAL.cumLine, width: 2, class: 'chart-cumulative-line' }));
+    if (totalCum) {
+      const tp = [];
+      for (let i = 0; i < totalCum.length; i++) {
+        const x = xScale(new Date(totalCum[i].date).getTime());
+        if (i > 0) tp.push(`${x},${yScale(totalCum[i - 1].cum)}`);
+        tp.push(`${x},${yScale(totalCum[i].cum)}`);
+      }
+      svg.appendChild(polyline(tp.join(' '), { stroke: PAL.cumLine, width: 1.6, dash: '2 3', opacity: 0.9, class: 'chart-cumulative-line chart-total-line' }));
+    }
 
     // ─── Trend lines ──────────────────────────────────────────────────────
     // Anchor both endpoints to the cumulative line itself so the trend is a
@@ -419,12 +435,17 @@
     const legY = MARGIN.top - 14;
     const legHasSoh = hasSohOverlay;
     const legHasStockout = stockoutWindows.length > 0;
-    const legEntries = 3 + (legHasSoh ? 1 : 0) + (legHasStockout ? 1 : 0);
+    const legEntries = 3 + (legHasSoh ? 1 : 0) + (legHasStockout ? 1 : 0) + (totalCum ? 1 : 0);
     // Push legend left when entries grow so it doesn't run off the right edge
     let legX = W - MARGIN.right - (legEntries * 64);
     svg.appendChild(line(legX, legY, legX + 18, legY, { stroke: PAL.cumLine, width: 2 }));
-    svg.appendChild(text(legX + 24, legY + 3, 'CUMULATIVE', { fill: PAL.text, size: 9, tracking: 1 }));
+    svg.appendChild(text(legX + 24, legY + 3, totalCum ? 'FROM STOCK' : 'CUMULATIVE', { fill: PAL.text, size: 9, tracking: 1 }));
     legX += 100;
+    if (totalCum) {
+      svg.appendChild(line(legX, legY, legX + 18, legY, { stroke: PAL.cumLine, width: 1.6, dash: '2 3' }));
+      svg.appendChild(text(legX + 24, legY + 3, 'TOTAL USE', { fill: PAL.text, size: 9, tracking: 1 }));
+      legX += 92;
+    }
     svg.appendChild(line(legX, legY, legX + 18, legY, { stroke: PAL.p1Line, width: 2, dash: '5 3' }));
     svg.appendChild(text(legX + 24, legY + 3, 'P1', { fill: PAL.text, size: 9, tracking: 1 }));
     legX += 50;
@@ -454,6 +475,11 @@
         return m;
       };
       const consByDate  = groupByDate(opts.movements.consumption);
+      // APP-TREND-TOTALUSE — dots on the dotted line where parts were bought for an account; their tip lists those
+      // rows and any stock issues of the same day (the dotted line steps by both).
+      const directByDate = groupByDate(opts.movements.direct);
+      const totByDate = new Map();
+      for (const [d, arr] of directByDate) totByDate.set(d, arr.concat(consByDate.get(d) || []));
       const stockByDate  = groupByDate(opts.movements.stock);
       const sohByDate = new Map();
       for (const p of sohSeries) sohByDate.set(p.date, p.soh);
@@ -488,7 +514,7 @@
         if (!t || !t.classList || !t.classList.contains('chart-hit')) return;
         const line = t.getAttribute('data-line');
         const date = t.getAttribute('data-date');
-        const movs = (line === 'soh' ? stockByDate : consByDate).get(date);
+        const movs = (line === 'soh' ? stockByDate : line === 'tot' ? totByDate : consByDate).get(date);
         if (!movs) return;
         const sohFoot = (line === 'soh' && sohByDate.has(date)) ? sohByDate.get(date) : null;
         tip.innerHTML = tipHtml(date, movs, line, sohFoot);
@@ -510,6 +536,17 @@
         gCum.appendChild(el('circle', { cx: x, cy: y, r: 6, class: 'chart-hit', fill: PAL.cumLine, 'fill-opacity': 0.08, 'data-line': 'cum', 'data-date': p.date }));
       }
       svg.appendChild(gCum);
+
+      if (totalCum && totByDate.size) {
+        const totAt = (t) => { let v = 0; for (const p of totalCum) { if (new Date(p.date).getTime() <= t) v = p.cum; else break; } return v; };
+        const gTot = el('g', { class: 'chart-cumulative-line chart-hit-grp' });
+        for (const [date] of totByDate) {
+          const tt = new Date(date).getTime();
+          if (tt < xMin || tt > xMax) continue;
+          gTot.appendChild(el('circle', { cx: xScale(tt), cy: yScale(totAt(tt)), r: 6, class: 'chart-hit', fill: PAL.cumLine, 'fill-opacity': 0.08, 'data-line': 'tot', 'data-date': date }));
+        }
+        svg.appendChild(gTot);
+      }
 
       if (hasSohOverlay && yScaleSOH) {
         const gSohHit = el('g', { class: 'chart-grp-soh chart-hit-grp' });

@@ -381,6 +381,28 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Two consumption lines: usage from stock drives the rates, total use dotted - 2026-10-14 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-14</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-TREND-TOTALUSE</b>: rates and Min / Max read usage from stock only; total use (with parts bought straight for an order) is a dotted line beside it — <b>browser-verified; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator decision (same day, second thought):</b> "we need to focus to have in stock what is supported through stock … if the team is in the habit of ordering items directly on a WO, then inventory should take that into account … The P2 rate is based on the solid line, not the dotted line … some of the project numbers are huge … do not want to carry them over-stock." The stock line stays as it is (operator: "purple line logic stays as per now").</li>
+        <li><b>Now:</b>
+          <ul>
+            <li><b>Solid orange line = usage from stock</b> (261 / 262 / 201 / 202). Qty Iss., P1 / P2 rates, Min / Max, the verdict, events, batches, HCE, the list screens, scope membership and Where used all read it: <b>the same as before 2026-10-14</b> (<code>AppPipeline.consMvt</code>).</li>
+            <li><b>Dotted orange line = total use</b>: usage from stock plus parts bought straight for an order, cost centre or project (a 109 with no storage location; its 110 reverses it). Display only (<code>AppPipeline.totalConsMvt</code>, <code>cumulativeTotal</code> on each material). Drawn only where a material has such parts and the MB51 has storage locations. Legend: FROM STOCK · TOTAL USE. Its own hover dots list the bought-for-order lines, labelled "not from stock". The Consumption checkbox hides both lines.</li>
+            <li>Qty Iss. shows the extra in grey, e.g. "185 +320 for orders".</li>
+            <li>Trace's Volume "Consumed" line shows total use, beside "Site Receipt", which counts every 109.</li>
+          </ul></li>
+        <li><b>Verified in the browser:</b> operator's saved run (no storage location): 115 materials identical to the engine before 2026-10-14 in every field. Operator's fresh MB51 (with storage location): the same 17 materials on the list as before; consumption fields (Qty Iss., P1, cumulative, events, batches, HCE P1, last consumption) identical to the old engine on all 17; the only changes come from the corrected stock line (false stock-outs gone: 4 verdicts change, e.g. 1002181 GREY with no recommendation → ORANGE, Min 41 / Max 82 on 16.3 / mo from stock); no stock line below zero; 16 of 17 show a dotted line (1002181: 185 from stock + 320 for orders = 505); Where used 185 = Qty Iss.; no console errors on Trend, Trace, Intake.</li>
+        <li>Files: <code>shared/pipeline.js</code> (cache tag pc6), <code>shared/chart.js</code>, <code>shared/material-detail.js</code>, <code>shared/movement-detail.js</code>, <code>shared/where-used.js</code>, <code>shared/consumption-profile.js</code>, <code>intake/intake.js</code>, <code>trace/trace.js</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Stock line by storage location + parts bought for an order count as consumption + one chart span - 2026-10-14 -->
     <article class="roc-entry dev">
       <div class="head">
@@ -393,7 +415,7 @@ git -C /tmp/peek push --force-with-lease origin main
         <li><b>Operator report:</b> stock lines below zero (1002181 down to −228). Investigation (<i>Investigation 2026-10-14 - stock line below zero</i>): 68 materials in the run went below zero, 9 on the Trend list. Nothing was missing from the MB51.</li>
         <li><b>Cause:</b> a 109 with text "GR AccAss fr. Val.B." has <b>no storage location</b>: the part was bought for a work order, cost centre or project and charged to it on arrival; it never reached the shelf. Trend counted every 109 as stock arriving, so walking back from today's stock the line fell below zero. 186 such lines on 90 of 91 materials in the operator's MB51. Smaller: stock moved from 113D into 113S (411) was missed; 561 opening balances and a 641 out of the shelf were left out.</li>
         <li><b>Stock line now (APP-FIX-SHELF-STOCK):</b> when MB51 carries a storage location, the line counts <b>every MB51 line in the shelf storage location</b> (the storage location on the Inventory Master row), with SAP's sign, whatever the movement type. Proof: adding those lines from go-live gives the Inventory Master stock for 91 of 91 materials; none goes below zero. One rule (<code>InventoryBackCalc.rowDelta</code>) serves the line, its hover list and the Trace cadence dots.</li>
-        <li><b>Consumption now (APP-FIX-DIRECTCHARGE, operator: "they cannot be excluded from consumption"):</b> a 109 with no storage location counts as consumption (as a 261 when it has an order, else a 201); a 110 with no storage location counts as its reversal. One rule (<code>AppPipeline.consMvt</code>) feeds the orange line, Qty Iss., P1 / P2 rates, Min / Max, events, batches, scope membership, Where used, the hover list, the Sandbox profile and Trace's "Consumed" volume line. The 109 stays a 109 for Trace lead times.</li>
+        <li><i>Reversed the same day by APP-TREND-TOTALUSE (above): rates read usage from stock only; parts bought for an order are a dotted "total use" line.</i> <b>Consumption now (APP-FIX-DIRECTCHARGE, operator: "they cannot be excluded from consumption"):</b> a 109 with no storage location counts as consumption (as a 261 when it has an order, else a 201); a 110 with no storage location counts as its reversal. One rule (<code>AppPipeline.consMvt</code>) feeds the orange line, Qty Iss., P1 / P2 rates, Min / Max, events, batches, scope membership, Where used, the hover list, the Sandbox profile and Trace's "Consumed" volume line. The 109 stays a 109 for Trace lead times.</li>
         <li><b>Intake:</b> MB51 Storage Location is now read (same aliases as the Inventory Master; a blank cell is kept as blank). The gate notes how many receipt lines were bought for an account; an MB51 <b>without</b> the column gets a warning saying what it costs.</li>
         <li><b>Charts (APP-CHART-SAMESPAN, operator: "charts must always have the same timescale … start and finish … orange and purple line just stays flat if no Tx"):</b> every chart of a run runs from the first MB51 date (or the P1 start if earlier) to the run date (or the last MB51 date if later). The stock line is drawn over the whole span; the analysis still reads stock-outs only inside its own window, so verdicts are unchanged by the longer line. Was: the chart ended at the P2 end, so a material whose P2 was moved back to its last consumption stopped there (1002390 ended in Oct 2025 on a run of Oct 2026).</li>
         <li><b>Verified in the browser:</b>

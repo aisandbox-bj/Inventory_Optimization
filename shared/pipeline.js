@@ -12,31 +12,41 @@
   const RETURN_TYPES = new Set(['262', '202']);   // returns
   const VALID_TYPES  = new Set([...ISSUE_TYPES, ...RETURN_TYPES]);
 
-  /* ─── APP-FIX-DIRECTCHARGE (2026-10-14) — parts bought straight for an account ───
+  /* ─── Parts bought straight for an account (APP-FIX-DIRECTCHARGE → APP-TREND-TOTALUSE, 2026-10-14) ───
      A 109 with NO storage location is a receipt bought for a work order, cost
      centre or project ("GR AccAss"): SAP charges it to that account on arrival,
-     so it never reaches the shelf. It IS consumption (operator 2026-10-14: "they
-     cannot be excluded from consumption"), counted like the issue it stands in
-     for: 261 when it carries an order, else 201. Its reversal (110, no storage
-     location) counts like 262 / 202. Recognised only when the MB51 row carries the
-     storageLocation field (Intake maps it from 2026-10-14); runs without it keep the
-     old reading (261 / 262 / 201 / 202 only). Every consumption read in this engine
-     goes through consMvt(), so the orange line, P1 / P2 rates, events, batches,
-     HCE and scope membership all agree. The 109 itself stays a 109 everywhere else
-     (Trace still reads it as the site delivery for lead times). */
+     so it never reaches the shelf. Recognised only when the MB51 row carries the
+     storageLocation field (Intake maps it from 2026-10-14).
+     Operator decision (2026-10-14, second thought): stock is held for what is
+     supported THROUGH stock. "If the team is in the habit of ordering items directly
+     on a WO, then inventory should take that into account" — and project buys are
+     large, "do not want to carry them over-stock". So:
+       · consMvt()      — usage FROM STOCK (261 / 262 / 201 / 202): the solid orange
+                          line, Qty Iss., P1 / P2 rates, Min / Max, events, batches,
+                          HCE, scope membership. Same as before 2026-10-14.
+       · totalConsMvt() — total use = usage from stock + parts bought for an account
+                          (109 → 261 with an order / 201 without; 110 → 262 / 202).
+                          Display only: the dotted orange line, Trace's Consumed line.
+     The 109 itself stays a 109 everywhere else (Trace reads it as the site delivery
+     for lead times; the stock line leaves it out because it has no storage location). */
   function isDirectCharge(r){
     if (!r || !Object.prototype.hasOwnProperty.call(r, 'storageLocation')) return false;
     const mt = String(r.movementType || '').trim();
     if (mt !== '109' && mt !== '110') return false;
     return !String(r.storageLocation == null ? '' : r.storageLocation).trim();
   }
-  /** The consumption movement type a row counts as ('261' · '262' · '201' · '202'), or '' when it isn't consumption. */
+  /** Usage FROM STOCK: the consumption movement a row counts as ('261' · '262' · '201' · '202'), or ''. Drives every rate. */
   function consMvt(r){
     const mt = String(r.movementType || '').trim();
-    if (VALID_TYPES.has(mt)) return mt;
+    return VALID_TYPES.has(mt) ? mt : '';
+  }
+  /** TOTAL use: as consMvt, plus a part bought for an account counted as the issue it stands in for. Display only. */
+  function totalConsMvt(r){
+    const mt = consMvt(r);
+    if (mt) return mt;
     if (isDirectCharge(r)) {
       const o = String(r.order || '').trim();
-      return mt === '109' ? (o ? '261' : '201') : (o ? '262' : '202');
+      return String(r.movementType || '').trim() === '109' ? (o ? '261' : '201') : (o ? '262' : '202');
     }
     return '';
   }
@@ -1127,6 +1137,26 @@
 
         const pattern = classifyPattern(tx, params);
         const cum = cumulativeSeries(tx);
+        // APP-TREND-TOTALUSE — the dotted "total use" line: usage from stock + parts bought straight for an
+        // order / cost centre / project. Display only; nothing below reads it. null when the material has none.
+        let cumulativeTotal = null, directNet = 0;
+        {
+          const _direct = (mb51FullByMat.get(q.material) || []).filter(isDirectCharge);
+          if (_direct.length) {
+            const _byDate = new Map(cum.map(p => [p.date, p.delta]));
+            for (const r of _direct) {
+              const d = r.postingDate; if (!d) continue;
+              const k = totalConsMvt(r);
+              const qv = Math.abs(parseFloat(r.quantity) || 0);
+              const dv = (k === '261' || k === '201') ? qv : -qv;
+              directNet += dv;
+              _byDate.set(d, (_byDate.get(d) || 0) + dv);
+            }
+            let _c = 0;
+            cumulativeTotal = [..._byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([date, delta]) => { _c += delta; return { date, cum: _c }; });
+            directNet = Math.round(directNet * 10) / 10;
+          }
+        }
         const rateChange = stockoutDominated
           ? null
           : ((p1f === 'OK' && p1r > 0 && p2f === 'OK')
@@ -1292,6 +1322,8 @@
           bucketKey:    bucket.key,
           bucketName:   bucket.name,
           cumulative:   cum,
+          cumulativeTotal,                         // APP-TREND-TOTALUSE — [{date, cum}] total use incl. parts bought for an account (dotted line), or null
+          directNet,                               // APP-TREND-TOTALUSE — net units bought straight for an account (whole MB51), display only
           p2Start, p2End, p1Start, p1End
         });
       }
@@ -1352,7 +1384,7 @@
     const d = (json && json.data) || {};
     const c = k => (Array.isArray(d[k]) ? d[k].length : 0);
     return [
-      'pc5',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption · pc4 = the work-order list too · pc5 = 2026-10-14 shelf stock line + bought-for-the-account receipts as consumption + one chart span) so a tab can't keep a stale cached result
+      'pc6',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption · pc4 = the work-order list too · pc5 = 2026-10-14 shelf stock line + bought-for-the-account receipts as consumption + one chart span · pc6 = same day: rates back to usage from stock, total use as a dotted line) so a tab can't keep a stale cached result
       m.assessmentName || m.name || '', m.uploadedAt || '', m.savedAt || '', m.createdAt || '',
       m.inventoryMasterDate || '',
       (json && json.SCHEMA_VERSION) || m.schemaVersion || '',
@@ -1394,7 +1426,7 @@
   /* ─── Public API ────────────────────────────────────────────────────────── */
   global.AppPipeline = Object.freeze({
     ISSUE_TYPES, RETURN_TYPES, VALID_TYPES,
-    consMvt, isDirectCharge,                       // APP-FIX-DIRECTCHARGE — the one consumption rule, for the other modules
+    consMvt, totalConsMvt, isDirectCharge,         // usage from stock (every rate) · total use (display only) · bought for an account
     netConsumptionByMaterial,
     calcPeriodRate,
     detectHce,

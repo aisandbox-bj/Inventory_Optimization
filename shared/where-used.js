@@ -11,11 +11,10 @@
      · All-time, split into annual buckets (by posting year).
      · Explicit "Unmapped WO" bucket for orders with no IW39 match — never
        silently dropped (credibility principle).
-     · APP-FIX-DIRECTCHARGE (2026-10-14): a 109 / 110 with no storage location
-       (bought straight for a work order / cost centre / project) counts as the
-       issue / reversal it stands in for (AppPipeline.consMvt), so these totals
-       tie to Trend's consumption. Quantity direction comes from the movement
-       (issue +, reversal −), not the row sign, since a receipt is posted positive.
+     · Usage from stock, read through AppPipeline.consMvt (2026-10-14), so these
+       totals tie to Trend's Qty Iss. Parts bought straight for an order are not
+       here (they never came from stock; the chart's dotted line shows them).
+       Quantity direction comes from the movement (issue +, reversal −).
 
    Availability: needs IW39 to resolve work orders → Sort Field. Model rollup
    needs Fleet Master; without it the table shows Sort Field directly.
@@ -30,7 +29,7 @@
 
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]); }
   function num(v){ const x = Number(v); return Number.isFinite(x) ? x : 0; }
-  // The consumption movement a row counts as ('261' · '262' · '201' · '202' or ''), via the pipeline's one rule.
+  // The usage-from-stock movement a row counts as ('261' · '262' · '201' · '202' or ''), via the pipeline's rule.
   function consMvt(r){
     const P = window.AppPipeline;
     if (P && P.consMvt) return P.consMvt(r);
@@ -256,7 +255,7 @@
       let key, fleetLab, unitLab, orderLab, descLab;
       if (isCC){
         key = 'm:' + ym.sortKey;            // group cost-centre issues by month
-        fleetLab = 'Cost centre'; unitLab = '—'; orderLab = '—'; descLab = 'Cost-centre / account issue (201/202, or bought for the account)';
+        fleetLab = 'Cost centre'; unitLab = '—'; orderLab = '—'; descLab = 'Cost-centre issue (mvt 201/202)';
       } else {
         const ord = String(r.order || '').trim();
         const sf  = ord ? orderToSF.get(ord) : '';
