@@ -381,6 +381,26 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Open reservations in Where used + Qty Iss. (RSV) + Trend view held across Trace + column filters fixed - 2026-10-16 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-16</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-RSV-WU</b> open reservations in Where used and beside Qty Iss.; <b>APP-FIX-TREND-HOLD-ALL</b> the Trend view survives a Trace round-trip; <b>APP-FIX-TREND-COLFILTER</b> column filters filter every row — <b>browser-verified on plant data; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Operator:</b> "upcoming demand is important for us to view, not just from past consumption, particularly when we review mins and maxes"; and "when I filter stuff or when I sort stuff in the trend app, I click trace it … when I just come back … it resets the filters and the sorting."</li>
+        <li><b>Qty Iss. (RSV)</b> (material detail on Trend, Canvas, Sandbox, pop-out): issued from stock, with the Inventory Master's open reservations in brackets, e.g. "6191 (467)". Display only.</li>
+        <li><b>Open reservations (optional · IWBK)</b>: a new optional Intake upload for SAP's order reservation list ("Availability list for materials for operations"). Read by the new <code>shared/reservations.js</code> (header row found by its column names, below the export's title rows; columns matched by name), outside the mapping step and DQ gate like the Duplicate list. Keeps lines with an open quantity (required less withdrawn) in an additive <code>json.reservations</code> block; trimmed with the run; carried through a JSON upload. No SCHEMA_VERSION change.</li>
+        <li><b>Where used</b>: with the list loaded, an amber <b>Open RSV</b> column by fleet and unit (order → IW39 Sort Field → Fleet model), units with reservations but no past use get their own row, and clicking a number lists the reservation lines (unit · earliest start · WO# · description · required · withdrawn · open). A line above the table gives the Inventory Master's open-reservation total and, when it differs, how much the list shows on work orders. Nothing in the Min / Max maths reads reservations.</li>
+        <li><b>Trend view held across Trace</b> (APP-FIX-TREND-HOLD-ALL): the held view now includes the column filters (▾), the sort order and the fleet tiles in review; before, only search, colour, ★ and duplicates were held, so filters and sorting reset on every return.</li>
+        <li><b>Column filters fixed</b> (APP-FIX-TREND-COLFILTER): the Trend list passed its filter function straight to <code>.filter()</code>, which handed it the row's position as its optional filter-set argument (added in v2.1.1), so from the second row on no column filter was checked. The ▾ filters on the Trend list only ever tested the first row. Mass-review tables were not affected.</li>
+        <li><b>Verified in the browser</b> on the plant files of 2026-10-08 (MB51, Inventory Master, IW39, Fleet register, IWBK): the tile read IWBK (header on row 3; 5,641 open lines, 3,627 materials, 1,198 work orders; 2,395 fully withdrawn and 2,027 lines with no material number left out); 2004641: "Qty Iss. (RSV) 6191 (467)", Where used Open RSV total 426 with the note "Inventory Master 467 … list 426 on work orders", 775G's 74 drills to lines summing to 74; a view with two fleet tiles + P2/mo ascending + an MRP column filter came back identical after Trend → Trace → Trend; with the fix the MRP filter removes the 7 PD rows (26 V1 left); no console errors on Trend, Canvas, Intake.</li>
+        <li>Files: <code>shared/reservations.js</code> (new), <code>intake/intake.html</code>, <code>intake/intake.js</code>, <code>shared/where-used.js</code>, <code>shared/material-detail.js</code>, <code>shared/material-detail.css</code>, <code>analysis/analysis.js</code>. Rollback: <code>_rollback/TREND-HOLD-RSV-pre/</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Project-stock lines off the shelf - 2026-10-14 -->
     <article class="roc-entry dev">
       <div class="head">

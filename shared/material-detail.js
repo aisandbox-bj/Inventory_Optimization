@@ -482,7 +482,7 @@
         <div class="stat-cell"><span class="lab">Unit cost (CAD)</span><div class="v">${mat.movingAvgPrice != null ? AppLocale.fmtCAD(mat.movingAvgPrice) : '—'}</div></div>
         <div class="stat-cell"><span class="lab">Runway @ P2</span><div class="v">${mat.runway != null ? mat.runway + ' mo' : '—'}</div></div>
         <div class="stat-cell"><span class="lab">P2 rate</span><div class="v ${mat.p2Flag !== 'OK' ? 'warn' : ''}">${mat.p2Flag === 'OK' ? mat.p2Rate.toFixed(2) : '—'} <small>/ mo</small></div></div>
-        <div class="stat-cell"><span class="lab">Qty Iss. (window)</span><div class="v">${mat.totalNet}${mat.directNet ? ` <small>+${mat.directNet} for orders</small>` : ''}</div></div>
+        <div class="stat-cell"><span class="lab">Qty Iss. (RSV)</span><div class="v">${mat.totalNet}${(mat.totalReservation != null && mat.totalReservation !== '') ? ` (${Number(mat.totalReservation).toLocaleString()})` : ''}${mat.directNet ? ` <small>+${mat.directNet} for orders</small>` : ''}</div></div>
         ${perEventCell}
         ${lastConsCell}
         <div class="stat-cell"><span class="lab">Lead time ${infoI('Avg total-to-site procurement lead time in calendar days (completed chains, phases A–D). Needs PR History. Same figure on Trend, Canvas and Sandbox. Colour banding: ≤21 default · ≤35 yellow · ≤45 orange · ≤60 red · >60 bold red.')}</span><div class="v ${mat.leadDays != null ? leadBandClass(mat.leadDays) : ''}">${mat.leadDays != null ? mat.leadDays.toFixed(1) + ' d' : '—'}</div>${(mat.leadDays == null && mat.leadGap) ? `<div class="lead-gap">${escapeHtml(mat.leadGap.short)} <button type="button" class="lead-why" id="leadWhyBtn">why?</button></div>` : ''}</div>
@@ -771,6 +771,7 @@
       body.querySelectorAll('.wu-cell').forEach(cell => {
         cell.addEventListener('click', () => {
           const sel = { year: cell.dataset.wuYear };
+          if (cell.dataset.wuRsv)    sel.rsv       = true;   // APP-RSV-WU — an Open RSV cell
           if (cell.dataset.wuSf)     sel.sortField = cell.dataset.wuSf;
           if (cell.dataset.wuModel)  sel.model     = cell.dataset.wuModel;
           if (cell.dataset.wuBucket) sel.bucket    = cell.dataset.wuBucket;

@@ -93,8 +93,12 @@
      returning to Trend keeps the filter the operator had in place. Session-scoped
      (survives navigation within the tab, clears when the tab closes) and keyed by
      assessment so filters don't bleed between assessments. Only view filters —
-     never the math. colFilters are intentionally excluded (per-column, and reset
-     on a fleet switch anyway).
+     never the math.
+     APP-FIX-TREND-HOLD-ALL (2026-10-16, operator: "when I filter stuff or when I sort
+     stuff in the trend app, I click trace it, I go to trace, and when I just come back
+     … it resets the filters and the sorting"). The hold now also keeps the column
+     filters (▾ in each header), the sort order and the fleet tiles in review. Before,
+     those three were left out, so they reset on every return from Trace.
   ═════════════════════════════════════════════════════════════════════════ */
   function filterHoldKey(){
     const n = (state.json && state.json.metadata && state.json.metadata.assessmentName) || '';
@@ -107,7 +111,12 @@
         tl:  state.filterTl     || 'ALL',
         act: !!state.filterAction,
         dup: state.filterDup || null,    // APP-DUP-FLAG
-        fams: [...state.dupFamSel]       // APP-DUP-FINDER
+        fams: [...state.dupFamSel],      // APP-DUP-FINDER
+        // APP-FIX-TREND-HOLD-ALL — column filters (Sets as arrays), sort, fleets in review
+        cf: Object.fromEntries(Object.entries(state.colFilters || {}).map(([k, f]) =>
+              [k, (f && f.values instanceof Set) ? { ...f, values: [...f.values] } : f])),
+        sk: state.sortKey, sd: state.sortDir,
+        fl: [...state.selectedBuckets]
       }));
     } catch (e) { /* private mode / quota / no sessionStorage — non-fatal */ }
   }
@@ -122,14 +131,43 @@
         tl:  typeof o.tl === 'string' ? o.tl : 'ALL',
         act: !!o.act,
         dup: (o.dup === 'all' || o.dup === 'families') ? o.dup : null,
-        fams: Array.isArray(o.fams) ? o.fams.map(String) : []
+        fams: Array.isArray(o.fams) ? o.fams.map(String) : [],
+        cf: (o.cf && typeof o.cf === 'object') ? o.cf : {},
+        sk: typeof o.sk === 'string' ? o.sk : null,
+        sd: (o.sd === 'asc' || o.sd === 'desc') ? o.sd : null,
+        fl: Array.isArray(o.fl) ? o.fl.map(String) : []
       };
     } catch (e) { return null; }
   }
   function applySavedFilters(f){
     if (!f) return;
-    // Nothing held (all defaults) → leave the fresh view untouched.
-    if (!f.s && (f.tl === 'ALL' || !f.tl) && !f.act && !f.dup) return;
+    // APP-FIX-TREND-HOLD-ALL — fleets in review: keep the ones that still exist; the material opened by a
+    // "Back to Trend" link must stay in view, so its fleet joins the selection if it isn't there.
+    let fleetsChanged = false;
+    if (f.fl && f.fl.length && state.result && state.result.buckets) {
+      const keys = new Set(state.result.buckets.map(b => String(b.key)));
+      const sel = new Set(f.fl.filter(k => keys.has(k)));
+      if (sel.size) {
+        if (state.selectedMaterial) {
+          const home = state.result.buckets.find(b => b.materials.some(m => String(m.material) === String(state.selectedMaterial)));
+          if (home) sel.add(String(home.key));
+        }
+        const same = sel.size === state.selectedBuckets.size && [...sel].every(k => state.selectedBuckets.has(k));
+        if (!same) { state.selectedBuckets = sel; fleetsChanged = true; }
+      }
+    }
+    // Column filters: only columns the list still has
+    const colKeys = new Set(LIST_COLS.map(c => c.k));
+    const cf = {};
+    for (const [k, v] of Object.entries(f.cf || {})) {
+      if (!colKeys.has(k) || !v || typeof v !== 'object') continue;
+      cf[k] = (v.type === 'set' && Array.isArray(v.values)) ? { ...v, values: new Set(v.values) } : v;
+    }
+    state.colFilters = cf;
+    if (f.sk && colKeys.has(f.sk)) { state.sortKey = f.sk; state.sortDir = f.sd || 'desc'; }
+    if (fleetsChanged) { renderFleetTiles(); renderDetail(); }
+    // Nothing else held (all defaults) → keep the fresh view, but re-save it.
+    if (!f.s && (f.tl === 'ALL' || !f.tl) && !f.act && !f.dup) { renderList(); persistFilters(); return; }
     state.searchText   = f.s;
     state.filterTl     = f.tl || 'ALL';
     state.filterAction = f.act;
@@ -459,6 +497,7 @@
     renderFleetTiles();
     renderList();
     renderDetail();
+    persistFilters();   // APP-FIX-TREND-HOLD-ALL — the fleets in review are held too
   }
 
   // Select exactly ONE fleet (resets the view filters, like the old single tabs).
@@ -804,7 +843,11 @@
     }
     // APP-LIST-SEARCH — text, or a pasted list of up to 20 material numbers
     if (state.searchText) rows = rows.filter(m => ListSearch.test(state.searchText, m.material, m.description));
-    rows = rows.filter(passesColFilters);
+    // APP-FIX-TREND-COLFILTER (2026-10-16) — call with the material only. Passed straight to .filter(),
+    // passesColFilters received the row's POSITION as its second argument (its optional filter set since
+    // v2.1.1), so from the second row on it checked no filters at all: on the Trend list the ▾ column
+    // filters only ever tested the first row.
+    rows = rows.filter(m => passesColFilters(m));
     const k = state.sortKey, dir = state.sortDir;
     rows.sort((a, b) => {
       let av = a[k], bv = b[k];
@@ -975,6 +1018,7 @@
         if (state.sortKey === k) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
         else { state.sortKey = k; state.sortDir = 'desc'; }
         renderList();
+        persistFilters();   // APP-FIX-TREND-HOLD-ALL
       });
     });
     // Filter dropdown: click caret → open popover
@@ -1078,7 +1122,7 @@
     const colDefs    = opts.colDefs    || LIST_COLS;
     const colFilters = opts.colFilters || state.colFilters;
     const data       = opts.data       || (currentBucket() ? currentBucket().materials : []);
-    const onChange   = opts.onChange   || renderList;
+    const onChange   = opts.onChange   || (() => { renderList(); persistFilters(); });   // APP-FIX-TREND-HOLD-ALL — the main list's column filters are held
 
     closeColFilterPopover();
     const colKey = btn.dataset.filter;

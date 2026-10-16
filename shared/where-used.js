@@ -108,7 +108,29 @@
     });
     const grandTotal = woEntries.reduce((s, e) => s + e.total, 0) + cc.total + unmappedWO.total;
 
-    return { available: hasIw39, hasFleet, years: yearList, woEntries, cc, unmappedWO, grandByYear, grandTotal };
+    // APP-RSV-WU (2026-10-16) — open reservations on work orders (IWBK list loaded in Intake), mapped to the
+    // same destinations: order → IW39 Sort Field → Fleet model. A unit with reservations but no past use gets
+    // its own row. Display only. Plus the Inventory Master's open-reservation total for the material.
+    const hasRsvList = !!(json.reservations && Array.isArray(json.reservations.rows));
+    let rsvTotal = 0;
+    unmappedWO.rsv = 0;
+    if (hasRsvList) {
+      for (const r of json.reservations.rows) {
+        if (String(r.material || '').trim() !== String(material).trim() || !(r.open > 0)) continue;
+        rsvTotal += r.open;
+        const sf = r.order ? orderToSF.get(String(r.order).trim()) : null;
+        if (!sf) { unmappedWO.rsv += r.open; continue; }
+        const model = hasFleet ? (sfToModel.get(sf) || '(unmapped model)') : null;
+        const key = (model || '') + '||' + sf;
+        let e = woMap.get(key);
+        if (!e) { e = { model, sortField: sf, byYear: {}, total: 0 }; woMap.set(key, e); woEntries.push(e); }
+        e.rsv = (e.rsv || 0) + r.open;
+      }
+    }
+    const imRow = (data.inventoryMaster || []).find(r => String(r.material || '').trim() === String(material).trim());
+    const imRsv = imRow && imRow.totalReservation != null && imRow.totalReservation !== '' ? Number(imRow.totalReservation) : null;
+
+    return { available: hasIw39, hasFleet, years: yearList, woEntries, cc, unmappedWO, grandByYear, grandTotal, hasRsvList, rsvTotal, imRsv };
   }
 
   function yearCells(byYear, years){
@@ -133,10 +155,12 @@
       return `<div class="wu-empty">Load <b>IW39</b> (work orders) to see where this material is used — it resolves each work-order issue to its Sort Field. Add <b>Fleet Master</b> for a model rollup.</div>`;
     }
     const years = data.years;
-    if (!years.length){
-      return `<div class="wu-empty">No work-order (261) or cost-centre (201) consumption recorded for ${esc(material)}.</div>`;
+    if (!years.length && !data.rsvTotal){
+      return `<div class="wu-empty">No work-order (261) or cost-centre (201) consumption recorded for ${esc(material)}.${rsvLine(data)}</div>`;
     }
     const yhead = years.map(y => `<th class="num">${esc(y)}</th>`).join('');
+    const R = !!data.hasRsvList;   // APP-RSV-WU — the Open RSV column shows when the reservation list is loaded
+    const rsvCell = (v, sel) => !R ? '' : (v ? `<td class="num wu-rsv wu-cell" data-wu-rsv="1"${Object.entries(sel).map(([k, val]) => ` data-wu-${k}="${esc(val)}"`).join('')}>${fmt(v)}</td>` : `<td class="num wu-rsv">·</td>`);
     let body = '';
 
     if (data.hasFleet){
@@ -149,39 +173,51 @@
       const models = [...byModel.entries()].map(([m, list]) => {
         const byYear = {}; let total = 0;
         list.forEach(e => { Object.entries(e.byYear).forEach(([y, v]) => byYear[y] = (byYear[y] || 0) + v); total += e.total; });
-        return { model: m, list: list.sort((a, b) => b.total - a.total), byYear, total };
-      }).sort((a, b) => b.total - a.total);
+        const rsv = list.reduce((s, e) => s + (e.rsv || 0), 0);
+        return { model: m, list: list.sort((a, b) => (b.total - a.total) || ((b.rsv || 0) - (a.rsv || 0))), byYear, total, rsv };
+      }).sort((a, b) => (b.total - a.total) || (b.rsv - a.rsv));
       for (const mg of models){
-        body += `<tr class="wu-model"><td>${esc(mg.model)}</td>${yearCellsSel(mg.byYear, years, { model: mg.model })}<td class="num">${fmt(mg.total)}</td></tr>`;
+        body += `<tr class="wu-model"><td>${esc(mg.model)}</td>${yearCellsSel(mg.byYear, years, { model: mg.model })}<td class="num">${mg.total ? fmt(mg.total) : '·'}</td>${rsvCell(mg.rsv, { model: mg.model })}</tr>`;
         for (const e of mg.list){
-          body += `<tr class="wu-sf"><td><span class="wu-ind">↳</span>${esc(e.sortField)}</td>${yearCellsSel(e.byYear, years, { sf: e.sortField })}<td class="num">${fmt(e.total)}</td></tr>`;
+          body += `<tr class="wu-sf"><td><span class="wu-ind">↳</span>${esc(e.sortField)}</td>${yearCellsSel(e.byYear, years, { sf: e.sortField })}<td class="num">${e.total ? fmt(e.total) : '·'}</td>${rsvCell(e.rsv, { sf: e.sortField })}</tr>`;
         }
       }
     } else {
-      for (const e of data.woEntries.slice().sort((a, b) => b.total - a.total)){
-        body += `<tr class="wu-sf"><td>${esc(e.sortField)}</td>${yearCellsSel(e.byYear, years, { sf: e.sortField })}<td class="num">${fmt(e.total)}</td></tr>`;
+      for (const e of data.woEntries.slice().sort((a, b) => (b.total - a.total) || ((b.rsv || 0) - (a.rsv || 0)))){
+        body += `<tr class="wu-sf"><td>${esc(e.sortField)}</td>${yearCellsSel(e.byYear, years, { sf: e.sortField })}<td class="num">${e.total ? fmt(e.total) : '·'}</td>${rsvCell(e.rsv, { sf: e.sortField })}</tr>`;
       }
     }
-    if (data.unmappedWO.total){
-      body += `<tr class="wu-unmapped"><td>Unmapped WO</td>${yearCellsSel(data.unmappedWO.byYear, years, { bucket: 'unmapped' })}<td class="num">${fmt(data.unmappedWO.total)}</td></tr>`;
+    if (data.unmappedWO.total || data.unmappedWO.rsv){
+      body += `<tr class="wu-unmapped"><td>Unmapped WO</td>${yearCellsSel(data.unmappedWO.byYear, years, { bucket: 'unmapped' })}<td class="num">${data.unmappedWO.total ? fmt(data.unmappedWO.total) : '·'}</td>${rsvCell(data.unmappedWO.rsv, { bucket: 'unmapped' })}</tr>`;
     }
     if (data.cc.total){
-      body += `<tr class="wu-cc"><td>Cost centre (CC)</td>${yearCellsSel(data.cc.byYear, years, { bucket: 'cc' })}<td class="num">${fmt(data.cc.total)}</td></tr>`;
+      body += `<tr class="wu-cc"><td>Cost centre (CC)</td>${yearCellsSel(data.cc.byYear, years, { bucket: 'cc' })}<td class="num">${fmt(data.cc.total)}</td>${R ? '<td class="num wu-rsv">·</td>' : ''}</tr>`;
     }
     if (!body){
-      return `<div class="wu-empty">No work-order (261) or cost-centre (201) consumption recorded for ${esc(material)}.</div>`;
+      return `<div class="wu-empty">No work-order (261) or cost-centre (201) consumption recorded for ${esc(material)}.${rsvLine(data)}</div>`;
     }
-    const grand = `<tr class="wu-grand"><td>Total</td>${yearCells(data.grandByYear, years)}<td class="num">${fmt(data.grandTotal)}</td></tr>`;
+    const grand = `<tr class="wu-grand"><td>Total</td>${yearCells(data.grandByYear, years)}<td class="num">${fmt(data.grandTotal)}</td>${R ? `<td class="num wu-rsv">${data.rsvTotal ? fmt(data.rsvTotal) : '·'}</td>` : ''}</tr>`;
     const fleetNote = data.hasFleet ? '' : `<div class="wu-note">Fleet Master not loaded — showing Sort Field only (no model rollup).</div>`;
     return `<div class="wu-panel">
-      <div class="wu-h">Where used — net consumption by destination<span class="wu-hint-tr"><i>click a number for WO detail</i></span></div>
-      ${fleetNote}
+      <div class="wu-h">Where used — net consumption${R ? ' and open reservations' : ''} by destination<span class="wu-hint-tr"><i>click a number for WO detail</i></span></div>
+      ${fleetNote}${rsvLine(data)}
       <table class="wu-tbl">
-        <thead><tr><th>Destination</th>${yhead}<th class="num">Total</th></tr></thead>
+        <thead><tr><th>Destination</th>${yhead}<th class="num">Total</th>${R ? '<th class="num wu-rsv">Open RSV</th>' : ''}</tr></thead>
         <tbody>${body}${grand}</tbody>
       </table>
-      <div class="wu-cav">Net of reversals (261−262 work-order issues · 201−202 cost-centre). Destinations from IW39 Sort Field${data.hasFleet ? ' → Fleet model' : ''}; all-time, bucketed by posting year.</div>
+      <div class="wu-cav">Net of reversals (261−262 work-order issues · 201−202 cost-centre). Destinations from IW39 Sort Field${data.hasFleet ? ' → Fleet model' : ''}; all-time, bucketed by posting year.${R ? ' Open RSV = open reservations on work orders now (required less withdrawn, from the reservation list loaded in Intake): upcoming demand, not in the Min / Max maths.' : ''}</div>
     </div>`;
+  }
+
+  // APP-RSV-WU — one line on reservations above the table
+  function rsvLine(data){
+    const im = (data.imRsv != null) ? `Inventory Master open reservations: <b>${fmt(data.imRsv)}</b>.` : '';
+    if (data.hasRsvList) {
+      const diff = (data.imRsv != null && Math.abs(data.imRsv - data.rsvTotal) > 1e-9)
+        ? ` The reservation list shows <b>${fmt(data.rsvTotal)}</b> on work orders (the rest may be on cost centres or newer than the list).` : '';
+      return im || diff ? `<div class="wu-note wu-rsv-note">${im}${diff}</div>` : '';
+    }
+    return `<div class="wu-note wu-rsv-note">${im} Load the <b>open reservations</b> list (IWBK) in Intake to see them by fleet and unit.</div>`;
   }
 
   /* ───────────────────────────────────────────────────────────────────────
@@ -213,6 +249,7 @@
   }
 
   function drill(json, material, sel){
+    if (sel && sel.rsv) return drillReservations(json, material, sel);   // APP-RSV-WU
     const data  = (json && json.data) || {};
     const mb51  = data.mb51 || [];
     const iw39  = data.iw39 || [];
@@ -299,8 +336,55 @@
     return { rows: out, total, ctx: { year, label } };
   }
 
+  // APP-RSV-WU — the open reservation lines behind one Open RSV cell
+  function drillReservations(json, material, sel){
+    const data = (json && json.data) || {};
+    const iw39 = data.iw39 || [], fleet = data.fleetMaster || [];
+    const hasFleet = fleet.length > 0;
+    const orderToSF = new Map(), orderToDesc = new Map();
+    for (const o of iw39){
+      const ord = String(o.order || '').trim(); if (!ord) continue;
+      if (!orderToSF.has(ord))   orderToSF.set(ord, String(o.sortField || '').trim());
+      if (!orderToDesc.has(ord)) orderToDesc.set(ord, String(o.description || '').trim());
+    }
+    const sfToModel = new Map();
+    for (const u of fleet){ const sf = String(u.sortField || '').trim(), m = String(u.model || '').trim(); if (sf && m && !sfToModel.has(sf)) sfToModel.set(sf, m); }
+    const modelOf = sf => hasFleet ? (sfToModel.get(sf) || '(unmapped model)') : null;
+    const rows = ((json.reservations && json.reservations.rows) || []).filter(r => String(r.material || '').trim() === String(material).trim() && r.open > 0);
+    const out = []; let total = 0;
+    for (const r of rows){
+      const sf = r.order ? (orderToSF.get(String(r.order).trim()) || '') : '';
+      if (sel.bucket === 'unmapped') { if (sf) continue; }
+      else if (sel.sortField != null) { if (sf !== sel.sortField) continue; }
+      else if (sel.model != null) { if (!sf || modelOf(sf) !== sel.model) continue; }
+      out.push({ fleet: sf ? (modelOf(sf) || '—') : '—', unit: sf || '—', start: r.start || '—', order: r.order || '—',
+                 desc: r.text || orderToDesc.get(String(r.order).trim()) || '(no description)', required: r.required, withdrawn: r.withdrawn, open: r.open });
+      total += r.open;
+    }
+    out.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+    const label = sel.bucket === 'unmapped' ? 'Unmapped WO' : (sel.model != null ? sel.model : (sel.sortField != null ? (((m) => (m && m !== '(unmapped model)') ? `${m} · ${sel.sortField}` : sel.sortField)(modelOf(sel.sortField))) : ''));
+    return { kind: 'rsv', rows: out, total, ctx: { label } };
+  }
+
   function renderDrill(d, material){
     const back = `<button type="button" class="wu-back" id="wuBack">‹ Back to where-used</button>`;
+    if (d && d.kind === 'rsv') {   // APP-RSV-WU
+      const headR = `<div class="wu-drill-h">${esc(d.ctx.label)} · open reservations <span class="wu-drill-sub">— work orders for ${esc(material)}</span></div>`;
+      if (!d.rows.length) return `<div class="wu-drill">${back}${headR}<div class="wu-empty">No open reservation lines found for this destination.</div></div>`;
+      const bodyR = d.rows.map(r => `<tr>
+          <td>${esc(r.fleet)}</td><td>${esc(r.unit)}</td><td class="wu-nowrap">${esc(r.start)}</td><td>${esc(r.order)}</td>
+          <td class="wu-desc">${esc(r.desc)}</td><td class="num">${fmt(r.required)}</td><td class="num">${fmt(r.withdrawn)}</td><td class="num wu-rsv">${fmt(r.open)}</td>
+        </tr>`).join('');
+      return `<div class="wu-drill">
+        ${back}
+        ${headR}
+        <table class="wu-tbl wu-drill-tbl">
+          <thead><tr><th>Fleet</th><th>Unit</th><th>Earliest start</th><th>WO#</th><th>WO description</th><th class="num">Required</th><th class="num">Withdrawn</th><th class="num wu-rsv">Open</th></tr></thead>
+          <tbody>${bodyR}<tr class="wu-grand"><td colspan="7">Total open</td><td class="num wu-rsv">${fmt(d.total)}</td></tr></tbody>
+        </table>
+        <div class="wu-cav">From the open-reservation list (IWBK) loaded in Intake; open = required less withdrawn. Sorted by earliest start date. Rows sum to the number you clicked.</div>
+      </div>`;
+    }
     const head = `<div class="wu-drill-h">${esc(d.ctx.label)} · ${esc(d.ctx.year)} <span class="wu-drill-sub">— work orders for ${esc(material)}</span></div>`;
     if (!d.rows.length){
       return `<div class="wu-drill">${back}${head}<div class="wu-empty">No underlying movements found for this destination and year.</div></div>`;

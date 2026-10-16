@@ -278,6 +278,15 @@
             <span class="file">drag .xlsx / .csv here, or click</span>
             <input type="file" accept=".xlsx,.xls,.csv,.txt" />
           </label>
+          <!-- APP-RSV-WU (2026-10-16) — open reservations per work order (SAP IWBK). Read by
+               shared/reservations.js (no column mapping, no DQ gate), like the Duplicate list. -->
+          <label class="drop drop-cond" data-source="reservationList">
+            <span class="drop-flag" aria-hidden="true"></span>
+            <div class="name">Open reservations <em style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:.3px;font-style:normal;font-weight:normal;">(optional · IWBK)</em></div>
+            <div class="hint">SAP's reservation list for work orders (IWBK, "Availability list for materials for operations"). Adds <b>open reservations by fleet and unit</b> to <b>Where used</b>: upcoming demand beside past use. Not used in the Min / Max maths.</div>
+            <span class="file">drag .xlsx / .csv here, or click</span>
+            <input type="file" accept=".xlsx,.xls,.csv,.txt" />
+          </label>
         </div>
       </div>
     </section>
@@ -530,7 +539,8 @@
 <script src="../shared/inventory-back-calc.js"></script>
 <script src="../shared/pipeline.js"></script>
 <script src="../shared/analyst-marks.js"></script>
-<script src="../shared/duplicate-list.js"></script><!-- APP-DUP-FLAG — parse the potential-duplicates worklist -->
+<script src="../shared/duplicate-list.js"></script>
+<script src="../shared/reservations.js"></script><!-- APP-RSV-WU — read the open-reservation list (IWBK) --><!-- APP-DUP-FLAG — parse the potential-duplicates worklist -->
 <script src="intake.js"></script>
 
 </body>

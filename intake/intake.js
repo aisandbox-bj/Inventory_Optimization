@@ -134,6 +134,7 @@
     inventoryMasterDate: null,                       // APP-FIX-SNAPSHOT-ALIGN · SAP extract date of the Inventory Master (yyyy-mm-dd)
     analystMap:  null,                               // APP-ANALYST-IN-JSON · review work carried in by an uploaded JSON / Reuse (→ json.analyst)
     analystFrom: null,                               //   … and the name it was filed under in this browser
+    reservations: null,                              // APP-RSV-WU · open reservations per work order { file, loadedAt, rows } (→ json.reservations)
     duplicates: null,                                // APP-DUP-FLAG · parsed potential-duplicates list { hasFamilies, materials, families } (→ json.duplicates)
     fleetModelMerges: {}                             // APP-INT-MODELMERGE · lower-cased model → the spelling the operator chose to keep (a model spelled two ways by letter case)
   };
@@ -275,6 +276,8 @@
         return { level:'opt', reason:'enables lead-time-based Min/Max' };
       case 'duplicateList':   // APP-DUP-FLAG
         return { level:'opt', reason:'adds the Duplicates filter on Trend' };
+      case 'reservationList':   // APP-RSV-WU
+        return { level:'opt', reason:'adds open reservations by fleet and unit to Where used' };
       default:
         return { level:'na' };
     }
@@ -342,6 +345,7 @@
     }
     syncInventoryMasterDateInput();
     setupDuplicateDrop();   // APP-DUP-FLAG
+    setupReservationDrop();   // APP-RSV-WU
     setupClearButtons();    // APP-INT-CLEAR
   }
 
@@ -351,7 +355,7 @@
      away a big file. Clearing re-runs the mapping + data-quality checks, so no
      stale result (e.g. "passed" from before MB51 was removed) is left showing. */
   function setupClearButtons(){
-    const sources = REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES).concat(['duplicateList']);
+    const sources = REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES).concat(['duplicateList', 'reservationList']);
     sources.forEach(source => {
       const drop = document.querySelector(`.drop[data-source="${source}"]`);
       if (!drop || drop.querySelector('.drop-clear')) return;
@@ -377,6 +381,13 @@
   }
   function clearDataset(source){
     const drop = document.querySelector(`.drop[data-source="${source}"]`);
+    if (source === 'reservationList') {   // APP-RSV-WU
+      state.reservations = null;
+      showReservationTile(drop ? drop.dataset.emptyLabel : '');
+      renderJsonPreview();
+      toast('Open reservations cleared.', 'ok');
+      return;
+    }
     if (source === 'duplicateList') {
       state.duplicates = null;
       showDuplicateTile(drop ? drop.dataset.emptyLabel : '');
@@ -449,6 +460,55 @@
       state.duplicates = null;
       showDuplicateTile(`${file.name} · ERROR: ${e.message || e}`);
       toast('Duplicate list failed to load: ' + (e.message || e), 'crit');
+    }
+  }
+
+  /* APP-RSV-WU (2026-10-16) — open reservations per work order (SAP IWBK). Optional, outside the
+     mapping step and the DQ gate (like the Duplicate list); parsed by shared/reservations.js into an
+     additive json.reservations block. Display only: Where used shows it; no Min / Max maths read it. */
+  function setupReservationDrop(){
+    const drop = document.querySelector('.drop[data-source="reservationList"]');
+    if (!drop || drop._rsvWired) return;
+    drop._rsvWired = true;
+    const input = drop.querySelector('input[type="file"]');
+    drop.addEventListener('dragover',  (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+    drop.addEventListener('dragleave', ()  => drop.classList.remove('dragover'));
+    drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('dragover'); if (e.dataTransfer.files.length) handleReservationFile(e.dataTransfer.files[0]); });
+    input.addEventListener('change', (e) => { if (e.target.files.length) handleReservationFile(e.target.files[0]); e.target.value = ''; });
+  }
+  function reservationSummary(r){
+    if (!r || !r.rows) return '';
+    const n = r.rows.length, mats = new Set(r.rows.map(x => x.material)).size, ords = new Set(r.rows.map(x => x.order)).size;
+    return `${n.toLocaleString()} open line${n === 1 ? '' : 's'} · ${mats.toLocaleString()} material${mats === 1 ? '' : 's'} · ${ords.toLocaleString()} work order${ords === 1 ? '' : 's'}`;
+  }
+  function showReservationTile(label){
+    const drop = document.querySelector('.drop[data-source="reservationList"]');
+    if (!drop) return;
+    drop.classList.toggle('loaded', !!state.reservations);
+    drop.querySelector('.file').textContent = label;
+  }
+  async function handleReservationFile(file){
+    if (typeof Reservations === 'undefined'){ toast('Reservation-list reader unavailable.', 'crit'); return; }
+    showReservationTile(`${file.name} · reading…`);
+    try {
+      const rows = await Reservations.readFile(file);
+      const p = Reservations.parse(rows);
+      if (p.headerRow == null){
+        state.reservations = null;
+        showReservationTile(`${file.name} · no Order / Material / Requirement Quantity columns found`);
+        toast('That file has no Order, Material and Requirement Quantity columns: nothing loaded. Use the IWBK export.', 'crit');
+      } else {
+        state.reservations = { file: file.name, loadedAt: new Date().toISOString().slice(0, 10), rows: p.rows };
+        const sk = p.skipped || {};
+        showReservationTile(`${file.name} · ${reservationSummary(state.reservations)}`);
+        toast(`Open reservations loaded — ${reservationSummary(state.reservations)}${sk.closed ? ` (${sk.closed.toLocaleString()} fully withdrawn lines left out)` : ''}.`, 'ok');
+      }
+      renderJsonPreview();
+    } catch (e){
+      console.error(e);
+      state.reservations = null;
+      showReservationTile(`${file.name} · could not be read (${e.message || e})`);
+      toast('The reservation list could not be read (' + (e.message || e) + ').', 'crit');
     }
   }
 
@@ -2494,6 +2554,8 @@
     }
     // APP-DUP-FLAG — additive, optional top-level block (no SCHEMA_VERSION bump; absent = no list)
     if (state.duplicates && state.duplicates.materials && state.duplicates.materials.length) json.duplicates = state.duplicates;
+    // APP-RSV-WU — additive, optional top-level block (absent = no reservation list)
+    if (state.reservations && Array.isArray(state.reservations.rows)) json.reservations = state.reservations;
     // APP-ANALYST-IN-JSON (2026-09-27) — the review work (★ For Action, Analyst Rec,
     // notes) goes INTO the JSON under whatever name this run is saved as. Sources,
     // newest edit per material wins: the work carried in by an uploaded JSON or a
@@ -2547,6 +2609,7 @@
       summary.data[key] = arr.length > 0 ? `[ … ${arr.length} rows … ]` : `[ ]`;
     }
     if (json.duplicates) summary.duplicates = `{ … ${duplicateSummary(json.duplicates)} … }`;   // APP-DUP-FLAG
+    if (json.reservations) summary.reservations = `{ … ${reservationSummary(json.reservations)} … }`;   // APP-RSV-WU
     host.textContent = JSON.stringify(summary, null, 2);
 
     $('#jsonSize').textContent = humanBytes(jsonSizeOf(json));
@@ -2678,6 +2741,9 @@
         // APP-DUP-FLAG — carry the duplicate list through a JSON upload so a re-save keeps it
         state.duplicates = (json.duplicates && Array.isArray(json.duplicates.materials) && json.duplicates.materials.length) ? json.duplicates : null;
         showDuplicateTile(state.duplicates ? `${duplicateSummary(state.duplicates)} · loaded from JSON` : 'drag .xlsx / .csv here, or click');
+        // APP-RSV-WU — carry the reservation list through a JSON upload so a re-save keeps it
+        state.reservations = (json.reservations && Array.isArray(json.reservations.rows)) ? json.reservations : null;
+        showReservationTile(state.reservations ? `${reservationSummary(state.reservations)} · loaded from JSON` : 'drag .xlsx / .csv here, or click');
         // Stuff data into parsed slots so downstream UI works
         for (const s of REQUIRED_SOURCES.concat(CONDITIONAL_SOURCES)) {
           if (json.data[s] && json.data[s].length) {
@@ -2772,6 +2838,12 @@
       const kept = rows.filter(r => keep.has(String(r.material||'').trim()));
       dropped += (rows.length - kept.length);
       json.data[tbl] = kept;
+    }
+    // APP-RSV-WU — the open-reservation list follows the same keep-set
+    if (json.reservations && Array.isArray(json.reservations.rows)) {
+      const kept = json.reservations.rows.filter(r => keep.has(String(r.material || '').trim()));
+      dropped += json.reservations.rows.length - kept.length;
+      json.reservations = { ...json.reservations, rows: kept };
     }
     return { ok:true, materials: keep.size, dropped };
   }

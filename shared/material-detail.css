@@ -658,3 +658,8 @@
   font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.4px; color:#1FCED8; }
 .lead-why-x{ background:none; border:none; color:#9BABA8; cursor:pointer; font-size:13px; }
 .lead-why-b{ padding:10px 12px 12px; font-size:12.5px; line-height:1.5; }
+
+/* APP-RSV-WU (2026-10-16) — open reservations in Where used: amber, so upcoming demand reads apart from past use */
+.wu-tbl .wu-rsv{ color:var(--status-warn,#FBBF24); }
+.wu-tbl th.wu-rsv{ color:var(--status-warn,#FBBF24); }
+.wu-rsv-note{ margin:2px 0 6px; }
