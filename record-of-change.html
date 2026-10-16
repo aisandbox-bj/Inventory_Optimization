@@ -381,6 +381,28 @@ git -C /tmp/peek push --force-with-lease origin main
 
   <div class="roc-list">
 
+    <!-- v2.2.0-dev - Project-stock lines off the shelf - 2026-10-14 -->
+    <article class="roc-entry dev">
+      <div class="head">
+        <span class="ver">v2.2.0</span>
+        <span class="date">2026-10-14</span>
+        <span class="tag dev">dev</span>
+      </div>
+      <h4>v2.2.0-dev — <b>APP-FIX-PROJECT-STOCK</b>: project (special stock) lines are left off the shelf; use from project stock joins the dotted total-use line — <b>browser-verified on the plant MB51; pending operator off-repo validation</b></h4>
+      <ul>
+        <li><b>Why:</b> project stock carries the shelf storage location but is not own stock (WO Readiness proved the rule on 4,038 of 4,038 parts, 2026-09-28). The plant MB51 of 2026-10-08 has 109 "GR fr Val.BlStk Proj" (60 lines, into project stock), 291 "GI acct ass.fm proj." (57, issued from it), 415 "TF proj. to proj." (24) and 711 "GI InvDiff:whse/proj" (1), all in the shelf location; the stock line counted them.</li>
+        <li><b>Now:</b> Intake reads MB51 <b>Movement Type Text</b> and <b>Special Stock</b> (both optional). A line is project stock when Special Stock is filled, or, without that column, when its movement text mentions a project and it is not 221 / 222 ("GI / RE for project" = own stock going to or from a project, which stays on the shelf). Project-stock lines never move the stock line (<code>InventoryBackCalc.isProjectStock</code>). An issue from project stock is never usage from stock; it joins the dotted total-use line, labelled "From project stock · not shelf stock". The Intake gate counts the project-stock lines left off the shelf, and warns when MB51 has neither column.</li>
+        <li><b>Verified in the browser:</b>
+          <ul>
+            <li>operator's saved run: identical to the engine before 2026-10-14 in every field; operator's 91-material MB51: identical to the previous push (no project-stock lines there);</li>
+            <li>plant MB51 (57,423 lines) + Inventory Master of 2026-10-08: adding up every shelf line from go-live equals Inventory Master stock for 1,661 of 1,664 parts (one of them once same-day postings are left out); 37 parts have project-stock lines; on 24 of them the drawn stock line changes (by up to 800 units), and one (2003216) no longer drops to −85;</li>
+            <li>the gate note reads "less 142 project-stock lines"; no console errors.</li>
+          </ul></li>
+        <li><b>Not explained:</b> 3 parts in that plant MB51 differ from Inventory Master by 6 to 8 units with no project lines (likely lines missing from a by-material pull; WO Readiness reached 100% combining the by-work-order and by-material pulls).</li>
+        <li>Files: <code>shared/parsers.js</code>, <code>shared/inventory-back-calc.js</code>, <code>shared/pipeline.js</code> (cache tag pc7), <code>shared/movement-detail.js</code>, <code>intake/intake.js</code>.</li>
+      </ul>
+    </article>
+
     <!-- v2.2.0-dev - Two consumption lines: usage from stock drives the rates, total use dotted - 2026-10-14 -->
     <article class="roc-entry dev">
       <div class="head">

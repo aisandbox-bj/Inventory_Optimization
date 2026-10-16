@@ -120,6 +120,10 @@
         consumption.push({ date, mt, mtDesc: describe(mt), qty: Math.abs(parseFloat(r.quantity) || 0), order });
       } else if (PL && PL.isDirectCharge && PL.isDirectCharge(r)){
         direct.push({ date, mt, mtDesc: directLabel(r), qty: Math.abs(parseFloat(r.quantity) || 0), order });
+      } else if (PL && PL.isOutsideStockUse && PL.isOutsideStockUse(r)){
+        // APP-FIX-PROJECT-STOCK — used from project stock (bought for the project)
+        const rev = /^(262|202|222|292)$/.test(mt);
+        direct.push({ date, mt, mtDesc: rev ? 'Reversal of use from project stock' : 'From project stock · not shelf stock', qty: Math.abs(parseFloat(r.quantity) || 0), order });
       }
       const sd = stockSignedDelta(r, siteSlocs);
       if (sd !== 0){

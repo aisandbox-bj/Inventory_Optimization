@@ -1008,7 +1008,12 @@
       const mb51Sloc = mb51.some(r => Object.prototype.hasOwnProperty.call(r, 'storageLocation'));
       if (mb51Sloc) {
         const direct = mb51.filter(r => { const mt = String(r.movementType || '').trim(); return (mt === '109' || mt === '110') && !String(r.storageLocation || '').trim(); }).length;
-        notes.push({ code:'mb51_sloc', sev:'note', msg:`MB51 has storage locations: the stock line counts every line in the shelf storage location.${direct ? ` ${direct.toLocaleString()} receipt line${direct === 1 ? '' : 's'} (109 / 110) with no storage location ${direct === 1 ? 'is a part' : 'are parts'} bought straight for an order, cost centre or project: shown on the chart as total use (dotted line); not stock, and not in the rates or Min / Max.` : ''}` });
+        const projIs = (BCm && BCm.isProjectStock) ? BCm.isProjectStock : null;
+        const canProj = mb51.some(r => Object.prototype.hasOwnProperty.call(r, 'movementTypeText') || Object.prototype.hasOwnProperty.call(r, 'specialStock'));
+        const proj = (projIs && canProj) ? mb51.filter(r => String(r.storageLocation || '').trim() && projIs(r)).length : 0;
+        if (!canProj) warnings.push({ code:'mb51_no_mvt_text', sev:'warn',
+          msg:'MB51 has no Movement Type Text (or Special Stock) column, so project-stock lines can\'t be told apart from shelf stock: on parts with project stock the stock line will be off. Re-export MB51 with Movement Type Text.' });
+        notes.push({ code:'mb51_sloc', sev:'note', msg:`MB51 has storage locations: the stock line counts every line in the shelf storage location${proj ? `, less ${proj.toLocaleString()} project-stock line${proj === 1 ? '' : 's'}` : ''}.${direct ? ` ${direct.toLocaleString()} receipt line${direct === 1 ? '' : 's'} (109 / 110) with no storage location ${direct === 1 ? 'is a part' : 'are parts'} bought straight for an order, cost centre or project: shown on the chart as total use (dotted line); not stock, and not in the rates or Min / Max.` : ''}` });
       } else {
         warnings.push({ code:'mb51_no_sloc', sev:'warn',
           msg:'MB51 has no Storage Location column. The stock line falls back to movement types: parts bought straight for an order are read as stock arriving (the line can drop below zero), and the chart cannot show total use. Re-export MB51 with Storage Location.' });

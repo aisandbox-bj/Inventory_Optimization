@@ -39,9 +39,14 @@
       purchaseOrder: ['Purchase order', 'PO', 'PO Number', 'PO No', 'PO No.', 'Purchasing Document'],
       /* APP-FIX-SHELF-STOCK (2026-10-14) — storage location on every MB51 line. The stock line counts
          the lines in the shelf storage location; a 109 / 110 with NO storage location is a part bought
-         straight for an order / cost centre / project (consumption, never shelf stock). Optional: a file
+         straight for an order / cost centre / project (total use, never shelf stock). Optional: a file
          without it keeps the old movement-type reading. Same aliases as the Inventory Master. */
-      storageLocation: ['Storage Location', 'Sloc', 'Stor. Loc.', 'StorLoc']
+      storageLocation: ['Storage Location', 'Sloc', 'Stor. Loc.', 'StorLoc'],
+      /* APP-FIX-PROJECT-STOCK (2026-10-14) — project (special stock Q) lines carry a storage location but
+         are not own stock. Told apart by the Special Stock indicator when the file has it, else by the
+         movement text ("GR fr Val.BlStk Proj", "GI acct ass.fm proj.", "TF proj. to proj.", …). Optional. */
+      movementTypeText: ['Movement Type Text', 'Mvt Type Text', 'MvT Text', 'Movement type text'],
+      specialStock:     ['Special Stock', 'Special Stock Indicator', 'Special Stock Ind.', 'Spec. Stock']
     },
     iw39: {
       order:          ['Order', 'Order Number'],
@@ -277,7 +282,9 @@
       movementType: 'string',
       plant:         'string',  /* APP-T-01b */
       purchaseOrder: 'string',  /* APP-FIX-T-04b — preserve PO leading zeros for PR↔MB51 join */
-      storageLocation: 'string' /* APP-FIX-SHELF-STOCK — blank is kept as '' (blank means "not on the shelf") */
+      storageLocation: 'string', /* APP-FIX-SHELF-STOCK — blank is kept as '' (blank means "not on the shelf") */
+      movementTypeText: 'string', /* APP-FIX-PROJECT-STOCK */
+      specialStock:     'string'  /* APP-FIX-PROJECT-STOCK — blank = own stock */
     },
     iw39: {
       order:          'string',

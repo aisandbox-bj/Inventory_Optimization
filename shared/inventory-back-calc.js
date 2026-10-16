@@ -146,6 +146,22 @@
   const hasOwn = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
   function slocOf(row) { return String(row.storageLocation == null ? '' : row.storageLocation).trim(); }
 
+  /* APP-FIX-PROJECT-STOCK (2026-10-14) — project (special stock Q) lines carry the shelf storage location
+     but are not own stock: 109 "GR fr Val.BlStk Proj" (into project stock), 291 "GI acct ass.fm proj."
+     (issued from it), 415 "TF proj. to proj.", 711 "GI InvDiff:whse/proj" (WO Readiness proved the rule
+     4,038 of 4,038, 2026-09-28; seen in the plant MB51 of 2026-10-08: 60 / 57 / 24 / 1 lines). A line is
+     project stock when its Special Stock indicator is filled, or, without that column, when its movement
+     text mentions a project and it is not 221 / 222 ("GI / RE for project": own stock going to or from a
+     project, which IS shelf stock). Unknown (neither column on the file) → false. */
+  function isProjectStock(row) {
+    if (!row) return false;
+    if (hasOwn(row, 'specialStock') && String(row.specialStock == null ? '' : row.specialStock).trim()) return true;
+    const txt = String(row.movementTypeText == null ? '' : row.movementTypeText);
+    if (!/proj/i.test(txt)) return false;
+    const mt = String(row.movementType || '').trim();
+    return mt !== '221' && mt !== '222';
+  }
+
   /** Signed forward-in-time effect of ONE MB51 row on the stock line.
    *  `siteSlocs` (Set) = the shelf storage locations → shelf rule; null → movement-type table. */
   function rowDelta(r, siteSlocs) {
@@ -154,6 +170,7 @@
     const mt = String(r.movementType || '').trim();
     if (siteSlocs && hasOwn(r, 'storageLocation')) {
       if (!siteSlocs.has(slocOf(r))) return 0;            // not on the shelf (blank = charged to an account)
+      if (isProjectStock(r)) return 0;                     // APP-FIX-PROJECT-STOCK — project stock, not own stock
       const sign = MVT_SIGN[mt];
       return sign != null ? sign * Math.abs(q) : q;
     }
@@ -562,6 +579,7 @@
     stockoutDaysInRange,
     chooseP2Window,
     rowDelta,                // APP-FIX-SHELF-STOCK — one line's effect on the stock line (shared with the hover)
+    isProjectStock,          // APP-FIX-PROJECT-STOCK — a project (special stock) line: never shelf stock
     shelfContext,            // APP-FIX-SHELF-STOCK — does this run's MB51 carry storage locations?
     shelfSlocs,              // APP-FIX-SHELF-STOCK — a material's shelf storage locations, or null
     MVT_SIGN,

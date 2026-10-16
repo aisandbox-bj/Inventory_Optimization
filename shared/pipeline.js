@@ -35,12 +35,29 @@
     if (mt !== '109' && mt !== '110') return false;
     return !String(r.storageLocation == null ? '' : r.storageLocation).trim();
   }
+  /* APP-FIX-PROJECT-STOCK (2026-10-14) — a project (special stock) line is never usage from stock. An issue
+     from project stock (291 "GI acct ass.fm proj.", or a 261 / 201 / 221 posted from it) is use of a part
+     bought for the project: total use only, like a part bought straight for an account. */
+  function isProjectStockRow(r){
+    const BC = global.InventoryBackCalc;
+    return !!(BC && BC.isProjectStock && BC.isProjectStock(r));
+  }
+  /** Use from project stock: the consumption movement it stands in for, or ''. */
+  function projectUseMvt(r){
+    if (!isProjectStockRow(r)) return '';
+    const mt = String(r.movementType || '').trim();
+    const o = String(r.order || '').trim();
+    if (mt === '261' || mt === '201' || mt === '221' || mt === '291') return o ? '261' : '201';
+    if (mt === '262' || mt === '202' || mt === '222' || mt === '292') return o ? '262' : '202';
+    return '';
+  }
   /** Usage FROM STOCK: the consumption movement a row counts as ('261' · '262' · '201' · '202'), or ''. Drives every rate. */
   function consMvt(r){
     const mt = String(r.movementType || '').trim();
-    return VALID_TYPES.has(mt) ? mt : '';
+    if (!VALID_TYPES.has(mt)) return '';
+    return isProjectStockRow(r) ? '' : mt;
   }
-  /** TOTAL use: as consMvt, plus a part bought for an account counted as the issue it stands in for. Display only. */
+  /** TOTAL use: as consMvt, plus a part bought for an account or used from project stock, counted as the issue it stands in for. Display only. */
   function totalConsMvt(r){
     const mt = consMvt(r);
     if (mt) return mt;
@@ -48,8 +65,10 @@
       const o = String(r.order || '').trim();
       return String(r.movementType || '').trim() === '109' ? (o ? '261' : '201') : (o ? '262' : '202');
     }
-    return '';
+    return projectUseMvt(r);
   }
+  /** Not from stock but in total use: bought straight for an account, or used from project stock. */
+  function isOutsideStockUse(r){ return isDirectCharge(r) || !!projectUseMvt(r); }
 
   /* ─── Date helpers ──────────────────────────────────────────────────────── */
   function toDate(s){ if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d; }
@@ -1141,7 +1160,7 @@
         // order / cost centre / project. Display only; nothing below reads it. null when the material has none.
         let cumulativeTotal = null, directNet = 0;
         {
-          const _direct = (mb51FullByMat.get(q.material) || []).filter(isDirectCharge);
+          const _direct = (mb51FullByMat.get(q.material) || []).filter(isOutsideStockUse);
           if (_direct.length) {
             const _byDate = new Map(cum.map(p => [p.date, p.delta]));
             for (const r of _direct) {
@@ -1384,7 +1403,7 @@
     const d = (json && json.data) || {};
     const c = k => (Array.isArray(d[k]) ? d[k].length : 0);
     return [
-      'pc6',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption · pc4 = the work-order list too · pc5 = 2026-10-14 shelf stock line + bought-for-the-account receipts as consumption + one chart span · pc6 = same day: rates back to usage from stock, total use as a dotted line) so a tab can't keep a stale cached result
+      'pc7',   // bump when the engine's OUTPUT changes (pc2 = 2026-09-26 rule-0 wording · pc3 = 2026-10-13 fleet scope reads whole-site consumption · pc4 = the work-order list too · pc5 = 2026-10-14 shelf stock line + bought-for-the-account receipts as consumption + one chart span · pc6 = same day: rates back to usage from stock, total use as a dotted line · pc7 = project-stock lines off the shelf) so a tab can't keep a stale cached result
       m.assessmentName || m.name || '', m.uploadedAt || '', m.savedAt || '', m.createdAt || '',
       m.inventoryMasterDate || '',
       (json && json.SCHEMA_VERSION) || m.schemaVersion || '',
@@ -1427,6 +1446,7 @@
   global.AppPipeline = Object.freeze({
     ISSUE_TYPES, RETURN_TYPES, VALID_TYPES,
     consMvt, totalConsMvt, isDirectCharge,         // usage from stock (every rate) · total use (display only) · bought for an account
+    isOutsideStockUse, isProjectStockRow,          // APP-FIX-PROJECT-STOCK — in total use but not from stock · a project-stock line
     netConsumptionByMaterial,
     calcPeriodRate,
     detectHce,
